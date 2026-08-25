@@ -1,0 +1,41 @@
+/*
+ * Prompt Board theme bridge for my-comp-lib.
+ *
+ * This file is loaded after the application's semantic tokens. It maps only
+ * names that differ between the two systems; shared --color-*, --radius-* and
+ * --font-* variables are already overridden by tokens.css through cascade order.
+ */
+:root,
+:root[data-theme='dark'],
+:root.dark,
+.dark {
+  --color-primary-active: var(--color-primary-hover);
+  --color-primary-subtle: var(--color-primary-light);
+
+  --color-bg-glass: var(--glass-bg);
+  --color-border-default: var(--color-border);
+
+  --shadow-glass-xs: var(--shadow-sm);
+  --shadow-glass-sm: var(--shadow-sm);
+  --shadow-glass-md: var(--shadow-md);
+  --shadow-glass-lg: var(--shadow-lg);
+  --shadow-glass-xl: var(--shadow-xl);
+  --shadow-glass-2xl: var(--shadow-xl);
+}
+
+:root[data-theme='light'],
+:root.light,
+.light {
+  --color-primary-active: var(--color-primary-hover);
+  --color-primary-subtle: var(--color-primary-light);
+
+  --color-bg-glass: var(--glass-bg);
+  --color-border-default: var(--color-border);
+
+  --shadow-glass-xs: var(--shadow-sm);
+  --shadow-glass-sm: var(--shadow-sm);
+  --shadow-glass-md: var(--shadow-md);
+  --shadow-glass-lg: var(--shadow-lg);
+  --shadow-glass-xl: var(--shadow-xl);
+  --shadow-glass-2xl: var(--shadow-xl);
+}

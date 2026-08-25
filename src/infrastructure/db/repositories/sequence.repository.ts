@@ -1,4 +1,4 @@
-import { db } from '../db/dexie'
+import { db } from '../dexie'
 import type { Sequence } from '@core/types/timeline.types'
 
 export class SequenceRepository {

@@ -1,4 +1,4 @@
-import { db } from '../db/dexie'
+import { db } from '../dexie'
 import type { Project } from '@core/types/project.types'
 
 export class ProjectRepository {

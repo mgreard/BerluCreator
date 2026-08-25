@@ -1,0 +1,182 @@
+:root {
+  /* Dimensions & Spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Border Radii - compact product hierarchy */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-card: var(--radius-lg);
+  --radius-pill: 9999px;
+
+  --content-width: 82rem;
+
+  /* Typography */
+  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ========================================================================= */
+/* DARK THEME (Par défaut / :root / :root[data-theme="dark"] / .dark)       */
+/* ========================================================================= */
+:root,
+:root[data-theme='dark'],
+:root.dark,
+.dark {
+  color-scheme: dark;
+
+  /* Color Palette - Deep Ambient Dark Theme */
+  --color-bg-base: #09090e;
+  --color-bg-surface: rgba(18, 18, 26, 0.75);
+  --color-bg-surface-solid: #121218;
+  --color-bg-surface-hover: rgba(30, 30, 42, 0.85);
+  --color-bg-surface-active: rgba(40, 40, 56, 0.9);
+  --color-bg-canvas: #09090e;
+  --color-bg-surface-inset: rgba(0, 0, 0, 0.3);
+  --color-bg-surface-muted: rgba(0, 0, 0, 0.4);
+  --color-bg-elevated: #181822;
+
+  /* Subtle High-End Borders */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-subtle: rgba(255, 255, 255, 0.04);
+  --color-border-hover: rgba(255, 255, 255, 0.16);
+  --color-border-focus: #818cf8;
+
+  /* Text Colors */
+  --color-text-primary: #f4f4f5;
+  --color-text-secondary: #a1a1aa;
+  --color-text-tertiary: #8b8b95;
+  --color-text-muted: #71717a;
+  --color-text-inverse: #09090e;
+
+  /* Accents & Status Colors */
+  --color-primary: #ffffff;
+  --color-primary-hover: #e4e4e7;
+  --color-primary-rgb: 255, 255, 255;
+  --color-primary-light: rgba(255, 255, 255, 0.08);
+
+  --color-accent: #818cf8;
+  --color-accent-hover: #6366f1;
+  --color-accent-light: #a5b4fc;
+  --color-secondary: var(--color-accent);
+
+  /* Compatibility aliases */
+  --color-surface: var(--color-bg-surface);
+  --color-surface-hover: var(--color-bg-surface-hover);
+  --color-surface-subtle: rgba(255, 255, 255, 0.03);
+
+  --color-success: #34d399;
+  --color-success-bg: rgba(52, 211, 153, 0.12);
+
+  --color-warning: #fbbf24;
+  --color-warning-bg: rgba(251, 191, 36, 0.12);
+
+  --color-danger: #f87171;
+  --color-danger-bg: rgba(248, 113, 113, 0.12);
+
+  --color-info: #38bdf8;
+  --color-info-bg: rgba(56, 189, 248, 0.12);
+
+  /* Shadows & Ambient Glassmorphism */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 24px 56px rgba(0, 0, 0, 0.68);
+
+  --glass-bg: rgba(18, 18, 26, 0.92);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-backdrop: blur(28px) saturate(160%);
+}
+
+/* ========================================================================= */
+/* LIGHT THEME (:root[data-theme="light"] / :root.light / .light)            */
+/* ========================================================================= */
+:root[data-theme='light'],
+:root.light,
+.light {
+  color-scheme: light;
+
+  /* Color Palette - neutral editorial workspace */
+  --color-bg-base: #f3f5f9;
+  --color-bg-canvas: #edf1f6;
+  --color-bg-surface: #ffffff;
+  --color-bg-surface-solid: #ffffff;
+  --color-bg-surface-hover: #f7f8fb;
+  --color-bg-surface-active: #eef1f6;
+  --color-bg-surface-inset: #f1f3f7;
+  --color-bg-surface-muted: #e8ecf2;
+  --color-bg-elevated: #ffffff;
+
+  /* Crisp restrained borders */
+  --color-border: #d7dde7;
+  --color-border-subtle: #e7eaf0;
+  --color-border-hover: #aeb8c8;
+  --color-border-focus: #5b5ce2;
+
+  /* Text Colors - High Contrast Legibility (WCAG AAA/AA) */
+  --color-text-primary: #151a2a;
+  --color-text-secondary: #3d475b;
+  --color-text-tertiary: #566176;
+  --color-text-muted: #6f7b91;
+  --color-text-inverse: #ffffff;
+
+  /* Accents & Status Colors */
+  --color-primary: #25204f;
+  --color-primary-hover: #342d72;
+  --color-primary-rgb: 37, 32, 79;
+  --color-primary-light: rgba(91, 92, 226, 0.1);
+
+  --color-accent: #5b5ce2;
+  --color-accent-hover: #494acb;
+  --color-accent-light: #4143b8;
+  --color-secondary: var(--color-accent);
+
+  /* Compatibility aliases */
+  --color-surface: var(--color-bg-surface);
+  --color-surface-hover: var(--color-bg-surface-hover);
+  --color-surface-subtle: var(--color-bg-surface-inset);
+
+  --color-success: #059669;
+  --color-success-bg: rgba(5, 150, 105, 0.12);
+
+  --color-warning: #d97706;
+  --color-warning-bg: rgba(217, 119, 6, 0.12);
+
+  --color-danger: #dc2626;
+  --color-danger-bg: rgba(220, 38, 38, 0.12);
+
+  --color-info: #0284c7;
+  --color-info-bg: rgba(2, 132, 199, 0.12);
+
+  /* Physical multi-layer shadows */
+  --shadow-sm:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 1px 2px rgba(24, 32, 52, 0.05),
+    0 1px 5px rgba(24, 32, 52, 0.035);
+  --shadow-md:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 8px 22px -12px rgba(24, 32, 52, 0.22),
+    0 2px 6px rgba(24, 32, 52, 0.05);
+  --shadow-lg:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 18px 38px -18px rgba(24, 32, 52, 0.28),
+    0 5px 12px rgba(24, 32, 52, 0.06);
+  --shadow-xl:
+    inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 28px 56px -22px rgba(24, 32, 52, 0.34),
+    0 8px 18px rgba(24, 32, 52, 0.07);
+
+  --glass-bg: rgba(255, 255, 255, 0.34);
+  --glass-border: rgba(255, 255, 255, 0.68);
+  --glass-backdrop: blur(24px) saturate(125%);
+}

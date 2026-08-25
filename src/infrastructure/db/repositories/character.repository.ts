@@ -1,4 +1,4 @@
-import { db } from '../db/dexie'
+import { db } from '../dexie'
 import type { CharacterPreset } from '@core/types/character.types'
 
 export class CharacterRepository {

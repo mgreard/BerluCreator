@@ -1,4 +1,4 @@
-import { db } from '../db/dexie'
+import { db } from '../dexie'
 import type { Asset, AssetBlobRecord, AssetCategory } from '@core/types/asset.types'
 
 export class AssetRepository {
