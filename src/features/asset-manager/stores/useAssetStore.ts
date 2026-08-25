@@ -4,6 +4,8 @@ import type { Asset, AssetCategory, AnchorPoint } from '@core/types/asset.types'
 import { assetRepository } from '@infrastructure/db/repositories/asset.repository'
 import { generateId } from '@/lib/utils'
 
+import { resolveSpriteConfig } from '@core/constants/sprites-config'
+
 export const useAssetStore = defineStore('asset', () => {
   const assets = ref<Asset[]>([])
   const selectedAssetId = ref<string | null>(null)
@@ -65,15 +67,19 @@ export const useAssetStore = defineStore('asset', () => {
     // Définir des ancres par défaut judicieuses selon la catégorie
     const defaultAnchors = createDefaultAnchors(category, dimensions.width, dimensions.height)
 
+    const assetName = name || file.name.replace(/\.[^/.]+$/, '')
+    const spriteConfig = resolveSpriteConfig(assetName, category)
+
     const newAsset: Asset = {
       id,
-      name: name || file.name.replace(/\.[^/.]+$/, ''),
+      name: assetName,
       category,
       tags: [category],
       blobId,
       width: dimensions.width,
       height: dimensions.height,
       anchors: defaultAnchors,
+      isMovable: spriteConfig.isMovable,
       createdAt: Date.now(),
       updatedAt: Date.now()
     }

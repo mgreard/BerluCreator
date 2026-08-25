@@ -22,6 +22,7 @@ const timelineStore = useTimelineStore()
 const isSettingsOpen = ref(false)
 const isExportOpen = ref(false)
 const isAiDirectorOpen = ref(false)
+const showHierarchy = ref(true)
 
 onMounted(async () => {
   // 1. Initialiser le projet
@@ -64,6 +65,9 @@ onMounted(async () => {
 
     // Réinitialiser les pistes
     for (const track of timelineStore.currentSequence.tracks) {
+      if (track.category === 'arms_left' && track.zIndex < 10) {
+        track.zIndex = 12
+      }
       track.keyframes = []
     }
 
@@ -84,7 +88,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden font-sans">
+  <div class="h-screen w-screen flex flex-col bg-bg-base text-text-primary overflow-hidden font-sans select-none">
     <!-- Barre supérieure de navigation -->
     <StudioHeader
       @open-settings="isSettingsOpen = true"
@@ -98,10 +102,10 @@ onMounted(async () => {
       <AssetLibraryPanel />
 
       <!-- Viewport & Canvas de Composition (Centre) -->
-      <StudioViewport />
+      <StudioViewport v-model:show-hierarchy="showHierarchy" />
 
       <!-- Inspecteur de Hiérarchie des Calques (Droite) -->
-      <HierarchyInspector />
+      <HierarchyInspector v-if="showHierarchy" />
     </div>
 
     <!-- Séquenceur & Timeline Discrète (Bas) -->

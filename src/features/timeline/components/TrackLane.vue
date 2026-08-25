@@ -47,13 +47,13 @@ function handleLaneDblClick(e: MouseEvent) {
 
 <template>
   <div
-    class="relative h-8 border-b border-border/30 bg-surface/20 hover:bg-surface-hover/30 transition-colors flex items-center select-none"
+    class="relative h-8 border-b border-border-subtle/40 bg-bg-surface/20 hover:bg-bg-surface-hover/30 transition-colors flex items-center select-none"
     :style="{ width: `${trackWidthPx}px` }"
     @click="handleLaneClick"
     @dblclick="handleLaneDblClick"
   >
     <!-- Ligne médiane guide -->
-    <div class="absolute inset-x-0 h-px bg-border/20 pointer-events-none" />
+    <div class="absolute inset-x-0 h-px bg-border-subtle/25 pointer-events-none" />
 
     <!-- Keyframes posées -->
     <KeyframeMarker

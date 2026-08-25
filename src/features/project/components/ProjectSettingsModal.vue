@@ -7,13 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
-const { open = false } = defineProps<{
-  open: boolean
-}>()
-
-const emit = defineEmits<{
-  (e: 'update:open', value: boolean): void
-}>()
+const open = defineModel<boolean>('open', { default: false })
 
 const projectStore = useProjectStore()
 
@@ -25,17 +19,33 @@ const bgColor = ref(projectStore.currentProject.stage.backgroundColor)
 const safeArea = ref(projectStore.currentProject.stage.safeArea)
 const showGrid = ref(projectStore.currentProject.stage.showGrid)
 
+function syncFromStore() {
+  const proj = projectStore.currentProject
+  projectName.value = proj.name
+  projectDesc.value = proj.description || ''
+  stageWidth.value = proj.stage.width
+  stageHeight.value = proj.stage.height
+  bgColor.value = proj.stage.backgroundColor
+  safeArea.value = proj.stage.safeArea
+  showGrid.value = proj.stage.showGrid
+}
+
+watch(
+  () => open.value,
+  (isOpen) => {
+    if (isOpen) {
+      syncFromStore()
+    }
+  },
+  { immediate: true }
+)
+
 watch(
   () => projectStore.currentProject,
-  (proj) => {
-    projectName.value = proj.name
-    projectDesc.value = proj.description || ''
-    stageWidth.value = proj.stage.width
-    stageHeight.value = proj.stage.height
-    bgColor.value = proj.stage.backgroundColor
-    safeArea.value = proj.stage.safeArea
-    showGrid.value = proj.stage.showGrid
-  }
+  () => {
+    syncFromStore()
+  },
+  { deep: true }
 )
 
 const resolutionPresets = [
@@ -45,10 +55,13 @@ const resolutionPresets = [
   { value: '1080x1920', label: '1080 × 1920 (9:16 Vertical / Short)' }
 ]
 
-function onResolutionPresetChange(val: string | number) {
-  const [w, h] = String(val).split('x').map(Number)
-  stageWidth.value = w
-  stageHeight.value = h
+function onResolutionPresetChange(val: string | number | boolean | null) {
+  if (typeof val !== 'string') return
+  const [w, h] = val.split('x').map(Number)
+  if (w && h) {
+    stageWidth.value = w
+    stageHeight.value = h
+  }
 }
 
 async function save() {
@@ -60,17 +73,16 @@ async function save() {
     safeArea: safeArea.value,
     showGrid: showGrid.value
   })
-  emit('update:open', false)
+  open.value = false
 }
 </script>
 
 <template>
   <Modal
-    :open="open"
+    v-model:open="open"
     size="md"
     title="Paramètres du Projet & Plateau"
-    description="Configurez le titre de l'émission, les dimensions du plateau et les options d'affichage."
-    @update:open="emit('update:open', $event)"
+    subtitle="Configurez le titre de l'émission, les dimensions du plateau et les options d'affichage."
   >
     <div class="space-y-4 text-xs">
       <div class="space-y-1">
@@ -113,7 +125,7 @@ async function save() {
 
     <template #footer>
       <div class="flex items-center justify-end gap-2">
-        <Button variant="ghost" size="sm" @click="emit('update:open', false)">
+        <Button variant="ghost" size="sm" @click="open = false">
           Annuler
         </Button>
         <Button variant="primary" size="sm" @click="save">

@@ -1,5 +1,6 @@
 import { assetRepository } from '@infrastructure/db/repositories/asset.repository'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
+import { resolveSpriteConfig } from '@core/constants/sprites-config'
 import { generateId } from '@/lib/utils'
 
 // Import eager de tous les sprites PNG du dossier assets
@@ -15,17 +16,17 @@ const spriteModules = import.meta.glob<string>('@/assets/sprites/**/*.png', {
 export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
   const existing = await assetRepository.getAll()
 
-  // Détecter si la base contient les anciens placeholders SVG vectoriels
-  const hasOldSvgPlaceholders = existing.some(
-    (a) => a.id.startsWith('asset_backdrop') || a.id.startsWith('asset_torso')
+  // Détecter si la base contient les anciens placeholders SVG vectoriels ou s'il manque isMovable
+  const hasOldPlaceholders = existing.some(
+    (a) => a.id.startsWith('asset_backdrop') || a.id.startsWith('asset_torso') || a.isMovable === undefined
   )
 
-  if (!force && existing.length > 0 && !hasOldSvgPlaceholders) {
+  if (!force && existing.length > 0 && !hasOldPlaceholders) {
     return
   }
 
   // Nettoyer les anciens assets si placeholders ou forçage
-  if (hasOldSvgPlaceholders || force) {
+  if (hasOldPlaceholders || force) {
     for (const old of existing) {
       await assetRepository.delete(old.id)
     }
@@ -38,6 +39,7 @@ export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
       const blob = await response.blob()
       const dimensions = await getBlobDimensions(blob)
       const { name, category, tags } = parseSpriteMetadata(path)
+      const spriteConfig = resolveSpriteConfig(name, category)
 
       const assetId = generateId(`asset_${category}`)
       const blobId = generateId('blob')
@@ -51,6 +53,7 @@ export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
         width: dimensions.width,
         height: dimensions.height,
         anchors: [],
+        isMovable: spriteConfig.isMovable,
         createdAt: Date.now(),
         updatedAt: Date.now()
       }

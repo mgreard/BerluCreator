@@ -21,11 +21,29 @@ export interface Keyframe {
   label?: string
 }
 
+export type TrackGroupColor = 'indigo' | 'emerald' | 'amber' | 'rose' | 'blue' | 'purple' | 'cyan'
+
+export interface TrackGroup {
+  id: string
+  name: string
+  /** Z-Index global du groupe sur le Canvas (ex: Décor=0, Personnage=20, Bureau=30, Overlays=50) */
+  zIndex: number
+  /** Décalage géométrique global appliqué à l'ensemble des enfants du groupe */
+  transform?: Partial<Transform2D>
+  muted?: boolean
+  locked?: boolean
+  collapsed?: boolean
+  color?: TrackGroupColor
+}
+
 export interface TimelineTrack {
   id: string
   name: string
   category: AssetCategory
   targetSlot: AssetCategory
+  /** ID du groupe parent auquel appartient la piste */
+  groupId?: string
+  /** Z-Index local à l'intérieur du groupe */
   zIndex: number
   muted: boolean
   locked: boolean
@@ -38,6 +56,8 @@ export interface Sequence {
   name: string
   durationMs: number
   fps: number
+  /** Groupes hiérarchiques de la séquence */
+  groups?: TrackGroup[]
   tracks: TimelineTrack[]
   createdAt: number
   updatedAt: number

@@ -40,7 +40,7 @@ function handleRulerClick(e: MouseEvent) {
 
 <template>
   <div
-    class="relative h-7 border-b border-border/40 bg-surface/40 select-none cursor-pointer overflow-hidden"
+    class="sticky top-0 z-30 h-7 border-b border-border-subtle bg-bg-surface/95 backdrop-blur-md select-none cursor-pointer overflow-hidden"
     :style="{ width: `${totalWidthPx}px` }"
     @click="handleRulerClick"
   >
@@ -53,13 +53,13 @@ function handleRulerClick(e: MouseEvent) {
     >
       <span
         v-if="tick.isMajor"
-        class="text-[9px] font-mono text-muted-foreground -translate-x-1/2 mb-1"
+        class="text-[9px] font-mono text-text-muted -translate-x-1/2 mb-1 font-medium"
       >
         {{ tick.label }}
       </span>
       <div
-        class="w-px bg-border/60"
-        :class="tick.isMajor ? 'h-3 bg-foreground/40' : 'h-1.5 bg-border/40'"
+        class="w-px"
+        :class="tick.isMajor ? 'h-3 bg-text-muted/60' : 'h-1.5 bg-border-subtle'"
       />
     </div>
 

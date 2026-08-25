@@ -19,17 +19,19 @@ defineOptions({ inheritAttrs: false })
 
 const attrs = useAttrs()
 
-// Support v-model:isOpen et v-model standard
+// Support v-model:open, v-model:isOpen et v-model standard
+const openModel = defineModel<boolean>('open')
 const isOpenModel = defineModel<boolean>('isOpen')
 const defaultModel = defineModel<boolean>()
 
 const isVisible = computed({
-  get: () => isOpenModel.value ?? defaultModel.value ?? false,
+  get: () => openModel.value ?? isOpenModel.value ?? defaultModel.value ?? false,
   set: (val: boolean) => {
+    if (openModel.value !== undefined) openModel.value = val
     if (isOpenModel.value !== undefined) isOpenModel.value = val
     if (defaultModel.value !== undefined) defaultModel.value = val
-    if (isOpenModel.value === undefined && defaultModel.value === undefined) {
-      isOpenModel.value = val
+    if (openModel.value === undefined && isOpenModel.value === undefined && defaultModel.value === undefined) {
+      defaultModel.value = val
     }
   }
 })

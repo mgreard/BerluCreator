@@ -1,25 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useProjectStore } from '../stores/useProjectStore'
 import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
+import { useHierarchyResolver } from '@/features/studio/composables/useHierarchyResolver'
+import { captureCleanFrame } from '@/features/studio/composables/useCanvasRenderer'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Badge } from '@/components/ui/badge'
 
-const { open = false } = defineProps<{
-  open: boolean
-}>()
-
-const emit = defineEmits<{
-  (e: 'update:open', value: boolean): void
-}>()
+const open = defineModel<boolean>('open', { default: false })
 
 const projectStore = useProjectStore()
 const timelineStore = useTimelineStore()
 const assetStore = useAssetStore()
+const { activeLayers } = useHierarchyResolver()
 
+const stage = computed(() => projectStore.currentProject.stage)
 const isExporting = ref(false)
 
 function downloadJson() {
@@ -41,25 +39,30 @@ function downloadJson() {
   URL.revokeObjectURL(url)
 }
 
-function captureCurrentFrame() {
-  const canvas = document.querySelector('canvas')
-  if (!canvas) return
+async function captureCurrentFrame() {
+  if (isExporting.value) return
+  isExporting.value = true
 
-  const dataUrl = canvas.toDataURL('image/png')
-  const link = document.createElement('a')
-  link.href = dataUrl
-  link.download = `berlu_frame_${timelineStore.playback.currentTimeMs}ms.png`
-  link.click()
+  try {
+    const dataUrl = await captureCleanFrame(activeLayers.value, stage.value, 'image/png')
+    const link = document.createElement('a')
+    link.href = dataUrl
+    link.download = `${projectStore.currentProject.name.toLowerCase().replace(/\s+/g, '_')}_frame_${timelineStore.playback.currentTimeMs}ms.png`
+    link.click()
+  } catch (error) {
+    console.error('Erreur lors de la capture du rendu :', error)
+  } finally {
+    isExporting.value = false
+  }
 }
 </script>
 
 <template>
   <Modal
-    :open="open"
+    v-model:open="open"
     size="md"
     title="Exporter la Séquence Stop-Motion"
-    description="Exportez les données de séquence ou capturez les rendus d'animation."
-    @update:open="emit('update:open', $event)"
+    subtitle="Exportez les données de séquence ou capturez les rendus d'animation."
   >
     <div class="space-y-4 text-xs">
       <div class="p-3 rounded-lg border border-border/40 bg-surface/40 flex items-center justify-between">
@@ -79,12 +82,18 @@ function captureCurrentFrame() {
         <div>
           <h4 class="font-semibold text-foreground">Instantané PNG de l'Image Actuelle</h4>
           <p class="text-[11px] text-muted-foreground mt-0.5">
-            Rendu haute résolution au timecode {{ (timelineStore.playback.currentTimeMs / 1000).toFixed(2) }}s.
+            Rendu haute résolution sans repères au timecode {{ (timelineStore.playback.currentTimeMs / 1000).toFixed(2) }}s.
           </p>
         </div>
-        <Button size="sm" variant="secondary" class="gap-1.5" @click="captureCurrentFrame">
+        <Button
+          size="sm"
+          variant="secondary"
+          class="gap-1.5"
+          :disabled="isExporting"
+          @click="captureCurrentFrame"
+        >
           <Icon name="photo_camera" size="xs" />
-          <span>Capturer PNG</span>
+          <span>{{ isExporting ? 'Capture en cours...' : 'Capturer PNG' }}</span>
         </Button>
       </div>
 
@@ -98,7 +107,7 @@ function captureCurrentFrame() {
 
     <template #footer>
       <div class="flex items-center justify-end">
-        <Button variant="ghost" size="sm" @click="emit('update:open', false)">
+        <Button variant="ghost" size="sm" @click="open = false">
           Fermer
         </Button>
       </div>

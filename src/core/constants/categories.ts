@@ -7,7 +7,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'tv_gen',
     description: 'Arrière-plans et environnements du plateau télévisé',
     defaultZIndex: 0,
-    allowedSockets: []
+    allowedSockets: [],
+    cardinality: 'singleton',
+    placementMode: 'character-anchored'
   },
   torso: {
     id: 'torso',
@@ -15,7 +17,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'body_system',
     description: 'Corps du présentateur (racine de la cinématique)',
     defaultZIndex: 10,
-    allowedSockets: ['neck', 'shoulder_left', 'shoulder_right', 'hand_left', 'hand_right']
+    allowedSockets: ['neck', 'shoulder_left', 'shoulder_right', 'hand_left', 'hand_right'],
+    cardinality: 'singleton',
+    placementMode: 'character-anchored'
   },
   head: {
     id: 'head',
@@ -23,7 +27,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'face',
     description: 'Tête recevant les expressions et les accessoires',
     defaultZIndex: 20,
-    allowedSockets: ['mouth', 'eyes', 'hat', 'glasses']
+    allowedSockets: ['mouth', 'eyes', 'hat', 'glasses'],
+    cardinality: 'singleton',
+    placementMode: 'character-anchored'
   },
   mouth: {
     id: 'mouth',
@@ -31,7 +37,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'sentiment_satisfied',
     description: 'Expressions labiales et formes de bouche pour le dialogue',
     defaultZIndex: 25,
-    allowedSockets: []
+    allowedSockets: [],
+    cardinality: 'singleton',
+    placementMode: 'character-anchored'
   },
   eyes: {
     id: 'eyes',
@@ -39,15 +47,19 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'visibility',
     description: 'Regard, clignements et émotions faciales',
     defaultZIndex: 24,
-    allowedSockets: []
+    allowedSockets: [],
+    cardinality: 'singleton',
+    placementMode: 'character-anchored'
   },
   arms_left: {
     id: 'arms_left',
     label: 'Bras Gauche',
     icon: 'front_hand',
     description: 'Bras gauche, postures et gestuelle',
-    defaultZIndex: 9,
-    allowedSockets: ['hand_left_prop']
+    defaultZIndex: 12,
+    allowedSockets: ['hand_left_prop'],
+    cardinality: 'singleton',
+    placementMode: 'character-anchored'
   },
   arms_right: {
     id: 'arms_right',
@@ -55,7 +67,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'waving_hand',
     description: 'Bras droit, postures et gestuelle',
     defaultZIndex: 15,
-    allowedSockets: ['hand_right_prop']
+    allowedSockets: ['hand_right_prop'],
+    cardinality: 'singleton',
+    placementMode: 'character-anchored'
   },
   props: {
     id: 'props',
@@ -63,7 +77,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'mic',
     description: 'Objets tenus ou portés (micro, fiches, journal, tasse)',
     defaultZIndex: 30,
-    allowedSockets: []
+    allowedSockets: [],
+    cardinality: 'multi',
+    placementMode: 'free-transform'
   },
   overlay: {
     id: 'overlay',
@@ -71,7 +87,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'newspaper',
     description: 'Bandeaux "Breaking News", synthés, infographies et incrustations',
     defaultZIndex: 50,
-    allowedSockets: []
+    allowedSockets: [],
+    cardinality: 'multi',
+    placementMode: 'free-transform'
   }
 }
 

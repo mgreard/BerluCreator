@@ -18,7 +18,6 @@ const emit = defineEmits<{
 }>()
 
 const previewUrl = ref<string | null>(null)
-const isDragging = ref(false)
 
 watchEffect(async () => {
   const currentBlobId = asset.blobId
@@ -27,85 +26,76 @@ watchEffect(async () => {
     return
   }
 
+  onWatcherCleanup(() => {
+    blobCacheService.release(currentBlobId)
+  })
+
   try {
     previewUrl.value = await blobCacheService.acquire(currentBlobId)
   } catch (err) {
     console.error('Erreur chargement preview blob:', err)
   }
-
-  onWatcherCleanup(() => {
-    blobCacheService.release(currentBlobId)
-  })
 })
-
-function onDragStart(e: DragEvent) {
-  isDragging.value = true
-  if (e.dataTransfer) {
-    e.dataTransfer.effectAllowed = 'copyMove'
-    e.dataTransfer.setData('application/json', JSON.stringify(asset))
-    e.dataTransfer.setData('text/plain', asset.id)
-    
-    // Image fantôme ou prévisualisation de drag
-    const img = e.currentTarget as HTMLElement
-    if (img) {
-      e.dataTransfer.setDragImage(img, 40, 40)
-    }
-  }
-}
-
-function onDragEnd() {
-  isDragging.value = false
-}
 </script>
 
 <template>
   <div
-    draggable="true"
-    class="group relative rounded-xl border p-2 flex flex-col gap-2 transition-all cursor-grab active:cursor-grabbing select-none"
+    class="group relative rounded-xl border p-2 flex flex-col gap-1.5 transition-all duration-200 cursor-pointer select-none"
     :class="[
       selected
-        ? 'border-primary bg-primary/10 shadow-glass-sm'
-        : 'border-border/50 bg-surface/40 hover:border-border hover:bg-surface-hover/60',
-      isDragging && 'opacity-40 scale-95 ring-2 ring-primary/50'
+        ? 'border-primary bg-primary/15 shadow-glow-sm ring-2 ring-primary/60 scale-[1.02]'
+        : 'border-border-subtle bg-bg-surface/60 hover:border-primary/50 hover:bg-bg-surface-hover/80 hover:shadow-glass-sm'
     ]"
     @click="emit('select', asset)"
-    @dragstart="onDragStart"
-    @dragend="onDragEnd"
   >
     <!-- Vignette de prévisualisation -->
     <div
-      class="relative w-full aspect-square rounded-lg bg-black/40 flex items-center justify-center overflow-hidden border border-border/30 pointer-events-none"
+      class="relative w-full aspect-square rounded-lg bg-black/40 flex items-center justify-center overflow-hidden border border-border-subtle/50 pointer-events-none"
     >
       <img
         v-if="previewUrl"
         :src="previewUrl"
         :alt="asset.name"
-        class="max-w-full max-h-full object-contain pointer-events-none"
+        class="max-w-full max-h-full object-contain pointer-events-none transition-transform duration-200 group-hover:scale-105"
       />
-      <div v-else class="animate-pulse flex items-center justify-center text-muted-foreground">
+      <div v-else class="animate-pulse flex items-center justify-center text-text-muted">
         <Icon name="image" size="md" />
       </div>
 
-      <!-- Badge nombre d'ancres -->
-      <span
-        v-if="asset.anchors.length > 0"
-        class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-mono bg-black/70 text-white border border-white/10"
+      <!-- Badge indicateur déplaçable / mobile sur canvas -->
+      <Badge
+        v-if="asset.isMovable"
+        variant="accent"
+        size="sm"
+        class="absolute top-1.5 left-1.5 text-[9px] font-semibold gap-1 shadow-glass-xs border-primary/30 backdrop-blur-md"
+        title="Ce sprite peut être déplacé à la souris sur le canvas"
       >
-        {{ asset.anchors.length }} ancre{{ asset.anchors.length > 1 ? 's' : '' }}
-      </span>
+        <Icon name="open_with" size="xs" class="text-primary" />
+        <span>Mobile</span>
+      </Badge>
+
+      <!-- Badge nombre d'ancres -->
+      <Badge
+        v-if="asset.anchors && asset.anchors.length > 0"
+        variant="neutral"
+        size="sm"
+        class="absolute top-1.5 right-1.5 text-[9px] font-mono shadow-glass-xs backdrop-blur-md"
+      >
+        {{ asset.anchors.length }} ancres
+      </Badge>
     </div>
 
     <!-- Informations et Actions -->
-    <div class="flex items-center justify-between gap-1 min-w-0">
+    <div class="flex items-center justify-between gap-1 min-w-0 pt-0.5">
       <div class="truncate flex-1">
-        <h4 class="text-xs font-semibold text-foreground truncate" :title="asset.name">
+        <h4 class="text-xs font-semibold text-text-primary truncate group-hover:text-primary transition-colors" :title="asset.name">
           {{ asset.name }}
         </h4>
-        <div class="flex items-center gap-1 mt-0.5">
-          <Badge variant="neutral" size="sm" class="text-[9px] px-1 py-0 uppercase font-mono">
+        <div class="flex items-center gap-1.5 mt-0.5">
+          <Badge variant="neutral" size="sm" class="text-[9px] px-1 py-0 uppercase font-mono bg-bg-surface-hover border-border-subtle text-text-muted">
             {{ asset.category }}
           </Badge>
-          <span class="text-[10px] text-muted-foreground font-mono">
+          <span class="text-[10px] text-text-muted font-mono">
             {{ asset.width }}&times;{{ asset.height }}
           </span>
         </div>
@@ -117,13 +107,15 @@ function onDragEnd() {
           size="xs"
           variant="ghost"
           title="Éditer les points d'ancrage"
+          class="text-text-muted hover:text-text-primary"
           @click.stop="emit('editAnchors', asset)"
         />
         <IconButton
           icon="delete"
           size="xs"
-          variant="destructive"
+          variant="ghost"
           title="Supprimer l'asset"
+          class="text-text-muted hover:text-danger"
           @click.stop="emit('delete', asset)"
         />
       </div>

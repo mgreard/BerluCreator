@@ -101,7 +101,7 @@ function getTickPosition(tickVal: number): number {
     :class="
       cn(
         'flex flex-col gap-2 select-none',
-        orientation === 'vertical' && 'h-48 items-center',
+        orientation === 'horizontal' ? 'w-full' : 'h-48 items-center',
         disabled && 'opacity-50 cursor-not-allowed',
         className
       )

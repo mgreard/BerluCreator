@@ -1,3 +1,5 @@
+import type { HTMLAttributes } from 'vue'
+
 export type IconSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | string
 
 export interface IconProps {
@@ -10,5 +12,5 @@ export interface IconProps {
   /** Couleur spécifique (par défaut currentColor) */
   color?: string
   /** Classes CSS supplémentaires */
-  class?: string
+  class?: HTMLAttributes['class']
 }

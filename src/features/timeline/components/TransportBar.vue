@@ -35,12 +35,12 @@ function stepFrame(frames: number) {
 </script>
 
 <template>
-  <div class="h-11 border-b border-border/40 px-4 flex items-center justify-between bg-surface/60 backdrop-blur-md z-10 select-none">
+  <div class="h-11 border-b border-border-subtle px-4 flex items-center justify-between bg-bg-surface/70 backdrop-blur-md z-10 select-none">
     <!-- Timecode & Cadence -->
     <div class="flex items-center gap-3">
-      <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/60 border border-border/40 font-mono text-sm">
-        <span class="text-primary font-bold">{{ formattedCurrentTime }}</span>
-        <span class="text-muted-foreground text-xs">/ {{ formattedTotalTime }}</span>
+      <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-bg-base border border-border-subtle font-mono text-xs shadow-xs">
+        <span class="text-primary font-bold tracking-wider">{{ formattedCurrentTime }}</span>
+        <span class="text-text-muted text-[11px]">/ {{ formattedTotalTime }}</span>
       </div>
 
       <div class="w-28">
@@ -54,67 +54,89 @@ function stepFrame(frames: number) {
     </div>
 
     <!-- Contrôles de lecture centraux -->
-    <div class="flex items-center gap-1.5">
+    <div class="flex items-center gap-1">
       <IconButton
         icon="first_page"
-        size="sm"
+        size="xs"
         variant="ghost"
         title="Retour au début (Stop)"
+        class="text-text-muted hover:text-text-primary"
         @click="timelineStore.stop"
       />
       <IconButton
         icon="chevron_left"
-        size="sm"
+        size="xs"
         variant="ghost"
         title="Image précédente (-1 frame)"
+        class="text-text-muted hover:text-text-primary"
         @click="stepFrame(-1)"
       />
       <Button
         :variant="timelineStore.playback.isPlaying ? 'secondary' : 'primary'"
         size="sm"
-        class="min-w-[72px] font-bold"
+        class="h-7 min-w-[70px] font-bold gap-1 shadow-glass-sm"
         @click="timelineStore.togglePlay"
       >
-        <Icon :name="timelineStore.playback.isPlaying ? 'pause' : 'play_arrow'" size="sm" />
-        {{ timelineStore.playback.isPlaying ? 'Pause' : 'Play' }}
+        <Icon :name="timelineStore.playback.isPlaying ? 'pause' : 'play_arrow'" size="xs" />
+        <span>{{ timelineStore.playback.isPlaying ? 'Pause' : 'Play' }}</span>
       </Button>
       <IconButton
         icon="chevron_right"
-        size="sm"
+        size="xs"
         variant="ghost"
         title="Image suivante (+1 frame)"
+        class="text-text-muted hover:text-text-primary"
         @click="stepFrame(1)"
       />
       <IconButton
         :icon="timelineStore.playback.loop ? 'repeat' : 'repeat_one'"
-        size="sm"
-        :variant="timelineStore.playback.loop ? 'primary' : 'ghost'"
+        size="xs"
+        variant="ghost"
+        :active="timelineStore.playback.loop"
         title="Boucler la lecture"
+        class="text-text-muted hover:text-text-primary"
         @click="timelineStore.playback.loop = !timelineStore.playback.loop"
       />
     </div>
 
     <!-- Zoom & Assistant IA -->
     <div class="flex items-center gap-4">
-      <div class="flex items-center gap-2 w-36">
-        <Icon name="zoom_out" size="xs" class="text-muted-foreground" />
+      <div class="flex items-center gap-1.5 w-36">
+        <button
+          type="button"
+          class="text-text-muted hover:text-text-primary transition-colors cursor-pointer flex items-center justify-center p-0.5 rounded touch-manipulation"
+          title="Dézoomer (-25px/s)"
+          @click="timelineStore.playback.zoom = Math.max(50, timelineStore.playback.zoom - 25)"
+        >
+          <Icon name="zoom_out" size="xs" />
+        </button>
         <Slider
           v-model="timelineStore.playback.zoom"
           :min="50"
           :max="300"
           :step="10"
           size="sm"
+          tooltip="hover"
+          :formatter="(val) => `${val}px/s`"
+          class="flex-1"
         />
-        <Icon name="zoom_in" size="xs" class="text-muted-foreground" />
+        <button
+          type="button"
+          class="text-text-muted hover:text-text-primary transition-colors cursor-pointer flex items-center justify-center p-0.5 rounded touch-manipulation"
+          title="Zoomer (+25px/s)"
+          @click="timelineStore.playback.zoom = Math.min(300, timelineStore.playback.zoom + 25)"
+        >
+          <Icon name="zoom_in" size="xs" />
+        </button>
       </div>
 
       <Button
-        variant="outline"
+        variant="ghost"
         size="sm"
-        class="border-primary/50 text-primary hover:bg-primary/10 gap-1.5 font-medium"
+        class="h-7 text-xs border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 gap-1.5 font-medium"
         @click="emit('openAiDirector')"
       >
-        <Icon name="auto_awesome" size="sm" class="text-amber-400 animate-pulse" />
+        <Icon name="auto_awesome" size="xs" class="text-amber-400 animate-pulse" />
         <span>Scénariste IA</span>
       </Button>
     </div>
