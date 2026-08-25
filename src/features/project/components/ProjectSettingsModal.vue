@@ -1,0 +1,125 @@
+<script setup lang="ts">
+import { ref, watch } from 'vue'
+import { useProjectStore } from '../stores/useProjectStore'
+import { Modal } from '@/components/ui/modal'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+
+const { open = false } = defineProps<{
+  open: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'update:open', value: boolean): void
+}>()
+
+const projectStore = useProjectStore()
+
+const projectName = ref(projectStore.currentProject.name)
+const projectDesc = ref(projectStore.currentProject.description || '')
+const stageWidth = ref(projectStore.currentProject.stage.width)
+const stageHeight = ref(projectStore.currentProject.stage.height)
+const bgColor = ref(projectStore.currentProject.stage.backgroundColor)
+const safeArea = ref(projectStore.currentProject.stage.safeArea)
+const showGrid = ref(projectStore.currentProject.stage.showGrid)
+
+watch(
+  () => projectStore.currentProject,
+  (proj) => {
+    projectName.value = proj.name
+    projectDesc.value = proj.description || ''
+    stageWidth.value = proj.stage.width
+    stageHeight.value = proj.stage.height
+    bgColor.value = proj.stage.backgroundColor
+    safeArea.value = proj.stage.safeArea
+    showGrid.value = proj.stage.showGrid
+  }
+)
+
+const resolutionPresets = [
+  { value: '1920x1080', label: '1920 × 1080 (16:9 Full HD)' },
+  { value: '1280x720', label: '1280 × 720 (16:9 HD)' },
+  { value: '1080x1080', label: '1080 × 1080 (1:1 Carré)' },
+  { value: '1080x1920', label: '1080 × 1920 (9:16 Vertical / Short)' }
+]
+
+function onResolutionPresetChange(val: string | number) {
+  const [w, h] = String(val).split('x').map(Number)
+  stageWidth.value = w
+  stageHeight.value = h
+}
+
+async function save() {
+  await projectStore.updateProjectMeta(projectName.value, projectDesc.value)
+  await projectStore.updateStage({
+    width: stageWidth.value,
+    height: stageHeight.value,
+    backgroundColor: bgColor.value,
+    safeArea: safeArea.value,
+    showGrid: showGrid.value
+  })
+  emit('update:open', false)
+}
+</script>
+
+<template>
+  <Modal
+    :open="open"
+    size="md"
+    title="Paramètres du Projet & Plateau"
+    description="Configurez le titre de l'émission, les dimensions du plateau et les options d'affichage."
+    @update:open="emit('update:open', $event)"
+  >
+    <div class="space-y-4 text-xs">
+      <div class="space-y-1">
+        <label class="font-medium text-foreground">Nom de la Scène / Projet :</label>
+        <Input v-model="projectName" size="sm" />
+      </div>
+
+      <div class="space-y-1">
+        <label class="font-medium text-foreground">Format de Rendu Vidéo :</label>
+        <Select
+          :options="resolutionPresets"
+          :model-value="`${stageWidth}x${stageHeight}`"
+          size="sm"
+          @update:model-value="onResolutionPresetChange"
+        />
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div class="space-y-1">
+          <label class="text-[11px] text-muted-foreground">Largeur (px) :</label>
+          <Input v-model.number="stageWidth" type="number" size="sm" />
+        </div>
+        <div class="space-y-1">
+          <label class="text-[11px] text-muted-foreground">Hauteur (px) :</label>
+          <Input v-model.number="stageHeight" type="number" size="sm" />
+        </div>
+      </div>
+
+      <div class="border-t border-border/40 pt-3 space-y-3">
+        <div class="flex items-center justify-between">
+          <span>Safe-Area TV active par défaut :</span>
+          <Switch v-model="safeArea" size="sm" />
+        </div>
+        <div class="flex items-center justify-between">
+          <span>Affichage de la grille repère :</span>
+          <Switch v-model="showGrid" size="sm" />
+        </div>
+      </div>
+    </div>
+
+    <template #footer>
+      <div class="flex items-center justify-end gap-2">
+        <Button variant="ghost" size="sm" @click="emit('update:open', false)">
+          Annuler
+        </Button>
+        <Button variant="primary" size="sm" @click="save">
+          Enregistrer
+        </Button>
+      </div>
+    </template>
+  </Modal>
+</template>

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Package Library"
+  short_description: "Build and test the distributable package"
+  default_prompt: "Use $package-library to build, inspect, pack, and smoke-test MyCompLib as a consumer."

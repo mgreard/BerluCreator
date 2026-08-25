@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify Library"
+  short_description: "Run trustworthy library quality gates"
+  default_prompt: "Use $verify-library to run the appropriate quality gates and report every failure accurately."
