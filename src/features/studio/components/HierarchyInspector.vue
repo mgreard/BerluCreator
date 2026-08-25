@@ -16,7 +16,7 @@ const timelineStore = useTimelineStore()
         <Icon name="account_tree" size="sm" class="text-primary" />
         <span>Arbre des Calques Actifs</span>
       </div>
-      <Badge variant="outline" size="sm">
+      <Badge variant="neutral" size="sm">
         {{ activeLayers.length }} calques
       </Badge>
     </div>
@@ -32,7 +32,7 @@ const timelineStore = useTimelineStore()
             <Icon name="layers" size="xs" class="text-primary" />
             {{ layer.asset.name }}
           </span>
-          <Badge variant="secondary" size="sm" class="text-[10px]">
+          <Badge variant="neutral" size="sm" class="text-[10px]">
             {{ layer.category }}
           </Badge>
         </div>

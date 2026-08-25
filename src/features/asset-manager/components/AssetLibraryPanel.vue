@@ -1,22 +1,56 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { CATEGORY_LIST } from '@core/constants/categories'
 import { useAssetStore } from '../stores/useAssetStore'
+import { seedDemoAssetsIfEmpty } from '../services/demo-asset-seeder'
 import AssetCard from './AssetCard.vue'
 import AssetDropzone from './AssetDropzone.vue'
 import AnchorEditorModal from './AnchorEditorModal.vue'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { IconButton } from '@/components/ui/icon-button'
 import { Icon } from '@/components/ui/icon'
 
 const assetStore = useAssetStore()
 const selectedAssetForAnchors = ref<Asset | null>(null)
 const isAnchorModalOpen = ref(false)
+const isReloading = ref(false)
+
+const categoryCounts = computed(() => {
+  const counts: Record<string, number> = { all: assetStore.assets.length }
+  for (const cat of CATEGORY_LIST) {
+    counts[cat.id] = 0
+  }
+  for (const asset of assetStore.assets) {
+    counts[asset.category] = (counts[asset.category] || 0) + 1
+  }
+  return counts
+})
 
 onMounted(async () => {
   await assetStore.loadAssets()
 })
+
+async function onReloadDefaultPack() {
+  if (confirm('Voulez-vous réinitialiser et recharger le pack complet des 68 sprites par défaut ?')) {
+    isReloading.value = true
+    try {
+      await seedDemoAssetsIfEmpty(true)
+      await assetStore.loadAssets()
+    } finally {
+      isReloading.value = false
+    }
+  }
+}
+
+function selectCategory(catId: string) {
+  if (assetStore.selectedCategory === catId) {
+    assetStore.selectedCategory = 'all'
+  } else {
+    assetStore.selectedCategory = catId as AssetCategory | 'all'
+  }
+}
 
 function onEditAnchors(asset: Asset) {
   selectedAssetForAnchors.value = asset
@@ -38,9 +72,19 @@ function onDeleteAsset(asset: Asset) {
         <Icon name="photo_library" size="sm" class="text-primary" />
         <span>Bibliothèque d'Assets</span>
       </div>
-      <Badge variant="outline" size="sm">
-        {{ assetStore.filteredAssets.length }} sprite{{ assetStore.filteredAssets.length > 1 ? 's' : '' }}
-      </Badge>
+      <div class="flex items-center gap-1.5">
+        <IconButton
+          icon="restart_alt"
+          size="xs"
+          variant="ghost"
+          title="Recharger le pack de sprites par défaut"
+          :disabled="isReloading"
+          @click="onReloadDefaultPack"
+        />
+        <Badge variant="neutral" size="sm">
+          {{ assetStore.filteredAssets.length }} sprite{{ assetStore.filteredAssets.length > 1 ? 's' : '' }}
+        </Badge>
+      </div>
     </div>
 
     <!-- Recherche & Filtres -->
@@ -55,15 +99,16 @@ function onDeleteAsset(asset: Asset) {
       <div class="flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar">
         <button
           type="button"
-          class="px-2 py-1 rounded-md text-[11px] font-medium transition-colors shrink-0"
+          class="px-2 py-1 rounded-md text-[11px] font-medium transition-colors shrink-0 flex items-center gap-1"
           :class="[
             assetStore.selectedCategory === 'all'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-surface/60 text-muted-foreground hover:text-foreground'
+              ? 'bg-primary text-primary-foreground font-semibold shadow-sm'
+              : 'bg-surface/60 text-muted-foreground hover:text-foreground hover:bg-surface'
           ]"
-          @click="assetStore.selectedCategory = 'all'"
+          @click="selectCategory('all')"
         >
-          Tous
+          <span>Tous</span>
+          <span class="text-[9px] opacity-70 font-mono">({{ categoryCounts.all ?? 0 }})</span>
         </button>
         <button
           v-for="cat in CATEGORY_LIST"
@@ -72,13 +117,20 @@ function onDeleteAsset(asset: Asset) {
           class="px-2 py-1 rounded-md text-[11px] font-medium transition-colors shrink-0 flex items-center gap-1"
           :class="[
             assetStore.selectedCategory === cat.id
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-surface/60 text-muted-foreground hover:text-foreground'
+              ? 'bg-primary text-primary-foreground font-semibold shadow-sm'
+              : 'bg-surface/60 text-muted-foreground hover:text-foreground hover:bg-surface'
           ]"
-          @click="assetStore.selectedCategory = cat.id as AssetCategory"
+          @click="selectCategory(cat.id)"
         >
           <Icon :name="cat.icon" size="xs" />
           <span>{{ cat.label }}</span>
+          <span
+            v-if="categoryCounts[cat.id]"
+            class="text-[9px] px-1 py-0 rounded-full font-mono font-normal"
+            :class="assetStore.selectedCategory === cat.id ? 'bg-white/20' : 'bg-black/20 text-muted-foreground'"
+          >
+            {{ categoryCounts[cat.id] }}
+          </span>
         </button>
       </div>
     </div>

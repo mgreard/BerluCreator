@@ -1,6 +1,10 @@
 import { db } from '../dexie'
 import type { Asset, AssetBlobRecord, AssetCategory } from '@core/types/asset.types'
 
+function toPlain<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data))
+}
+
 export class AssetRepository {
   async getAll(): Promise<Asset[]> {
     return await db.assets.toArray()
@@ -25,13 +29,13 @@ export class AssetRepository {
 
     await db.transaction('rw', [db.assets, db.assetBlobs], async () => {
       await db.assetBlobs.put(blobRecord)
-      await db.assets.put(asset)
+      await db.assets.put(toPlain(asset))
     })
   }
 
   async update(id: string, changes: Partial<Asset>): Promise<void> {
     await db.assets.update(id, {
-      ...changes,
+      ...toPlain(changes),
       updatedAt: Date.now()
     })
   }

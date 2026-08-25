@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watchEffect, onWatcherCleanup } from 'vue'
 import type { Asset } from '@core/types/asset.types'
 import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 import { Badge } from '@/components/ui/badge'
@@ -18,33 +18,63 @@ const emit = defineEmits<{
 }>()
 
 const previewUrl = ref<string | null>(null)
+const isDragging = ref(false)
 
-onMounted(async () => {
+watchEffect(async () => {
+  const currentBlobId = asset.blobId
+  if (!currentBlobId) {
+    previewUrl.value = null
+    return
+  }
+
   try {
-    previewUrl.value = await blobCacheService.acquire(asset.blobId)
+    previewUrl.value = await blobCacheService.acquire(currentBlobId)
   } catch (err) {
     console.error('Erreur chargement preview blob:', err)
   }
+
+  onWatcherCleanup(() => {
+    blobCacheService.release(currentBlobId)
+  })
 })
 
-onUnmounted(() => {
-  blobCacheService.release(asset.blobId)
-})
+function onDragStart(e: DragEvent) {
+  isDragging.value = true
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'copyMove'
+    e.dataTransfer.setData('application/json', JSON.stringify(asset))
+    e.dataTransfer.setData('text/plain', asset.id)
+    
+    // Image fantôme ou prévisualisation de drag
+    const img = e.currentTarget as HTMLElement
+    if (img) {
+      e.dataTransfer.setDragImage(img, 40, 40)
+    }
+  }
+}
+
+function onDragEnd() {
+  isDragging.value = false
+}
 </script>
 
 <template>
   <div
-    class="group relative rounded-xl border p-2 flex flex-col gap-2 transition-all cursor-pointer select-none"
+    draggable="true"
+    class="group relative rounded-xl border p-2 flex flex-col gap-2 transition-all cursor-grab active:cursor-grabbing select-none"
     :class="[
       selected
         ? 'border-primary bg-primary/10 shadow-glass-sm'
-        : 'border-border/50 bg-surface/40 hover:border-border hover:bg-surface-hover/60'
+        : 'border-border/50 bg-surface/40 hover:border-border hover:bg-surface-hover/60',
+      isDragging && 'opacity-40 scale-95 ring-2 ring-primary/50'
     ]"
     @click="emit('select', asset)"
+    @dragstart="onDragStart"
+    @dragend="onDragEnd"
   >
     <!-- Vignette de prévisualisation -->
     <div
-      class="relative w-full aspect-square rounded-lg bg-black/40 flex items-center justify-center overflow-hidden border border-border/30"
+      class="relative w-full aspect-square rounded-lg bg-black/40 flex items-center justify-center overflow-hidden border border-border/30 pointer-events-none"
     >
       <img
         v-if="previewUrl"
@@ -72,7 +102,7 @@ onUnmounted(() => {
           {{ asset.name }}
         </h4>
         <div class="flex items-center gap-1 mt-0.5">
-          <Badge variant="secondary" size="sm" class="text-[9px] px-1 py-0 uppercase">
+          <Badge variant="neutral" size="sm" class="text-[9px] px-1 py-0 uppercase font-mono">
             {{ asset.category }}
           </Badge>
           <span class="text-[10px] text-muted-foreground font-mono">

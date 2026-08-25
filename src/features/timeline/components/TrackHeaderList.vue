@@ -39,7 +39,7 @@ const timelineStore = useTimelineStore()
         </div>
 
         <div class="flex items-center gap-1 shrink-0">
-          <Badge variant="outline" size="sm" class="text-[10px] font-mono px-1 py-0">
+          <Badge variant="neutral" size="sm" class="text-[10px] font-mono px-1 py-0">
             {{ track.keyframes.length }}
           </Badge>
           <IconButton

@@ -32,10 +32,10 @@ defineProps<{
       </div>
 
       <div class="flex items-center gap-1.5">
-        <Badge v-if="beat.suggestedTag" variant="secondary" size="sm" class="text-[10px]">
+        <Badge v-if="beat.suggestedTag" variant="accent" size="sm" class="text-[10px]">
           #{{ beat.suggestedTag }}
         </Badge>
-        <Badge variant="outline" size="sm" class="text-[10px] uppercase">
+        <Badge variant="neutral" size="sm" class="text-[10px] uppercase">
           {{ beat.targetSlot }}
         </Badge>
       </div>

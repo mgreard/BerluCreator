@@ -88,7 +88,7 @@ async function saveChanges() {
         <div class="border-t border-border/40 pt-2 flex flex-col gap-2 flex-1">
           <div class="flex items-center justify-between">
             <span class="text-xs font-medium text-foreground">Points d'ancrage :</span>
-            <Badge variant="outline" size="sm">{{ editingAnchors.length }}</Badge>
+            <Badge variant="neutral" size="sm">{{ editingAnchors.length }}</Badge>
           </div>
 
           <div class="max-h-44 overflow-y-auto space-y-1 pr-1">

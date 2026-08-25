@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { AssetCategory } from '@core/types/asset.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { useAssetStore } from '../stores/useAssetStore'
@@ -12,6 +12,17 @@ const isDragging = ref(false)
 const selectedCategory = ref<AssetCategory>('torso')
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
+// Synchroniser automatiquement la catégorie d'import avec l'onglet sélectionné dans la bibliothèque
+watch(
+  () => assetStore.selectedCategory,
+  (newCat) => {
+    if (newCat && newCat !== 'all') {
+      selectedCategory.value = newCat
+    }
+  },
+  { immediate: true }
+)
+
 const categoryOptions = Object.values(ASSET_CATEGORIES).map((c) => ({
   value: c.id,
   label: `${c.label} (${c.id})`
@@ -20,11 +31,17 @@ const categoryOptions = Object.values(ASSET_CATEGORIES).map((c) => ({
 async function handleFiles(files: FileList | null) {
   if (!files || files.length === 0) return
 
+  const targetCategory = selectedCategory.value
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
     if (file.type.startsWith('image/')) {
-      await assetStore.importAsset(file, selectedCategory.value)
+      await assetStore.importAsset(file, targetCategory)
     }
+  }
+
+  // Si un filtre autre que 'all' ou la catégorie cible était actif, basculer sur la catégorie de l'asset
+  if (assetStore.selectedCategory !== 'all' && assetStore.selectedCategory !== targetCategory) {
+    assetStore.selectedCategory = targetCategory
   }
 }
 

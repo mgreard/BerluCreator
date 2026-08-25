@@ -8,8 +8,8 @@ export const MIN_SEQUENCE_DURATION_MS = 1000 // 1 seconde minimum
 export const MAX_SEQUENCE_DURATION_MS = 300000 // 5 minutes maximum
 
 export const DEFAULT_STAGE_RESOLUTION = {
-  width: 1920,
-  height: 1080,
+  width: 1792,
+  height: 1024,
   aspectRatio: '16:9'
 } as const
 

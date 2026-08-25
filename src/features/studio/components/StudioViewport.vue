@@ -26,10 +26,10 @@ function toggleAnchors() {
     <!-- Barre d'outils du Viewport -->
     <div class="h-10 border-b border-border/40 px-4 flex items-center justify-between bg-surface/40 backdrop-blur-md z-10">
       <div class="flex items-center gap-2">
-        <Badge variant="outline" size="sm" class="font-mono text-xs">
+        <Badge variant="neutral" size="sm" class="font-mono text-xs">
           {{ stage.width }} &times; {{ stage.height }}
         </Badge>
-        <Badge variant="secondary" size="sm" class="text-xs">
+        <Badge variant="accent" size="sm" class="text-xs">
           16:9 HD
         </Badge>
       </div>

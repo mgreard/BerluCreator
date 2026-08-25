@@ -90,7 +90,7 @@ function captureCurrentFrame() {
 
       <div class="border-t border-border/40 pt-3 flex items-center justify-between text-muted-foreground text-[11px]">
         <span>Durée totale : {{ (timelineStore.currentSequence.durationMs / 1000).toFixed(1) }}s</span>
-        <Badge variant="outline" size="sm">
+        <Badge variant="neutral" size="sm">
           {{ timelineStore.currentSequence.fps }} FPS
         </Badge>
       </div>
