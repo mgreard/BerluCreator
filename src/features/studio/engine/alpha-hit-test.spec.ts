@@ -1,0 +1,39 @@
+import { describe, expect, it } from 'vitest'
+import type { RenderableLayer } from '../composables/useHierarchyResolver'
+import { mapStagePointToImagePixel } from './alpha-hit-test'
+
+function layer(overrides: Partial<RenderableLayer> = {}): RenderableLayer {
+  return {
+    x: 100,
+    y: 200,
+    width: 200,
+    height: 100,
+    transformOriginX: 200,
+    transformOriginY: 250,
+    scaleX: 1,
+    scaleY: 1,
+    rotation: 0,
+    ...overrides
+  } as RenderableLayer
+}
+
+describe('mapStagePointToImagePixel', () => {
+  it('mappe un point du viewport vers le pixel correspondant', () => {
+    expect(mapStagePointToImagePixel(layer(), { x: 150, y: 225 }, 20, 10)).toEqual({
+      x: 5,
+      y: 2
+    })
+  })
+
+  it('inverse la rotation et l’échelle autour du cadre logique original', () => {
+    const transformed = layer({ scaleX: 2, scaleY: 2, rotation: 90 })
+    expect(mapStagePointToImagePixel(transformed, { x: 200, y: 150 }, 20, 10)).toEqual({
+      x: 5,
+      y: 5
+    })
+  })
+
+  it('rejette un point situé hors du bitmap recadré', () => {
+    expect(mapStagePointToImagePixel(layer(), { x: 99, y: 250 }, 20, 10)).toBeNull()
+  })
+})

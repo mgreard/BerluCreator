@@ -16,6 +16,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Icon } from '@/components/ui/icon'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Tabs, type TabItem, type TabTone } from '@/components/ui/tabs'
+import { toast } from '@/ui/shared/services/toast.service'
 
 import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
@@ -24,6 +25,7 @@ const assetStore = useAssetStore()
 const timelineStore = useTimelineStore()
 const isUploadModalOpen = ref(false)
 const isReloading = ref(false)
+const isCropping = ref(false)
 
 watch(
   () => timelineStore.selectedTrack?.targetSlot ?? timelineStore.selectedTrack?.category,
@@ -181,6 +183,31 @@ async function onReloadDefaultPack() {
   }
 }
 
+async function onTrimExistingAssets() {
+  const accepted = confirm(
+    `Cette migration va remplacer les fichiers de ${assetStore.assets.length} assets par des PNG recadrés. ` +
+      'Une sauvegarde manuelle du projet est recommandée avant de continuer. Lancer le recadrage ?'
+  )
+  if (!accepted) return
+
+  isCropping.value = true
+  try {
+    const result = await assetStore.trimExistingAssets()
+    toast.success(
+      'Recadrage terminé',
+      `${result.cropped} asset(s) recadré(s), ${result.unchanged} inchangé(s)` +
+        (result.failed > 0 ? `, ${result.failed} échec(s).` : '.')
+    )
+  } catch (error) {
+    toast.error(
+      'Échec du recadrage',
+      error instanceof Error ? error.message : 'Une erreur inconnue est survenue.'
+    )
+  } finally {
+    isCropping.value = false
+  }
+}
+
 function onDeleteAsset(asset: Asset) {
   if (confirm(`Voulez-vous vraiment supprimer l'asset "${asset.name}" ?`)) {
     assetStore.deleteAsset(asset.id)
@@ -217,6 +244,7 @@ function onDeleteAsset(asset: Asset) {
             variant="primary"
             size="sm"
             class="h-7 px-2.5 text-xs gap-1 font-medium shadow-glass-sm"
+            :disabled="isCropping"
             @click="isUploadModalOpen = true"
           >
             <Icon name="cloud_upload" size="xs" />
@@ -224,12 +252,22 @@ function onDeleteAsset(asset: Asset) {
           </Button>
 
           <IconButton
+            icon="content_cut"
+            size="xs"
+            variant="ghost"
+            title="Migration temporaire : recadrer les bords transparents des assets existants"
+            class="text-warning hover:text-warning"
+            :disabled="isCropping || isReloading || assetStore.assets.length === 0"
+            @click="onTrimExistingAssets"
+          />
+
+          <IconButton
             icon="restart_alt"
             size="xs"
             variant="ghost"
             title="Recharger le pack complet des 68 sprites"
             class="text-text-muted hover:text-text-primary"
-            :disabled="isReloading"
+            :disabled="isReloading || isCropping"
             @click="onReloadDefaultPack"
           />
         </div>

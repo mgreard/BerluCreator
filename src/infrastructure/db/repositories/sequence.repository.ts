@@ -10,10 +10,6 @@ export class SequenceRepository {
     return await db.sequences.get(id)
   }
 
-  async getByProjectId(projectId: string): Promise<Sequence[]> {
-    return await db.sequences.where('projectId').equals(projectId).toArray()
-  }
-
   async save(sequence: Sequence): Promise<void> {
     await db.sequences.put({
       ...toPlain(sequence),
@@ -21,9 +17,6 @@ export class SequenceRepository {
     })
   }
 
-  async delete(id: string): Promise<void> {
-    await db.sequences.delete(id)
-  }
 }
 
 export const sequenceRepository = new SequenceRepository()

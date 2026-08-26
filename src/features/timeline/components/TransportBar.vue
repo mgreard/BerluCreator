@@ -9,10 +9,6 @@ import { Select } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Icon } from '@/components/ui/icon'
 
-const emit = defineEmits<{
-  (e: 'openAiDirector'): void
-}>()
-
 const timelineStore = useTimelineStore()
 
 const formattedCurrentTime = computed(() => {
@@ -99,7 +95,7 @@ function stepFrame(frames: number) {
       />
     </div>
 
-    <!-- Zoom & Assistant IA -->
+    <!-- Zoom de la timeline -->
     <div class="flex items-center gap-4">
       <div class="flex items-center gap-1.5 w-36">
         <IconButton
@@ -130,15 +126,6 @@ function stepFrame(frames: number) {
         />
       </div>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        class="h-7 text-xs border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 gap-1.5 font-medium"
-        @click="emit('openAiDirector')"
-      >
-        <Icon name="auto_awesome" size="xs" class="text-amber-400 animate-pulse" />
-        <span>Scénariste IA</span>
-      </Button>
     </div>
   </div>
 </template>

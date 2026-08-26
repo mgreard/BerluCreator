@@ -6,6 +6,11 @@ import type { BoxBounds } from '../engine/transform-matrix'
 
 const globalImageCache = new Map<string, HTMLImageElement>()
 
+export function getCachedAssetImage(blobId: string): HTMLImageElement | undefined {
+  const image = globalImageCache.get(blobId)
+  return image?.complete && image.naturalWidth > 0 ? image : undefined
+}
+
 /**
  * Charge ou récupère depuis le cache mémoire l'image HTML correspondant à un blobId d'asset.
  */
@@ -50,8 +55,8 @@ export function drawLayersOnContext(
         (layer.scaleY !== undefined && layer.scaleY !== 1)
 
       if (hasTransform) {
-        const centerX = layer.x + layer.width / 2
-        const centerY = layer.y + layer.height / 2
+        const centerX = layer.transformOriginX
+        const centerY = layer.transformOriginY
         ctx.translate(centerX, centerY)
         if (layer.rotation) {
           ctx.rotate((layer.rotation * Math.PI) / 180)
@@ -59,7 +64,13 @@ export function drawLayersOnContext(
         if (layer.scaleX !== undefined || layer.scaleY !== undefined) {
           ctx.scale(layer.scaleX ?? 1, layer.scaleY ?? 1)
         }
-        ctx.drawImage(img, -layer.width / 2, -layer.height / 2, layer.width, layer.height)
+        ctx.drawImage(
+          img,
+          layer.x - centerX,
+          layer.y - centerY,
+          layer.width,
+          layer.height
+        )
       } else {
         ctx.drawImage(img, layer.x, layer.y, layer.width, layer.height)
       }

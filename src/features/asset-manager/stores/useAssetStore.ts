@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { assetRepository } from '@infrastructure/db/repositories/asset.repository'
 import { generateId } from '@/lib/utils'
+import { trimTransparentImage } from '../services/transparent-image-trimmer'
 
 import { resolveSpriteConfig } from '@core/constants/sprites-config'
 
@@ -65,8 +66,9 @@ export const useAssetStore = defineStore('asset', () => {
     const id = generateId('asset')
     const blobId = generateId('blob')
 
-    // Extraire les dimensions naturelles de l'image
-    const dimensions = await getImageDimensions(file)
+    const trimmed = await trimTransparentImage(file)
+    const sourceWidth = trimmed.trimFrame?.sourceWidth ?? trimmed.width
+    const sourceHeight = trimmed.trimFrame?.sourceHeight ?? trimmed.height
 
     const defaultName = file instanceof File ? file.name.replace(/\.[^/.]+$/, '') : `sprite_${category}_${Date.now().toString().slice(-4)}`
     const assetName = name || defaultName
@@ -78,16 +80,17 @@ export const useAssetStore = defineStore('asset', () => {
       category,
       tags: [category],
       blobId,
-      width: dimensions.width,
-      height: dimensions.height,
-      displayWidth: dimensions.width,
-      displayHeight: dimensions.height,
+      width: trimmed.width,
+      height: trimmed.height,
+      displayWidth: sourceWidth,
+      displayHeight: sourceHeight,
+      trimFrame: trimmed.trimFrame,
       isMovable: spriteConfig.isMovable,
       createdAt: Date.now(),
       updatedAt: Date.now()
     }
 
-    await assetRepository.create(newAsset, file)
+    await assetRepository.create(newAsset, trimmed.blob)
     assets.value.push(newAsset)
     selectedAssetId.value = newAsset.id
 
@@ -125,6 +128,60 @@ export const useAssetStore = defineStore('asset', () => {
     }
   }
 
+  async function trimExistingAssets(): Promise<{
+    cropped: number
+    unchanged: number
+    failed: number
+  }> {
+    let cropped = 0
+    let unchanged = 0
+    let failed = 0
+
+    for (const asset of [...assets.value]) {
+      if (asset.trimFrame) {
+        unchanged += 1
+        continue
+      }
+
+      try {
+        const source = await assetRepository.getBlob(asset.blobId)
+        if (!source) throw new Error(`Blob introuvable pour ${asset.name}`)
+
+        const trimmed = await trimTransparentImage(source)
+        if (!trimmed.changed || !trimmed.trimFrame) {
+          unchanged += 1
+          continue
+        }
+
+        const blobId = generateId('blob')
+        const changes: Partial<Asset> = {
+          blobId,
+          width: trimmed.width,
+          height: trimmed.height,
+          displayWidth: asset.displayWidth ?? trimmed.trimFrame.sourceWidth,
+          displayHeight: asset.displayHeight ?? trimmed.trimFrame.sourceHeight,
+          trimFrame: trimmed.trimFrame
+        }
+        await assetRepository.replaceBlob(asset.id, blobId, trimmed.blob, changes)
+
+        const index = assets.value.findIndex((candidate) => candidate.id === asset.id)
+        if (index !== -1) {
+          assets.value[index] = {
+            ...assets.value[index],
+            ...changes,
+            updatedAt: Date.now()
+          }
+        }
+        cropped += 1
+      } catch (error) {
+        console.error(`Échec du recadrage de l'asset ${asset.name}:`, error)
+        failed += 1
+      }
+    }
+
+    return { cropped, unchanged, failed }
+  }
+
   function selectAsset(id: string | null) {
     selectedAssetId.value = id
   }
@@ -144,22 +201,7 @@ export const useAssetStore = defineStore('asset', () => {
     importSlicedAssets,
     updateAsset,
     deleteAsset,
+    trimExistingAssets,
     selectAsset
   }
 })
-
-function getImageDimensions(file: File | Blob): Promise<{ width: number; height: number }> {
-  return new Promise((resolve) => {
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload = () => {
-      resolve({ width: img.naturalWidth, height: img.naturalHeight })
-      URL.revokeObjectURL(url)
-    }
-    img.onerror = () => {
-      resolve({ width: 400, height: 400 })
-      URL.revokeObjectURL(url)
-    }
-    img.src = url
-  })
-}

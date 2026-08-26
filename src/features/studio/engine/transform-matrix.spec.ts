@@ -31,6 +31,10 @@ describe('computeTransformedBounds', () => {
       height: 200
     })
   })
+  it('utilise le centre du cadre logique pour un bitmap recadré', () => {
+    const bounds = computeTransformedBounds(200, 250, 100, 50, 2, 2, 100, 100)
+    expect(bounds).toEqual({ x: 300, y: 400, width: 200, height: 100 })
+  })
 })
 
 describe('computeResizeScales', () => {

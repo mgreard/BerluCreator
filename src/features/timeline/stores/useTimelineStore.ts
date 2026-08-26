@@ -8,7 +8,9 @@ import type {
   Keyframe,
   KeyframeSprite,
   PlaybackState,
-  Transform2D
+  Transform2D,
+  SavedKeyframePreset,
+  SavedKeyframeSprite
 } from '@core/types/timeline.types'
 import { normalizeAssetCategory, type AssetCategory } from '@core/types/asset.types'
 import {
@@ -794,6 +796,98 @@ export const useTimelineStore = defineStore('timeline', () => {
     saveSequence()
   }
 
+  async function applySavedKeyframe(preset: SavedKeyframePreset): Promise<number> {
+    pause()
+    commitTransformSession(false)
+    const sequence = currentSequence.value
+    const timeMs = Math.max(0, Math.min(playback.value.currentTimeMs, sequence.durationMs))
+    const groups = sequence.groups ?? (sequence.groups = [])
+    const groupIdMap = new Map<string, string>()
+
+    for (const savedGroup of preset.groups) {
+      let group = groups.find((candidate) => candidate.id === savedGroup.sourceGroupId)
+        ?? groups.find((candidate) => candidate.name === savedGroup.name)
+      if (!group) {
+        group = {
+          id: generateId('grp'),
+          name: savedGroup.name,
+          zIndex: savedGroup.zIndex,
+          muted: false,
+          locked: false,
+          collapsed: false
+        }
+        groups.push(group)
+      }
+      group.name = savedGroup.name
+      group.zIndex = savedGroup.zIndex
+      group.transform = cloneTransform(savedGroup.transform)
+      group.muted = false
+      groupIdMap.set(savedGroup.sourceGroupId, group.id)
+    }
+
+    const assignedTrackIds = new Set<string>()
+    const spritesByTrackId = new Map<string, SavedKeyframeSprite[]>()
+    for (const savedTrack of preset.tracks) {
+      let track = sequence.tracks.find(
+        (candidate) => candidate.id === savedTrack.sourceTrackId && !assignedTrackIds.has(candidate.id)
+      )
+      if (!track) {
+        track = sequence.tracks.find(
+          (candidate) =>
+            !assignedTrackIds.has(candidate.id) &&
+            candidate.category === savedTrack.category &&
+            candidate.name === savedTrack.name
+        )
+      }
+      if (!track) {
+        track = {
+          id: generateId(`trk_${savedTrack.category}`),
+          name: savedTrack.name,
+          category: savedTrack.category,
+          targetSlot: savedTrack.targetSlot,
+          zIndex: savedTrack.zIndex,
+          muted: false,
+          locked: false,
+          keyframes: []
+        }
+        sequence.tracks.push(track)
+      }
+
+      track.name = savedTrack.name
+      track.targetSlot = savedTrack.targetSlot
+      track.zIndex = savedTrack.zIndex
+      track.muted = false
+      track.groupId = savedTrack.sourceGroupId
+        ? groupIdMap.get(savedTrack.sourceGroupId) ?? savedTrack.sourceGroupId
+        : undefined
+      assignedTrackIds.add(track.id)
+      spritesByTrackId.set(track.id, savedTrack.sprites)
+    }
+
+    for (const track of sequence.tracks) {
+      const savedSprites = spritesByTrackId.get(track.id) ?? []
+      let keyframe = track.keyframes.find((candidate) => Math.abs(candidate.timeMs - timeMs) < 10)
+      if (!keyframe) {
+        keyframe = { id: generateId('kf'), timeMs, sprites: [] }
+        track.keyframes.push(keyframe)
+        track.keyframes.sort((left, right) => left.timeMs - right.timeMs)
+      }
+      keyframe.sprites = savedSprites.map((sprite) => ({
+        id: generateId('kfs'),
+        assetId: sprite.assetId,
+        transform: cloneTransform(sprite.transform),
+        label: sprite.label,
+        order: sprite.order
+      }))
+    }
+
+    clearTransformHistory()
+    clearStudioSelection(false)
+    sequence.updatedAt = Date.now()
+    await saveSequence()
+    return [...spritesByTrackId.values()].reduce((count, sprites) => count + sprites.length, 0)
+  }
+
   async function saveSequence() {
     await sequenceRepository.save(currentSequence.value)
   }
@@ -853,6 +947,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     toggleTrackLock,
     setDuration,
     setFps,
+    applySavedKeyframe,
     saveSequence
   }
 })

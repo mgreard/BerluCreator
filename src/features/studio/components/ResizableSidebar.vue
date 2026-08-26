@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useId, useTemplateRef, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { PanelResizeHandle } from '@/components/ui/panel-resize-handle'
 
 const {
   side,
@@ -17,7 +18,6 @@ const {
 
 const open = defineModel<boolean>('open', { default: true })
 const panelId = useId()
-const handleRef = useTemplateRef<HTMLDivElement>('handleRef')
 const width = ref(defaultWidth)
 const isResizing = ref(false)
 
@@ -26,6 +26,7 @@ let startWidth = defaultWidth
 let pointerId: number | null = null
 let previousCursor = ''
 let previousUserSelect = ''
+let handleElement: HTMLElement | null = null
 
 const panelStyle = computed(() => ({
   width: open.value ? `${width.value}px` : '0px',
@@ -47,8 +48,8 @@ function onPointerDown(event: PointerEvent) {
   startWidth = width.value
   pointerId = event.pointerId
   isResizing.value = true
-  handleRef.value?.setPointerCapture?.(event.pointerId)
-
+  handleElement = event.currentTarget as HTMLElement
+  handleElement.setPointerCapture?.(event.pointerId)
   previousCursor = document.body.style.cursor
   previousUserSelect = document.body.style.userSelect
   document.body.style.cursor = 'col-resize'
@@ -64,14 +65,12 @@ function onPointerMove(event: PointerEvent) {
 function stopResizing(event?: PointerEvent) {
   if (!isResizing.value) return
   const activePointerId = event?.pointerId ?? pointerId
-  if (
-    activePointerId !== null &&
-    handleRef.value?.hasPointerCapture?.(activePointerId)
-  ) {
-    handleRef.value.releasePointerCapture(activePointerId)
+  if (activePointerId !== null && handleElement?.hasPointerCapture?.(activePointerId)) {
+    handleElement.releasePointerCapture(activePointerId)
   }
   isResizing.value = false
   pointerId = null
+  handleElement = null
   document.body.style.cursor = previousCursor
   document.body.style.userSelect = previousUserSelect
 }
@@ -112,23 +111,20 @@ watch(width, (value) => {
     class="relative h-full shrink-0 overflow-visible transition-[width,min-width] duration-200 ease-out"
     :class="{ 'transition-none': isResizing }"
   >
-    <div v-if="open" class="w-full h-full overflow-hidden">
+    <div v-if="open" class="h-full w-full overflow-hidden">
       <slot />
     </div>
 
-    <div
+    <PanelResizeHandle
       v-if="open"
-      ref="handleRef"
-      role="separator"
-      tabindex="0"
-      aria-orientation="vertical"
-      :aria-controls="panelId"
-      :aria-valuemin="minWidth"
-      :aria-valuemax="maxWidth"
-      :aria-valuenow="width"
-      :aria-label="`Redimensionner le panneau ${side === 'left' ? 'gauche' : 'droit'}`"
-      title="Glisser pour redimensionner · Double-cliquer pour réinitialiser"
-      class="group absolute inset-y-0 z-40 w-2 cursor-col-resize touch-none outline-none"
+      orientation="vertical"
+      :active="isResizing"
+      :controls="panelId"
+      :label="`Redimensionner le panneau ${side === 'left' ? 'gauche' : 'droit'}`"
+      :value-min="minWidth"
+      :value-max="maxWidth"
+      :value-now="width"
+      :value-text="`${width} pixels`"
       :class="side === 'left' ? '-right-1' : '-left-1'"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
@@ -137,12 +133,6 @@ watch(width, (value) => {
       @lostpointercapture="stopResizing"
       @keydown="onKeydown"
       @dblclick="resetWidth"
-    >
-      <span
-        aria-hidden="true"
-        class="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border-subtle transition-colors group-hover:bg-primary group-focus-visible:bg-primary"
-        :class="{ 'bg-primary! w-0.5!': isResizing }"
-      />
-    </div>
+    />
   </aside>
 </template>

@@ -12,6 +12,8 @@ node_modules
 dist
 dist-ssr
 dist-server
+.trimmed-sprites/
+.sprite-trim-backup/
 *.local
 .agy.local.md
 *.tsbuildinfo

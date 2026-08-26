@@ -1,7 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie'
 import type { Asset, AssetBlobRecord } from '@core/types/asset.types'
 import type { Project, WorkspaceSnapshot } from '@core/types/project.types'
-import type { Sequence } from '@core/types/timeline.types'
+import type { SavedKeyframePreset, Sequence } from '@core/types/timeline.types'
 import type { CharacterPreset } from '@core/types/character.types'
 
 export class BerluDatabase extends Dexie {
@@ -11,6 +11,7 @@ export class BerluDatabase extends Dexie {
   sequences!: EntityTable<Sequence, 'id'>
   characters!: EntityTable<CharacterPreset, 'id'>
   workspaceSnapshots!: EntityTable<WorkspaceSnapshot, 'id'>
+  savedKeyframes!: EntityTable<SavedKeyframePreset, 'id'>
 
   constructor() {
     super('BerluCreatorDB')
@@ -30,6 +31,16 @@ export class BerluDatabase extends Dexie {
       sequences: 'id, projectId, createdAt, updatedAt',
       characters: 'id, name, createdAt, updatedAt',
       workspaceSnapshots: 'id, createdAt'
+    })
+
+    this.version(3).stores({
+      assets: 'id, name, category, *tags, blobId, createdAt, updatedAt',
+      assetBlobs: 'id, mimeType, createdAt',
+      projects: 'id, createdAt, updatedAt',
+      sequences: 'id, projectId, createdAt, updatedAt',
+      characters: 'id, name, createdAt, updatedAt',
+      workspaceSnapshots: 'id, createdAt',
+      savedKeyframes: 'id, name, createdAt, updatedAt'
     })
   }
 }

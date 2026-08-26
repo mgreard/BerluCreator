@@ -68,6 +68,42 @@ export interface Sequence {
   updatedAt: number
 }
 
+export interface SavedKeyframeSprite {
+  assetId: string
+  transform?: Partial<Transform2D>
+  label?: string
+  order: number
+}
+
+export interface SavedKeyframeTrack {
+  sourceTrackId: string
+  name: string
+  category: AssetCategory
+  targetSlot: AssetCategory
+  sourceGroupId?: string
+  zIndex: number
+  sprites: SavedKeyframeSprite[]
+}
+
+export interface SavedKeyframeGroup {
+  sourceGroupId: string
+  name: string
+  zIndex: number
+  transform?: Partial<Transform2D>
+}
+
+/** Pose de scène réutilisable, distincte d'une sauvegarde complète de l'application. */
+export interface SavedKeyframePreset {
+  id: string
+  name: string
+  sourceTimeMs: number
+  thumbnailDataUrl: string
+  tracks: SavedKeyframeTrack[]
+  groups: SavedKeyframeGroup[]
+  createdAt: number
+  updatedAt: number
+}
+
 export interface PlaybackState {
   isPlaying: boolean
   currentTimeMs: number

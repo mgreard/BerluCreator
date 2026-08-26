@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onBeforeUnmount, onMounted, watch, type WatchStopHandle } from 'vue'
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
+import { useWorkspaceBackupStore } from '@/features/project/stores/useWorkspaceBackupStore'
 import { seedDemoAssetsIfEmpty } from '@/features/asset-manager/services/demo-asset-seeder'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 
@@ -13,17 +14,19 @@ import HierarchyInspector from '@/features/studio/components/HierarchyInspector.
 import TimelinePanel from '@/features/timeline/components/TimelinePanel.vue'
 import ProjectSettingsModal from '@/features/project/components/ProjectSettingsModal.vue'
 import ExportSequenceModal from '@/features/project/components/ExportSequenceModal.vue'
-import AIDirectorModal from '@/features/ai-director/components/AIDirectorModal.vue'
+import SavedKeyframesModal from '@/features/timeline/components/SavedKeyframesModal.vue'
 import ResizableSidebar from '@/features/studio/components/ResizableSidebar.vue'
 import ToastContainer from '@/components/ui/toast-container/ToastContainer.vue'
 
 const projectStore = useProjectStore()
 const assetStore = useAssetStore()
 const timelineStore = useTimelineStore()
+const workspaceBackupStore = useWorkspaceBackupStore()
+let stopWorkspaceWatch: WatchStopHandle | null = null
 
 const isSettingsOpen = ref(false)
 const isExportOpen = ref(false)
-const isAiDirectorOpen = ref(false)
+const isSavedKeyframesOpen = ref(false)
 const showHierarchy = ref(true)
 const showAssetLibrary = ref(true)
 
@@ -40,7 +43,7 @@ function addInitialKeyframe(
 }
 
 onMounted(async () => {
-  // 1. Initialiser le projet
+  // 1. Initialiser l'espace de travail unique
   const proj = await projectStore.loadInitialProject()
 
   // 2. Pré-remplir les assets de démonstration si premier lancement
@@ -105,7 +108,24 @@ onMounted(async () => {
     addInitialKeyframe('desk', desk)
     addInitialKeyframe('props_set', light)
     timelineStore.clearStudioSelection(false)
+    await timelineStore.saveSequence()
   }
+
+  await workspaceBackupStore.initialize()
+  stopWorkspaceWatch = watch(
+    [
+      () => projectStore.currentProject,
+      () => timelineStore.currentSequence,
+      () => assetStore.assets
+    ],
+    () => workspaceBackupStore.markDirty(),
+    { deep: true }
+  )
+})
+
+onBeforeUnmount(() => {
+  stopWorkspaceWatch?.()
+  workspaceBackupStore.dispose()
 })
 </script>
 
@@ -115,7 +135,7 @@ onMounted(async () => {
     <StudioHeader
       @open-settings="isSettingsOpen = true"
       @open-export="isExportOpen = true"
-      @open-ai-director="isAiDirectorOpen = true"
+      @open-saved-keyframes="isSavedKeyframesOpen = true"
     />
 
     <!-- Zone Centrale du Studio (3 Colonnes) -->
@@ -152,12 +172,12 @@ onMounted(async () => {
     </div>
 
     <!-- Séquenceur & Timeline Discrète (Bas) -->
-    <TimelinePanel @open-ai-director="isAiDirectorOpen = true" />
+    <TimelinePanel />
 
     <!-- Modales Globales -->
     <ProjectSettingsModal v-model:open="isSettingsOpen" />
     <ExportSequenceModal v-model:open="isExportOpen" />
-    <AIDirectorModal v-model:open="isAiDirectorOpen" />
+    <SavedKeyframesModal v-model:open="isSavedKeyframesOpen" />
 
     <!-- Système de notifications Toasts -->
     <ToastContainer />

@@ -80,17 +80,19 @@ export function computeTransformedBounds(
   width: number,
   height: number,
   scaleX: number = 1,
-  scaleY: number = 1
+  scaleY: number = 1,
+  originX: number = x + width / 2,
+  originY: number = y + height / 2
 ): BoxBounds {
-  const scaledWidth = width * scaleX
-  const scaledHeight = height * scaleY
-  const visualX = x + (width - scaledWidth) / 2
-  const visualY = y + (height - scaledHeight) / 2
+  const left = originX + (x - originX) * scaleX
+  const right = originX + (x + width - originX) * scaleX
+  const top = originY + (y - originY) * scaleY
+  const bottom = originY + (y + height - originY) * scaleY
 
   return {
-    x: Math.round(visualX),
-    y: Math.round(visualY),
-    width: Math.round(scaledWidth),
-    height: Math.round(scaledHeight)
+    x: Math.round(Math.min(left, right)),
+    y: Math.round(Math.min(top, bottom)),
+    width: Math.round(Math.abs(right - left)),
+    height: Math.round(Math.abs(bottom - top))
   }
 }

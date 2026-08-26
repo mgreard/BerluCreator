@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useId, useTemplateRef } from 'vue'
 import { useTimelineStore } from '../stores/useTimelineStore'
+import { PanelResizeHandle } from '@/components/ui/panel-resize-handle'
 import TransportBar from './TransportBar.vue'
 import TrackHeaderList from './TrackHeaderList.vue'
 import TimelineRuler from './TimelineRuler.vue'
 import TrackLane from './TrackLane.vue'
-
-const emit = defineEmits<{
-  (e: 'openAiDirector'): void
-}>()
 
 const timelineStore = useTimelineStore()
 
@@ -18,7 +15,6 @@ const MIN_STUDIO_HEIGHT = 180
 const KEYBOARD_RESIZE_STEP = 16
 
 const timelinePanelId = useId()
-const resizeHandleRef = useTemplateRef<HTMLDivElement>('resizeHandleRef')
 const timelineHeight = ref(DEFAULT_TIMELINE_HEIGHT)
 const maxTimelineHeight = ref(DEFAULT_TIMELINE_HEIGHT)
 const isResizing = ref(false)
@@ -28,6 +24,7 @@ let resizeStartHeight = DEFAULT_TIMELINE_HEIGHT
 let resizePointerId: number | null = null
 let previousBodyCursor = ''
 let previousBodyUserSelect = ''
+let resizeHandleElement: HTMLElement | null = null
 
 function clampTimelineHeight(height: number) {
   return Math.round(Math.min(maxTimelineHeight.value, Math.max(MIN_TIMELINE_HEIGHT, height)))
@@ -55,7 +52,8 @@ function onResizePointerDown(event: PointerEvent) {
   resizeStartHeight = timelineHeight.value
   resizePointerId = event.pointerId
   isResizing.value = true
-  resizeHandleRef.value?.setPointerCapture?.(event.pointerId)
+  resizeHandleElement = event.currentTarget as HTMLElement
+  resizeHandleElement.setPointerCapture?.(event.pointerId)
 
   previousBodyCursor = document.body.style.cursor
   previousBodyUserSelect = document.body.style.userSelect
@@ -71,7 +69,7 @@ function onResizePointerMove(event: PointerEvent) {
 function stopResizing(event?: PointerEvent) {
   if (!isResizing.value) return
 
-  const handle = resizeHandleRef.value
+  const handle = resizeHandleElement
   const pointerId = event?.pointerId ?? resizePointerId
   if (pointerId !== null && handle?.hasPointerCapture?.(pointerId)) {
     handle.releasePointerCapture(pointerId)
@@ -79,6 +77,7 @@ function stopResizing(event?: PointerEvent) {
 
   isResizing.value = false
   resizePointerId = null
+  resizeHandleElement = null
   document.body.style.cursor = previousBodyCursor
   document.body.style.userSelect = previousBodyUserSelect
 }
@@ -169,20 +168,16 @@ function onHeadersScroll() {
     class="relative border-t border-border-subtle bg-bg-surface/50 backdrop-blur-md flex flex-col shrink-0 select-none"
     :style="{ height: `${timelineHeight}px` }"
   >
-    <div
-      ref="resizeHandleRef"
-      role="separator"
-      tabindex="0"
-      aria-label="Redimensionner la hauteur de la timeline"
-      aria-orientation="horizontal"
-      :aria-controls="timelinePanelId"
-      :aria-valuemin="MIN_TIMELINE_HEIGHT"
-      :aria-valuemax="maxTimelineHeight"
-      :aria-valuenow="timelineHeight"
-      :aria-valuetext="`${timelineHeight} pixels`"
-      title="Glisser pour redimensionner · Double-cliquer pour réinitialiser"
-      class="group absolute -top-1 left-0 right-0 z-40 h-2 cursor-row-resize touch-none outline-none"
-      :class="isResizing ? 'bg-primary/10' : ''"
+    <PanelResizeHandle
+      orientation="horizontal"
+      :active="isResizing"
+      :controls="timelinePanelId"
+      label="Redimensionner la hauteur de la timeline"
+      :value-min="MIN_TIMELINE_HEIGHT"
+      :value-max="maxTimelineHeight"
+      :value-now="timelineHeight"
+      :value-text="`${timelineHeight} pixels`"
+      class="-top-1"
       @pointerdown="onResizePointerDown"
       @pointermove="onResizePointerMove"
       @pointerup="stopResizing"
@@ -190,16 +185,10 @@ function onHeadersScroll() {
       @lostpointercapture="stopResizing"
       @keydown="onResizeKeydown"
       @dblclick="resetTimelineHeight"
-    >
-      <span
-        aria-hidden="true"
-        class="absolute left-1/2 top-1/2 h-1 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-border-default/80 shadow-sm transition-all duration-150 group-hover:w-20 group-hover:bg-primary/70 group-focus-visible:w-20 group-focus-visible:bg-primary group-focus-visible:ring-2 group-focus-visible:ring-primary/30"
-        :class="isResizing ? 'w-20! bg-primary! shadow-glow-sm' : ''"
-      />
-    </div>
+    />
 
     <!-- Barre de transport en haut du panneau timeline -->
-    <TransportBar @open-ai-director="emit('openAiDirector')" />
+    <TransportBar />
 
     <!-- Corps de la timeline (En-têtes à gauche + Pistes à droite avec défilement) -->
     <div class="flex-1 flex overflow-hidden">

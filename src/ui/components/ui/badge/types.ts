@@ -1,3 +1,5 @@
+import { HTMLAttributes } from "vue"
+
 export type BadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'accent' | 'neutral'
 export type BadgeSize = 'sm' | 'md'
 
@@ -9,5 +11,5 @@ export interface BadgeProps {
   /** Afficher un point indicateur */
   dot?: boolean
   /** Classes CSS supplémentaires */
-  class?: string
+  class?: HTMLAttributes['class']
 }

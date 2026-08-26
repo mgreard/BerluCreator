@@ -24,7 +24,7 @@ const isExporting = ref(false)
 
 function downloadJson() {
   const exportPayload = {
-    project: projectStore.currentProject,
+    stage: projectStore.currentProject.stage,
     sequence: timelineStore.currentSequence,
     assetsMetadata: assetStore.assets,
     exportedAt: new Date().toISOString(),
@@ -36,7 +36,7 @@ function downloadJson() {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `${projectStore.currentProject.name.toLowerCase().replace(/\s+/g, '_')}_export.json`
+  link.download = 'berlu_creator_export.json'
   link.click()
   URL.revokeObjectURL(url)
 }
@@ -49,7 +49,7 @@ async function captureCurrentFrame() {
     const dataUrl = await captureCleanFrame(activeLayers.value, stage.value, 'image/png')
     const link = document.createElement('a')
     link.href = dataUrl
-    link.download = `${projectStore.currentProject.name.toLowerCase().replace(/\s+/g, '_')}_frame_${timelineStore.playback.currentTimeMs}ms.png`
+    link.download = `berlu_creator_frame_${timelineStore.playback.currentTimeMs}ms.png`
     link.click()
   } catch (error) {
     console.error('Erreur lors de la capture du rendu :', error)
@@ -69,7 +69,7 @@ async function captureCurrentFrame() {
     <div class="space-y-4 text-xs">
       <div class="p-3 rounded-lg border border-border/40 bg-surface/40 flex items-center justify-between">
         <div>
-          <Heading as="h4" variant="sm" class="font-semibold text-foreground">Structure Complète du Projet (JSON)</Heading>
+          <Heading as="h4" variant="sm" class="font-semibold text-foreground">Structure complète du studio (JSON)</Heading>
           <Text variant="caption" color="muted" class="text-[11px] mt-0.5">
             Inclut les pistes, ancres, keyframes et métadonnées d'assets.
           </Text>

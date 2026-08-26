@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useProjectStore } from '../stores/useProjectStore'
 import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
+import { useSavedKeyframeStore } from '@/features/timeline/stores/useSavedKeyframeStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
+import { useWorkspaceBackupStore } from '../stores/useWorkspaceBackupStore'
 import {
   createManualWorkspaceSnapshot,
   getManualSnapshotSummary,
@@ -17,16 +19,27 @@ import { Separator } from '@/components/ui/separator'
 import { Heading } from '@/components/ui/heading'
 
 const emit = defineEmits<{
-  (e: 'openSettings'): void
-  (e: 'openExport'): void
-  (e: 'openAiDirector'): void
+  (event: 'openSettings'): void
+  (event: 'openExport'): void
+  (event: 'openSavedKeyframes'): void
 }>()
 
 const projectStore = useProjectStore()
 const timelineStore = useTimelineStore()
+const savedKeyframeStore = useSavedKeyframeStore()
 const assetStore = useAssetStore()
+const workspaceBackupStore = useWorkspaceBackupStore()
 const snapshotSummary = ref<WorkspaceSnapshotSummary | null>(null)
 const isSnapshotBusy = ref(false)
+
+const backupBadge = computed(() => ({
+  checking: { label: 'Vérification…', variant: 'neutral' as const, pulse: true },
+  no_snapshot: { label: 'Aucune sauvegarde', variant: 'warning' as const, pulse: false },
+  saved: { label: 'Sauvegardé', variant: 'success' as const, pulse: false },
+  dirty: { label: 'Modifications à sauvegarder', variant: 'warning' as const, pulse: false },
+  saving: { label: 'Sauvegarde…', variant: 'neutral' as const, pulse: true },
+  error: { label: 'Erreur de sauvegarde', variant: 'danger' as const, pulse: false }
+})[workspaceBackupStore.status])
 
 function formatSnapshotDate(timestamp: number) {
   return new Intl.DateTimeFormat('fr-FR', {
@@ -43,17 +56,23 @@ function formatBytes(bytes: number) {
 async function saveSnapshot() {
   if (isSnapshotBusy.value) return
   isSnapshotBusy.value = true
+  workspaceBackupStore.beginSaving()
   try {
     timelineStore.pause()
     timelineStore.commitTransformSession(false)
     await Promise.all([projectStore.saveProject(), timelineStore.saveSequence()])
     snapshotSummary.value = await createManualWorkspaceSnapshot(projectStore.currentProject.id)
+    await workspaceBackupStore.finishSaving()
     toast.success(
-      'Sauvegarde manuelle créée',
-      `${snapshotSummary.value.assetCount} assets inclus (${formatBytes(snapshotSummary.value.totalBlobSize)}).`
+      'Sauvegarde de l’application créée',
+      `${snapshotSummary.value.assetCount} assets (${formatBytes(snapshotSummary.value.totalBlobSize)}) et ${snapshotSummary.value.savedKeyframeCount} keyframe(s) enregistrée(s).`
     )
   } catch (error) {
-    toast.error('Échec de la sauvegarde', error instanceof Error ? error.message : 'Erreur inconnue.')
+    workspaceBackupStore.failSaving()
+    toast.error(
+      'Échec de la sauvegarde',
+      error instanceof Error ? error.message : 'Erreur inconnue.'
+    )
   } finally {
     isSnapshotBusy.value = false
   }
@@ -62,22 +81,31 @@ async function saveSnapshot() {
 async function restoreSnapshot() {
   if (isSnapshotBusy.value || !snapshotSummary.value) return
   const date = formatSnapshotDate(snapshotSummary.value.createdAt)
-  if (!confirm(`Restaurer la sauvegarde du ${date} ? Les changements plus récents seront remplacés.`)) {
+  if (!confirm(`Restaurer l’état complet de l’application du ${date} ? Les changements plus récents seront remplacés.`)) {
     return
   }
 
   isSnapshotBusy.value = true
+  workspaceBackupStore.beginSaving()
   try {
     timelineStore.pause()
     timelineStore.commitTransformSession(false)
     const snapshot = await restoreManualWorkspaceSnapshot()
-    const project = await projectStore.loadProject(snapshot.activeProjectId)
-    await assetStore.loadAssets()
-    await timelineStore.loadSequence(project.activeSequenceId, project.id)
+    const workspace = await projectStore.loadInitialProject()
+    await Promise.all([assetStore.loadAssets(), savedKeyframeStore.loadPresets()])
+    await timelineStore.loadSequence(workspace.activeSequenceId, workspace.id)
     timelineStore.clearStudioSelection(false)
-    toast.success('Sauvegarde restaurée', `État du ${formatSnapshotDate(snapshot.createdAt)} restauré.`)
+    await workspaceBackupStore.finishSaving()
+    toast.success(
+      'Application restaurée',
+      `État complet du ${formatSnapshotDate(snapshot.createdAt)} restauré.`
+    )
   } catch (error) {
-    toast.error('Échec de la restauration', error instanceof Error ? error.message : 'Erreur inconnue.')
+    workspaceBackupStore.failSaving()
+    toast.error(
+      'Échec de la restauration',
+      error instanceof Error ? error.message : 'Erreur inconnue.'
+    )
   } finally {
     isSnapshotBusy.value = false
   }
@@ -94,49 +122,33 @@ onMounted(async () => {
 
 <template>
   <header class="h-12 border-b border-border-subtle px-4 flex items-center justify-between bg-bg-surface/80 backdrop-blur-xl z-20 select-none">
-    <!-- Logo & Titre de Projet -->
     <div class="flex items-center gap-3">
-      <div class="flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-white shadow-glow-sm">
-          <Icon name="movie" size="sm" />
-        </div>
-        <div>
-          <Heading as="h1" variant="sm" class="text-sm font-black font-display tracking-tight bg-gradient-to-r from-text-primary via-text-primary/90 to-text-muted bg-clip-text text-transparent leading-none">
-            BerluCreator
-          </Heading>
-          <span class="text-[10px] text-text-muted font-mono block mt-0.5">
-            Studio 2D Stop-Motion
-          </span>
-        </div>
-      </div>
-
+      <Heading as="h1" variant="section" class="text-md font-black font-display tracking-tight leading-none">
+        <span class="text-yellow-500">Incroyaux</span>
+        <span class="text-purple-600"> News</span> Studio
+      </Heading>
       <Separator orientation="vertical" variant="subtle" class="h-5 mx-1" />
-
-      <div class="flex items-center gap-2">
-        <span class="text-xs font-semibold text-text-secondary truncate max-w-xs">
-          {{ projectStore.currentProject.name }}
-        </span>
-        <Badge v-if="projectStore.isSaving" variant="neutral" size="sm" class="text-[10px] animate-pulse">
-          Sauvegarde...
-        </Badge>
-        <Badge v-else variant="success" size="sm" class="text-[10px]">
-          Local DB
-        </Badge>
-      </div>
+      <Badge
+        :variant="backupBadge.variant"
+        size="sm"
+        class="text-[10px]"
+        :class="{ 'animate-pulse': backupBadge.pulse }"
+      >
+        {{ backupBadge.label }}
+      </Badge>
     </div>
 
-    <!-- Actions du Studio -->
     <div class="flex items-center gap-2">
       <Button
         variant="ghost"
         size="sm"
         class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
         :disabled="isSnapshotBusy"
-        title="Créer ou remplacer la sauvegarde manuelle complète"
+        title="Créer ou remplacer la sauvegarde complète de l’application"
         @click="saveSnapshot"
       >
         <Icon name="save" size="xs" />
-        <span>Sauvegarder</span>
+        <span>Sauvegarde app</span>
       </Button>
 
       <Button
@@ -144,11 +156,11 @@ onMounted(async () => {
         size="sm"
         class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
         :disabled="isSnapshotBusy || !snapshotSummary"
-        :title="snapshotSummary ? `Restaurer la sauvegarde du ${formatSnapshotDate(snapshotSummary.createdAt)}` : 'Aucune sauvegarde manuelle disponible'"
+        :title="snapshotSummary ? `Restaurer l’application du ${formatSnapshotDate(snapshotSummary.createdAt)}` : 'Aucune sauvegarde complète disponible'"
         @click="restoreSnapshot"
       >
         <Icon name="restore" size="xs" />
-        <span>Restaurer</span>
+        <span>Restaurer app</span>
       </Button>
 
       <Separator orientation="vertical" variant="subtle" class="h-5 mx-1" />
@@ -157,17 +169,18 @@ onMounted(async () => {
         variant="ghost"
         size="sm"
         class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
-        @click="emit('openAiDirector')"
+        title="Enregistrer ou charger une pose de keyframe"
+        @click="emit('openSavedKeyframes')"
       >
-        <Icon name="auto_awesome" size="xs" class="text-amber-400" />
-        <span>Scénariste IA</span>
+        <Icon name="collections_bookmark" size="xs" class="text-primary" />
+        <span>Keyframes</span>
       </Button>
 
       <Button
         variant="ghost"
         size="sm"
         class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
-        title="Paramètres de scène et de plateau"
+        title="Paramètres du plateau"
         @click="emit('openSettings')"
       >
         <Icon name="settings" size="xs" />
@@ -178,6 +191,7 @@ onMounted(async () => {
         variant="primary"
         size="sm"
         class="gap-1.5 text-xs shadow-glass-sm"
+        title="Exporter des fichiers ou des images"
         @click="emit('openExport')"
       >
         <Icon name="file_download" size="xs" />

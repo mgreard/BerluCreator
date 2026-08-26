@@ -75,4 +75,38 @@ describe('useHierarchyResolver multi-sprites', () => {
     const movedLayer = activeLayers.value.find((layer) => layer.spriteId === sprite?.id)
     expect(movedLayer).toMatchObject({ x: 80, y: 120, width: 320, height: 180 })
   })
+
+  it('replace un bitmap recadré dans son cadre logique original', () => {
+    const timelineStore = useTimelineStore()
+    const assetStore = useAssetStore()
+    assetStore.assets = [
+      createAsset('asset-trimmed', {
+        width: 400,
+        height: 300,
+        displayWidth: 1000,
+        displayHeight: 800,
+        trimFrame: {
+          sourceWidth: 1000,
+          sourceHeight: 800,
+          offsetX: 100,
+          offsetY: 200
+        }
+      })
+    ]
+
+    const sprite = timelineStore.addKeyframe('props_set', 0, 'asset-trimmed')
+    const { activeLayers } = useHierarchyResolver()
+    const resolved = activeLayers.value.find((layer) => layer.spriteId === sprite?.id)
+
+    expect(resolved).toMatchObject({
+      x: 496,
+      y: 312,
+      width: 400,
+      height: 300,
+      localX: 396,
+      localY: 112,
+      transformOriginX: 896,
+      transformOriginY: 512
+    })
+  })
 })

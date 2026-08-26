@@ -40,6 +40,34 @@ export class AssetRepository {
     })
   }
 
+  async replaceBlob(
+    assetId: string,
+    blobId: string,
+    blob: Blob,
+    changes: Partial<Asset>
+  ): Promise<void> {
+    const asset = await db.assets.get(assetId)
+    if (!asset) throw new Error(`Asset introuvable : ${assetId}`)
+
+    const blobRecord: AssetBlobRecord = {
+      id: blobId,
+      mimeType: blob.type || 'image/png',
+      data: blob,
+      size: blob.size,
+      createdAt: Date.now()
+    }
+
+    await db.transaction('rw', [db.assets, db.assetBlobs], async () => {
+      await db.assetBlobs.put(blobRecord)
+      await db.assets.update(assetId, {
+        ...toPlain(changes),
+        blobId,
+        updatedAt: Date.now()
+      })
+      await db.assetBlobs.delete(asset.blobId)
+    })
+  }
+
   async delete(id: string): Promise<void> {
     const asset = await db.assets.get(id)
     if (!asset) return

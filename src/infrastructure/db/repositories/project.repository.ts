@@ -10,10 +10,6 @@ export class ProjectRepository {
     return await db.projects.toArray()
   }
 
-  async getById(id: string): Promise<Project | undefined> {
-    return await db.projects.get(id)
-  }
-
   async create(project: Project): Promise<void> {
     await db.projects.put(toPlain(project))
   }
@@ -25,12 +21,6 @@ export class ProjectRepository {
     })
   }
 
-  async delete(id: string): Promise<void> {
-    await db.transaction('rw', [db.projects, db.sequences], async () => {
-      await db.projects.delete(id)
-      await db.sequences.where('projectId').equals(id).delete()
-    })
-  }
 }
 
 export const projectRepository = new ProjectRepository()

@@ -23,6 +23,8 @@ export interface RenderableLayer {
   y: number
   width: number
   height: number
+  transformOriginX: number
+  transformOriginY: number
   scaleX: number
   scaleY: number
   localX: number
@@ -156,10 +158,12 @@ function resolveLayer(
     y: Math.round(baseBounds.y + (groupTransform.y ?? 0)),
     width: baseBounds.width,
     height: baseBounds.height,
+    transformOriginX: baseBounds.transformOriginX + (groupTransform.x ?? 0),
+    transformOriginY: baseBounds.transformOriginY + (groupTransform.y ?? 0),
     scaleX: localScaleX * groupScaleX,
     scaleY: localScaleY * groupScaleY,
-    localX: transform.x ?? (placementMode === 'free-transform' ? baseBounds.x : 0),
-    localY: transform.y ?? (placementMode === 'free-transform' ? baseBounds.y : 0),
+    localX: baseBounds.localX,
+    localY: baseBounds.localY,
     localScaleX,
     localScaleY,
     rotation: (transform.rotation ?? 0) + (groupTransform.rotation ?? 0),
@@ -182,19 +186,23 @@ function resolveBaseBounds(
 ) {
   if (placementMode === 'character-anchored') {
     if (category === 'background') {
-      return {
+      return applyTrimFrame(asset, {
         x: transform.x ?? 0,
         y: transform.y ?? 0,
         width: stage.width,
-        height: stage.height
-      }
+        height: stage.height,
+        localX: transform.x ?? 0,
+        localY: transform.y ?? 0
+      })
     }
-    return {
+    return applyTrimFrame(asset, {
       x: character.x + (transform.x ?? 0),
       y: character.y + (transform.y ?? 0),
       width: character.width,
-      height: character.height
-    }
+      height: character.height,
+      localX: transform.x ?? 0,
+      localY: transform.y ?? 0
+    })
   }
 
   const hasLogicalSize =
@@ -214,10 +222,44 @@ function resolveBaseBounds(
       ? stage.height
       : asset.height || character.height
 
-  return {
-    x: transform.x ?? Math.round((stage.width - width) / 2),
-    y: transform.y ?? Math.round((stage.height - height) / 2),
+  const x = transform.x ?? Math.round((stage.width - width) / 2)
+  const y = transform.y ?? Math.round((stage.height - height) / 2)
+  return applyTrimFrame(asset, {
+    x,
+    y,
     width,
-    height
+    height,
+    localX: x,
+    localY: y
+  })
+}
+
+interface LogicalAssetFrame {
+  x: number
+  y: number
+  width: number
+  height: number
+  localX: number
+  localY: number
+}
+
+function applyTrimFrame(asset: Asset, frame: LogicalAssetFrame) {
+  const transformOriginX = frame.x + frame.width / 2
+  const transformOriginY = frame.y + frame.height / 2
+  const trim = asset.trimFrame
+  if (!trim || trim.sourceWidth <= 0 || trim.sourceHeight <= 0) {
+    return { ...frame, transformOriginX, transformOriginY }
+  }
+
+  const ratioX = frame.width / trim.sourceWidth
+  const ratioY = frame.height / trim.sourceHeight
+  return {
+    ...frame,
+    x: frame.x + trim.offsetX * ratioX,
+    y: frame.y + trim.offsetY * ratioY,
+    width: asset.width * ratioX,
+    height: asset.height * ratioY,
+    transformOriginX,
+    transformOriginY
   }
 }

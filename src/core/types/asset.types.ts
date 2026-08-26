@@ -68,6 +68,17 @@ export interface SpritesConfigFile {
   rules: SpriteConfigRule[]
 }
 
+/**
+ * Position du bitmap recadré dans son image source. Le canvas peut ainsi
+ * conserver l'alignement historique tout en stockant un fichier plus petit.
+ */
+export interface AssetTrimFrame {
+  sourceWidth: number
+  sourceHeight: number
+  offsetX: number
+  offsetY: number
+}
+
 export interface Asset {
   id: string
   name: string
@@ -79,6 +90,7 @@ export interface Asset {
   /** Logical size used on the canvas, independent from the source resolution. */
   displayWidth?: number
   displayHeight?: number
+  trimFrame?: AssetTrimFrame
   /** Indique si le sprite peut être déplacé librement à la souris sur le canvas */
   isMovable: boolean
   createdAt: number

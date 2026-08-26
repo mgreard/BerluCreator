@@ -6,6 +6,7 @@ import {
 } from '@core/types/asset.types'
 import { resolveSpriteConfig } from '@core/constants/sprites-config'
 import { generateId } from '@/lib/utils'
+import { trimTransparentImage } from './transparent-image-trimmer'
 
 // Import eager de tous les sprites PNG du dossier assets
 const spriteModules = import.meta.glob<string>('@/assets/sprites/**/*.png', {
@@ -41,7 +42,9 @@ export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
     try {
       const response = await fetch(url)
       const blob = await response.blob()
-      const dimensions = await getBlobDimensions(blob)
+      const trimmed = await trimTransparentImage(blob)
+      const sourceWidth = trimmed.trimFrame?.sourceWidth ?? trimmed.width
+      const sourceHeight = trimmed.trimFrame?.sourceHeight ?? trimmed.height
       const { name, category, tags } = parseSpriteMetadata(path)
       const spriteConfig = resolveSpriteConfig(name, category)
 
@@ -54,16 +57,17 @@ export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
         category,
         tags,
         blobId,
-        width: dimensions.width,
-        height: dimensions.height,
-        displayWidth: dimensions.width,
-        displayHeight: dimensions.height,
+        width: trimmed.width,
+        height: trimmed.height,
+        displayWidth: sourceWidth,
+        displayHeight: sourceHeight,
+        trimFrame: trimmed.trimFrame,
         isMovable: spriteConfig.isMovable,
         createdAt: Date.now(),
         updatedAt: Date.now()
       }
 
-      await assetRepository.create(asset, blob)
+      await assetRepository.create(asset, trimmed.blob)
     } catch (err) {
       console.error(`Erreur chargement sprite ${path}:`, err)
     }
@@ -139,20 +143,4 @@ export function parseSpriteMetadata(filePath: string): {
   }
 
   return { name: formattedName, category, tags }
-}
-
-function getBlobDimensions(blob: Blob): Promise<{ width: number; height: number }> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(blob)
-    const img = new Image()
-    img.onload = () => {
-      resolve({ width: img.naturalWidth, height: img.naturalHeight })
-      URL.revokeObjectURL(url)
-    }
-    img.onerror = () => {
-      resolve({ width: 840, height: 908 })
-      URL.revokeObjectURL(url)
-    }
-    img.src = url
-  })
 }

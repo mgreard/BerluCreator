@@ -4,7 +4,8 @@ import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useHierarchyResolver, type RenderableLayer } from '../composables/useHierarchyResolver'
-import { useCanvasRenderer } from '../composables/useCanvasRenderer'
+import { getCachedAssetImage, useCanvasRenderer } from '../composables/useCanvasRenderer'
+import { isLayerPointOpaque } from '../engine/alpha-hit-test'
 import {
   computeResizeScales,
   computeTransformedBounds,
@@ -98,7 +99,16 @@ const selectedBounds = computed<BoxBounds | null>(() => {
     const groupLayers = activeLayers.value.filter((l) => l.groupId === activeSelectedGroup.value?.id)
     if (groupLayers.length === 0) {
       const l = activeSelectedLayer.value
-      return computeTransformedBounds(l.x, l.y, l.width, l.height, l.scaleX, l.scaleY)
+      return computeTransformedBounds(
+        l.x,
+        l.y,
+        l.width,
+        l.height,
+        l.scaleX,
+        l.scaleY,
+        l.transformOriginX,
+        l.transformOriginY
+      )
     }
 
     let minX = Infinity
@@ -107,7 +117,16 @@ const selectedBounds = computed<BoxBounds | null>(() => {
     let maxY = -Infinity
 
     for (const l of groupLayers) {
-      const b = computeTransformedBounds(l.x, l.y, l.width, l.height, l.scaleX, l.scaleY)
+      const b = computeTransformedBounds(
+        l.x,
+        l.y,
+        l.width,
+        l.height,
+        l.scaleX,
+        l.scaleY,
+        l.transformOriginX,
+        l.transformOriginY
+      )
       minX = Math.min(minX, b.x)
       minY = Math.min(minY, b.y)
       maxX = Math.max(maxX, b.x + b.width)
@@ -124,7 +143,16 @@ const selectedBounds = computed<BoxBounds | null>(() => {
 
   // Sprite unique
   const l = activeSelectedLayer.value
-  return computeTransformedBounds(l.x, l.y, l.width, l.height, l.scaleX, l.scaleY)
+  return computeTransformedBounds(
+    l.x,
+    l.y,
+    l.width,
+    l.height,
+    l.scaleX,
+    l.scaleY,
+    l.transformOriginX,
+    l.transformOriginY
+  )
 })
 
 // Libellé informatif affiché sur la boîte de sélection
@@ -328,9 +356,25 @@ function hitTestLayer(pos: { x: number; y: number }): RenderableLayer | null {
 
     if (isFullScreenBg) continue
 
-    const b = computeTransformedBounds(layer.x, layer.y, layer.width, layer.height, layer.scaleX, layer.scaleY)
-    if (pos.x >= b.x && pos.x <= b.x + b.width && pos.y >= b.y && pos.y <= b.y + b.height) {
+    const image = getCachedAssetImage(layer.asset.blobId)
+    if (image && isLayerPointOpaque(layer, pos, image)) {
       return layer
+    }
+
+    if (!image) {
+      const b = computeTransformedBounds(
+        layer.x,
+        layer.y,
+        layer.width,
+        layer.height,
+        layer.scaleX,
+        layer.scaleY,
+        layer.transformOriginX,
+        layer.transformOriginY
+      )
+      if (pos.x >= b.x && pos.x <= b.x + b.width && pos.y >= b.y && pos.y <= b.y + b.height) {
+        return layer
+      }
     }
   }
 

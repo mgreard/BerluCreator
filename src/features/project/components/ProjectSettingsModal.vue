@@ -8,41 +8,24 @@ import { Select } from '@/components/ui/select'
 import { FormGroup } from '@/components/ui/form-group'
 
 const open = defineModel<boolean>('open', { default: false })
-
 const projectStore = useProjectStore()
-
-const projectName = ref(projectStore.currentProject.name)
-const projectDesc = ref(projectStore.currentProject.description || '')
 const stageWidth = ref(projectStore.currentProject.stage.width)
 const stageHeight = ref(projectStore.currentProject.stage.height)
-const bgColor = ref(projectStore.currentProject.stage.backgroundColor)
 
 function syncFromStore() {
-  const proj = projectStore.currentProject
-  projectName.value = proj.name
-  projectDesc.value = proj.description || ''
-  stageWidth.value = proj.stage.width
-  stageHeight.value = proj.stage.height
-  bgColor.value = proj.stage.backgroundColor
+  stageWidth.value = projectStore.currentProject.stage.width
+  stageHeight.value = projectStore.currentProject.stage.height
 }
 
 watch(
   () => open.value,
   (isOpen) => {
-    if (isOpen) {
-      syncFromStore()
-    }
+    if (isOpen) syncFromStore()
   },
   { immediate: true }
 )
 
-watch(
-  () => projectStore.currentProject,
-  () => {
-    syncFromStore()
-  },
-  { deep: true }
-)
+watch(() => projectStore.currentProject, syncFromStore, { deep: true })
 
 const resolutionPresets = [
   { value: '1920x1080', label: '1920 × 1080 (16:9 Full HD)' },
@@ -51,22 +34,17 @@ const resolutionPresets = [
   { value: '1080x1920', label: '1080 × 1920 (9:16 Vertical / Short)' }
 ]
 
-function onResolutionPresetChange(val: string | number | boolean | null) {
-  if (typeof val !== 'string') return
-  const [w, h] = val.split('x').map(Number)
-  if (w && h) {
-    stageWidth.value = w
-    stageHeight.value = h
+function onResolutionPresetChange(value: string | number | boolean | null) {
+  if (typeof value !== 'string') return
+  const [width, height] = value.split('x').map(Number)
+  if (width && height) {
+    stageWidth.value = width
+    stageHeight.value = height
   }
 }
 
 async function save() {
-  await projectStore.updateProjectMeta(projectName.value, projectDesc.value)
-  await projectStore.updateStage({
-    width: stageWidth.value,
-    height: stageHeight.value,
-    backgroundColor: bgColor.value
-  })
+  await projectStore.updateStage({ width: stageWidth.value, height: stageHeight.value })
   open.value = false
 }
 </script>
@@ -75,15 +53,11 @@ async function save() {
   <Modal
     v-model:open="open"
     size="md"
-    title="Paramètres du Projet & Plateau"
-    subtitle="Configurez le titre de l'émission et les dimensions du plateau."
+    title="Paramètres du plateau"
+    subtitle="Configurez les dimensions de rendu de l’espace de travail unique."
   >
     <div class="space-y-4 text-xs">
-      <FormGroup label="Nom de la Scène / Projet" label-for="project-name">
-        <Input id="project-name" v-model="projectName" size="sm" />
-      </FormGroup>
-
-      <FormGroup label="Format de Rendu Vidéo">
+      <FormGroup label="Format de rendu vidéo">
         <Select
           :options="resolutionPresets"
           :model-value="`${stageWidth}x${stageHeight}`"
@@ -104,12 +78,8 @@ async function save() {
 
     <template #footer>
       <div class="flex items-center justify-end gap-2">
-        <Button variant="ghost" size="sm" @click="open = false">
-          Annuler
-        </Button>
-        <Button variant="primary" size="sm" @click="save">
-          Enregistrer
-        </Button>
+        <Button variant="ghost" size="sm" @click="open = false">Annuler</Button>
+        <Button variant="primary" size="sm" @click="save">Enregistrer</Button>
       </div>
     </template>
   </Modal>
