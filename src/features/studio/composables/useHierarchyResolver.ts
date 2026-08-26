@@ -3,9 +3,11 @@ import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
+import type { KeyframeSprite, TrackGroup, Transform2D } from '@core/types/timeline.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 
 export interface RenderableLayer {
+  id: string
   trackId: string
   trackName: string
   category: AssetCategory
@@ -13,9 +15,10 @@ export interface RenderableLayer {
   groupName?: string
   groupZIndex: number
   trackZIndex: number
-  effectiveZIndex: number
+  spriteOrder: number
   asset: Asset
-  keyframeId?: string
+  keyframeId: string
+  spriteId: string
   x: number
   y: number
   width: number
@@ -32,6 +35,13 @@ export interface RenderableLayer {
   isMovable: boolean
 }
 
+interface CharacterGeometry {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export function useHierarchyResolver() {
   const timelineStore = useTimelineStore()
   const assetStore = useAssetStore()
@@ -43,132 +53,171 @@ export function useHierarchyResolver() {
     const groups = timelineStore.currentSequence.groups || []
     const layers: RenderableLayer[] = []
 
-    // Géométrie du personnage de base proportionnée au plateau (~70% de la hauteur, centré avec marge haute)
-    const charAspect = 840 / 908
-    const charHeight = Math.round(stage.height * 0.70)
-    const charWidth = Math.round(charHeight * charAspect)
-    const charX = Math.round((stage.width - charWidth) / 2)
-    const charY = Math.round(stage.height * 0.12)
+    const characterHeight = Math.round(stage.height * 0.7)
+    const characterWidth = Math.round(characterHeight * (840 / 908))
+    const character: CharacterGeometry = {
+      x: Math.round((stage.width - characterWidth) / 2),
+      y: Math.round(stage.height * 0.12),
+      width: characterWidth,
+      height: characterHeight
+    }
 
     for (const track of timelineStore.currentSequence.tracks) {
       if (track.muted) continue
 
-      const group = groups.find((g) => g.id === track.groupId)
+      const group = groups.find((candidate) => candidate.id === track.groupId)
       if (group?.muted) continue
 
-      const activeKf = timelineStore.getActiveKeyframeAtTime(track.id, timeMs)
-      if (!activeKf || !activeKf.assetId) continue
+      const activeKeyframe = timelineStore.getActiveKeyframeAtTime(track.id, timeMs)
+      if (!activeKeyframe) continue
 
-      const asset = assetStore.assets.find((a) => a.id === activeKf.assetId)
-      if (!asset) continue
+      const sortedSprites = [...activeKeyframe.sprites].sort(
+        (left, right) => left.order - right.order
+      )
+      for (const sprite of sortedSprites) {
+        const asset = assetStore.assets.find((candidate) => candidate.id === sprite.assetId)
+        if (!asset) continue
 
-      const catDef = ASSET_CATEGORIES[track.category]
-      const placementMode = catDef?.placementMode ?? 'character-anchored'
-      const transform = activeKf.transform || {}
-      const groupTransform = group?.transform || {}
-
-      let x = 0
-      let y = 0
-      let width = stage.width
-      let height = stage.height
-      const scaleX = transform.scaleX ?? 1
-      const scaleY = transform.scaleY ?? 1
-      const rotation = transform.rotation ?? 0
-      const opacity = transform.opacity ?? 1
-
-      if (placementMode === 'character-anchored') {
-        if (track.category === 'backdrop') {
-          x = 0 + (transform.x ?? 0)
-          y = 0 + (transform.y ?? 0)
-          width = stage.width
-          height = stage.height
-        } else {
-          x = charX + (transform.x ?? 0)
-          y = charY + (transform.y ?? 0)
-          width = charWidth
-          height = charHeight
-        }
-      } else {
-        // Mode placement libre (props, overlays, objets multiples)
-        const isCustomPositioned = transform.x !== undefined || transform.y !== undefined
-        const isFullStage =
-          asset.width >= 1200 ||
-          asset.tags?.includes('plateau') ||
-          asset.tags?.includes('desk') ||
-          asset.name.toLowerCase().includes('bureau') ||
-          track.category === 'overlay'
-
-        if (isCustomPositioned) {
-          x = transform.x ?? 0
-          y = transform.y ?? 0
-          width = asset.width || charWidth
-          height = asset.height || charHeight
-        } else if (isFullStage) {
-          x = 0
-          y = 0
-          width = stage.width
-          height = stage.height
-        } else {
-          // Par défaut centré sur le personnage
-          x = charX
-          y = charY
-          width = charWidth
-          height = charHeight
-        }
+        layers.push(
+          resolveLayer(
+            track.id,
+            track.name,
+            track.category,
+            track.zIndex,
+            activeKeyframe.id,
+            sprite,
+            asset,
+            group,
+            stage,
+            character
+          )
+        )
       }
-
-      // Appliquer les décalages géométriques solidaires du groupe parent
-      const groupOffsetX = groupTransform.x ?? 0
-      const groupOffsetY = groupTransform.y ?? 0
-      const groupScaleX = groupTransform.scaleX ?? 1
-      const groupScaleY = groupTransform.scaleY ?? 1
-      const groupRotation = groupTransform.rotation ?? 0
-      const groupOpacity = groupTransform.opacity ?? 1
-
-      const finalX = Math.round(x + groupOffsetX)
-      const finalY = Math.round(y + groupOffsetY)
-      const finalScaleX = scaleX * groupScaleX
-      const finalScaleY = scaleY * groupScaleY
-      const finalRotation = rotation + groupRotation
-      const finalOpacity = Math.max(0, Math.min(1, opacity * groupOpacity))
-
-      const groupZIndex = group?.zIndex ?? 0
-      const trackZIndex = track.zIndex
-      const effectiveZIndex = groupZIndex * 1000 + trackZIndex
-
-      layers.push({
-        trackId: track.id,
-        trackName: track.name,
-        category: track.category,
-        groupId: group?.id,
-        groupName: group?.name,
-        groupZIndex,
-        trackZIndex,
-        effectiveZIndex,
-        asset,
-        keyframeId: activeKf.id,
-        x: finalX,
-        y: finalY,
-        width,
-        height,
-        scaleX: finalScaleX,
-        scaleY: finalScaleY,
-        localX: transform.x ?? 0,
-        localY: transform.y ?? 0,
-        localScaleX: scaleX,
-        localScaleY: scaleY,
-        rotation: finalRotation,
-        zIndex: trackZIndex,
-        opacity: finalOpacity,
-        isMovable: true
-      })
     }
 
-    // Tri ascendant par Z-Index combiné (Painter's algorithm : premier plan dessiné en dernier)
-    return layers.sort((a, b) => a.effectiveZIndex - b.effectiveZIndex)
+    return layers.sort((left, right) => {
+      if (left.groupZIndex !== right.groupZIndex) {
+        return left.groupZIndex - right.groupZIndex
+      }
+      if (left.trackZIndex !== right.trackZIndex) {
+        return left.trackZIndex - right.trackZIndex
+      }
+      return left.spriteOrder - right.spriteOrder
+    })
   })
 
+  return { activeLayers }
+}
+
+function resolveLayer(
+  trackId: string,
+  trackName: string,
+  category: AssetCategory,
+  trackZIndex: number,
+  keyframeId: string,
+  sprite: KeyframeSprite,
+  asset: Asset,
+  group: TrackGroup | undefined,
+  stage: { width: number; height: number },
+  character: CharacterGeometry
+): RenderableLayer {
+  const placementMode = ASSET_CATEGORIES[category].placementMode
+  const transform = sprite.transform ?? {}
+  const groupTransform = group?.transform ?? {}
+
+  const baseBounds = resolveBaseBounds(
+    category,
+    placementMode,
+    asset,
+    transform,
+    stage,
+    character
+  )
+
+  const localScaleX = transform.scaleX ?? 1
+  const localScaleY = transform.scaleY ?? 1
+  const groupScaleX = groupTransform.scaleX ?? 1
+  const groupScaleY = groupTransform.scaleY ?? 1
+
   return {
-    activeLayers
+    id: `${keyframeId}:${sprite.id}`,
+    trackId,
+    trackName,
+    category,
+    groupId: group?.id,
+    groupName: group?.name,
+    groupZIndex: group?.zIndex ?? 0,
+    trackZIndex,
+    spriteOrder: sprite.order,
+    asset,
+    keyframeId,
+    spriteId: sprite.id,
+    x: Math.round(baseBounds.x + (groupTransform.x ?? 0)),
+    y: Math.round(baseBounds.y + (groupTransform.y ?? 0)),
+    width: baseBounds.width,
+    height: baseBounds.height,
+    scaleX: localScaleX * groupScaleX,
+    scaleY: localScaleY * groupScaleY,
+    localX: transform.x ?? (placementMode === 'free-transform' ? baseBounds.x : 0),
+    localY: transform.y ?? (placementMode === 'free-transform' ? baseBounds.y : 0),
+    localScaleX,
+    localScaleY,
+    rotation: (transform.rotation ?? 0) + (groupTransform.rotation ?? 0),
+    zIndex: trackZIndex,
+    opacity: Math.max(
+      0,
+      Math.min(1, (transform.opacity ?? 1) * (groupTransform.opacity ?? 1))
+    ),
+    isMovable: asset.isMovable
+  }
+}
+
+function resolveBaseBounds(
+  category: AssetCategory,
+  placementMode: 'character-anchored' | 'free-transform',
+  asset: Asset,
+  transform: Partial<Transform2D>,
+  stage: { width: number; height: number },
+  character: CharacterGeometry
+) {
+  if (placementMode === 'character-anchored') {
+    if (category === 'background') {
+      return {
+        x: transform.x ?? 0,
+        y: transform.y ?? 0,
+        width: stage.width,
+        height: stage.height
+      }
+    }
+    return {
+      x: character.x + (transform.x ?? 0),
+      y: character.y + (transform.y ?? 0),
+      width: character.width,
+      height: character.height
+    }
+  }
+
+  const hasLogicalSize =
+    Number.isFinite(asset.displayWidth) &&
+    Number.isFinite(asset.displayHeight) &&
+    (asset.displayWidth ?? 0) > 0 &&
+    (asset.displayHeight ?? 0) > 0
+  const isLegacyFullStage = !hasLogicalSize && asset.width >= 1200
+  const width = hasLogicalSize
+    ? (asset.displayWidth as number)
+    : isLegacyFullStage
+      ? stage.width
+      : asset.width || character.width
+  const height = hasLogicalSize
+    ? (asset.displayHeight as number)
+    : isLegacyFullStage
+      ? stage.height
+      : asset.height || character.height
+
+  return {
+    x: transform.x ?? Math.round((stage.width - width) / 2),
+    y: transform.y ?? Math.round((stage.height - height) / 2),
+    width,
+    height
   }
 }

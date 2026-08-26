@@ -1,26 +1,29 @@
 <script setup lang="ts">
 import { ref, useTemplateRef, computed, onMounted, onUnmounted } from 'vue'
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
-import {
-  useTimelineStore,
-  type TransformHistoryTarget
-} from '@/features/timeline/stores/useTimelineStore'
+import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useHierarchyResolver, type RenderableLayer } from '../composables/useHierarchyResolver'
 import { useCanvasRenderer } from '../composables/useCanvasRenderer'
-import { computeTransformedBounds, type BoxBounds } from '../engine/transform-matrix'
+import {
+  computeResizeScales,
+  computeTransformedBounds,
+  type BoxBounds,
+  type ResizeHandle
+} from '../engine/transform-matrix'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
-import type { Transform2D } from '@core/types/timeline.types'
 import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
 import { SegmentedControl, type SegmentOption } from '@/components/ui/segmented-control'
-
-type CornerHandle = 'tl' | 'tr' | 'bl' | 'br'
 
 const projectStore = useProjectStore()
 const timelineStore = useTimelineStore()
 const assetStore = useAssetStore()
+const showHierarchy = defineModel<boolean>('showHierarchy', { default: true })
+const showAssets = defineModel<boolean>('showAssets', { default: true })
 
 const stage = computed(() => projectStore.currentProject.stage)
 const canvasRef = useTemplateRef<HTMLCanvasElement>('canvas')
@@ -30,7 +33,15 @@ const { activeLayers } = useHierarchyResolver()
 const editScope = computed({
   get: () => timelineStore.editScope,
   set: (scope: 'group' | 'layer') => {
-    timelineStore.editScope = scope
+    if (scope === 'group' && activeSelectedGroup.value) {
+      timelineStore.selectGroupForEditing(activeSelectedGroup.value.id)
+    } else if (scope === 'layer' && activeSelectedLayer.value) {
+      timelineStore.selectSpriteForEditing(
+        activeSelectedLayer.value.trackId,
+        activeSelectedLayer.value.keyframeId,
+        activeSelectedLayer.value.spriteId
+      )
+    }
   }
 })
 
@@ -42,6 +53,13 @@ const editScopeOptions: SegmentOption[] = [
 const selectedTrackId = computed(() => timelineStore.selectedTrackId)
 
 const activeSelectedLayer = computed(() => {
+  if (timelineStore.selectedSpriteId) {
+    const selectedSpriteLayer = activeLayers.value.find(
+      (layer) => layer.spriteId === timelineStore.selectedSpriteId
+    )
+    if (selectedSpriteLayer) return selectedSpriteLayer
+  }
+
   const selectedLayer = activeLayers.value.find(
     (layer) => layer.trackId === timelineStore.selectedTrackId
   )
@@ -111,11 +129,12 @@ const selectedBounds = computed<BoxBounds | null>(() => {
 const targetLabel = computed<string | null>(() => {
   if (!activeSelectedLayer.value) return null
   if (isGroupTarget.value && activeSelectedGroup.value) {
-    const scale = activeSelectedGroup.value.transform?.scaleX ?? 1
-    return `Groupe : ${activeSelectedGroup.value.name} (${scale.toFixed(2)}×)`
+    const scaleX = activeSelectedGroup.value.transform?.scaleX ?? 1
+    const scaleY = activeSelectedGroup.value.transform?.scaleY ?? 1
+    return `Groupe : ${activeSelectedGroup.value.name} (X ${scaleX.toFixed(2)}× · Y ${scaleY.toFixed(2)}×)`
   }
   const l = activeSelectedLayer.value
-  return `${l.trackName || l.asset.name} (${(l.scaleX ?? 1).toFixed(2)}×)`
+  return `${l.trackName || l.asset.name} (X ${l.scaleX.toFixed(2)}× · Y ${l.scaleY.toFixed(2)}×)`
 })
 
 // Envoi vers le moteur de rendu
@@ -132,89 +151,40 @@ useCanvasRenderer(
 // --- GESTION DU DRAG & DROP ET DU RESIZE INTERACTIF ---
 const isDragging = ref(false)
 const isResizing = ref(false)
-const activeCorner = ref<CornerHandle | null>(null)
-const hoveredCorner = ref<CornerHandle | null>(null)
+const activeHandle = ref<ResizeHandle | null>(null)
+const hoveredHandle = ref<ResizeHandle | null>(null)
 const hoveredLayer = ref<RenderableLayer | null>(null)
 
 const dragStartPointer = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 const dragStartBounds = ref<BoxBounds>({ x: 0, y: 0, width: 0, height: 0 })
-const dragStartScale = ref<number>(1)
+const dragStartScale = ref({ x: 1, y: 1 })
 const dragStartLayerPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 const dragStartGroupPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
-let pendingTransformAction: {
-  target: TransformHistoryTarget
-  before: Partial<Transform2D> | undefined
-} | null = null
 
-const currentScale = computed(() => {
+const currentScaleX = computed(() => {
   if (isGroupTarget.value && activeSelectedGroup.value) {
     return activeSelectedGroup.value.transform?.scaleX ?? 1
   }
   return activeSelectedLayer.value?.localScaleX ?? activeSelectedLayer.value?.scaleX ?? 1
 })
 
-function getCurrentTransformTarget(): TransformHistoryTarget | null {
+const currentScaleY = computed(() => {
   if (isGroupTarget.value && activeSelectedGroup.value) {
-    return { kind: 'group', groupId: activeSelectedGroup.value.id }
+    return activeSelectedGroup.value.transform?.scaleY ?? 1
   }
-  if (activeSelectedLayer.value?.keyframeId) {
-    return {
-      kind: 'keyframe',
-      trackId: activeSelectedLayer.value.trackId,
-      keyframeId: activeSelectedLayer.value.keyframeId
-    }
-  }
-  return null
-}
+  return activeSelectedLayer.value?.localScaleY ?? activeSelectedLayer.value?.scaleY ?? 1
+})
 
-function readTransformSnapshot(
-  target: TransformHistoryTarget
-): Partial<Transform2D> | undefined {
-  if (target.kind === 'group') {
-    const group = timelineStore.currentSequence.groups?.find(
-      (candidate) => candidate.id === target.groupId
-    )
-    return group?.transform ? { ...group.transform } : undefined
-  }
-
-  const track = timelineStore.currentSequence.tracks.find(
-    (candidate) => candidate.id === target.trackId
-  )
-  const keyframe = track?.keyframes.find(
-    (candidate) => candidate.id === target.keyframeId
-  )
-  return keyframe?.transform ? { ...keyframe.transform } : undefined
-}
-
-function beginTransformAction() {
-  const target = getCurrentTransformTarget()
-  if (!target) return
-  pendingTransformAction = {
-    target,
-    before: readTransformSnapshot(target)
-  }
-}
-
-function commitTransformAction() {
-  if (!pendingTransformAction) return
-  timelineStore.recordTransformAction(
-    pendingTransformAction.target,
-    pendingTransformAction.before,
-    readTransformSnapshot(pendingTransformAction.target)
-  )
-  pendingTransformAction = null
-}
-
-function runDiscreteTransformAction(action: () => void) {
-  const target = getCurrentTransformTarget()
-  if (!target) {
-    action()
-    return
-  }
-  const before = readTransformSnapshot(target)
-  action()
-  timelineStore.recordTransformAction(target, before, readTransformSnapshot(target))
-}
+const resizeCursorClass = computed(() => {
+  const handle = activeHandle.value ?? hoveredHandle.value
+  if (handle === 'left' || handle === 'right') return 'cursor-ew-resize'
+  if (handle === 'top' || handle === 'bottom') return 'cursor-ns-resize'
+  if (handle === 'tl' || handle === 'br') return 'cursor-nwse-resize'
+  if (handle === 'tr' || handle === 'bl') return 'cursor-nesw-resize'
+  if (isDragging.value) return 'cursor-grabbing'
+  if (hoveredLayer.value) return 'cursor-grab'
+  return 'cursor-default'
+})
 
 function undoCanvasTransform() {
   if (!isDragging.value && !isResizing.value) {
@@ -228,6 +198,14 @@ function redoCanvasTransform() {
   }
 }
 
+function toggleGrid() {
+  projectStore.updateStage({ showGrid: !stage.value.showGrid })
+}
+
+function toggleSafeArea() {
+  projectStore.updateStage({ safeArea: !stage.value.safeArea })
+}
+
 function onHistoryKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
   if (
@@ -236,6 +214,11 @@ function onHistoryKeydown(event: KeyboardEvent) {
     target?.tagName === 'TEXTAREA' ||
     target?.tagName === 'SELECT'
   ) {
+    return
+  }
+  if (event.key === 'Escape' && timelineStore.hasActiveTransformSession) {
+    event.preventDefault()
+    timelineStore.cancelTransformSession()
     return
   }
   if (!(event.ctrlKey || event.metaKey) || event.altKey) return
@@ -256,32 +239,38 @@ function onHistoryKeydown(event: KeyboardEvent) {
 onMounted(() => window.addEventListener('keydown', onHistoryKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onHistoryKeydown))
 
-function applyScale(newScale: number) {
-  const clamped = Number(Math.max(0.05, Math.min(5.0, newScale)).toFixed(2))
+function clampScale(value: number) {
+  return Number(Math.max(0.05, Math.min(5, value)).toFixed(2))
+}
+
+function applyScaleAxes(newScaleX: number, newScaleY: number) {
+  const clampedX = clampScale(newScaleX)
+  const clampedY = clampScale(newScaleY)
 
   if (isGroupTarget.value && activeSelectedGroup.value) {
     timelineStore.updateGroupTransform(activeSelectedGroup.value.id, {
-      scaleX: clamped,
-      scaleY: clamped
+      scaleX: clampedX,
+      scaleY: clampedY
     })
   } else if (activeSelectedLayer.value?.keyframeId) {
-    timelineStore.updateKeyframeTransform(
+    timelineStore.updateKeyframeSpriteTransform(
       activeSelectedLayer.value.trackId,
       activeSelectedLayer.value.keyframeId,
+      activeSelectedLayer.value.spriteId,
       {
-        scaleX: clamped,
-        scaleY: clamped
+        scaleX: clampedX,
+        scaleY: clampedY
       }
     )
   }
 }
 
 function adjustScale(delta: number) {
-  runDiscreteTransformAction(() => applyScale(currentScale.value + delta))
+  applyScaleAxes(currentScaleX.value + delta, currentScaleY.value + delta)
 }
 
 function setExactScale(value: number) {
-  runDiscreteTransformAction(() => applyScale(value))
+  applyScaleAxes(value, value)
 }
 
 function onCanvasWheel(e: WheelEvent) {
@@ -304,19 +293,25 @@ function getStageCoordinates(e: PointerEvent): { x: number; y: number } | null {
   }
 }
 
-function hitTestCornerHandle(pos: { x: number; y: number }, bounds: BoxBounds): CornerHandle | null {
+function hitTestResizeHandle(pos: { x: number; y: number }, bounds: BoxBounds): ResizeHandle | null {
   const handleRadius = 10
-  const corners: { corner: CornerHandle; x: number; y: number }[] = [
-    { corner: 'tl', x: bounds.x, y: bounds.y },
-    { corner: 'tr', x: bounds.x + bounds.width, y: bounds.y },
-    { corner: 'bl', x: bounds.x, y: bounds.y + bounds.height },
-    { corner: 'br', x: bounds.x + bounds.width, y: bounds.y + bounds.height }
+  const centerX = bounds.x + bounds.width / 2
+  const centerY = bounds.y + bounds.height / 2
+  const handles: { handle: ResizeHandle; x: number; y: number }[] = [
+    { handle: 'tl', x: bounds.x, y: bounds.y },
+    { handle: 'tr', x: bounds.x + bounds.width, y: bounds.y },
+    { handle: 'bl', x: bounds.x, y: bounds.y + bounds.height },
+    { handle: 'br', x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+    { handle: 'top', x: centerX, y: bounds.y },
+    { handle: 'right', x: bounds.x + bounds.width, y: centerY },
+    { handle: 'bottom', x: centerX, y: bounds.y + bounds.height },
+    { handle: 'left', x: bounds.x, y: centerY }
   ]
 
-  for (const c of corners) {
-    const dist = Math.hypot(pos.x - c.x, pos.y - c.y)
+  for (const handle of handles) {
+    const dist = Math.hypot(pos.x - handle.x, pos.y - handle.y)
     if (dist <= handleRadius) {
-      return c.corner
+      return handle.handle
     }
   }
   return null
@@ -327,8 +322,8 @@ function hitTestLayer(pos: { x: number; y: number }): RenderableLayer | null {
 
   for (const layer of reversed) {
     const isFullScreenBg =
-      layer.category === 'backdrop' ||
-      (layer.category === 'overlay' && !layer.isMovable) ||
+      layer.category === 'background' ||
+      (layer.category === 'foreground' && !layer.isMovable) ||
       (layer.width >= stage.value.width * 0.95 && layer.height >= stage.value.height * 0.95 && !layer.isMovable)
 
     if (isFullScreenBg) continue
@@ -346,16 +341,15 @@ function onCanvasPointerDown(e: PointerEvent) {
   const pos = getStageCoordinates(e)
   if (!pos) return
 
-  // 1. Priorité 1 : Clic sur l'une des 4 poignées de redimensionnement de la sélection active
+  // 1. Priorité 1 : clic sur l'une des 8 poignées de redimensionnement.
   if (selectedBounds.value) {
-    const hitCorner = hitTestCornerHandle(pos, selectedBounds.value)
-    if (hitCorner) {
-      beginTransformAction()
+    const hitHandle = hitTestResizeHandle(pos, selectedBounds.value)
+    if (hitHandle) {
       isResizing.value = true
-      activeCorner.value = hitCorner
+      activeHandle.value = hitHandle
       dragStartPointer.value = { ...pos }
       dragStartBounds.value = { ...selectedBounds.value }
-      dragStartScale.value = currentScale.value
+      dragStartScale.value = { x: currentScaleX.value, y: currentScaleY.value }
 
       const target = e.currentTarget as HTMLElement
       target?.setPointerCapture?.(e.pointerId)
@@ -365,7 +359,6 @@ function onCanvasPointerDown(e: PointerEvent) {
     // 2. Priorité 2 : Clic à l'intérieur de la boîte de sélection active (Déplacement direct)
     const b = selectedBounds.value
     if (pos.x >= b.x && pos.x <= b.x + b.width && pos.y >= b.y && pos.y <= b.y + b.height) {
-      beginTransformAction()
       isDragging.value = true
       dragStartPointer.value = { ...pos }
 
@@ -393,11 +386,10 @@ function onCanvasPointerDown(e: PointerEvent) {
     if (hit.groupId && editScope.value === 'group') {
       timelineStore.selectGroupForEditing(hit.groupId)
     } else {
-      timelineStore.selectTrackForEditing(hit.trackId)
+      timelineStore.selectSpriteForEditing(hit.trackId, hit.keyframeId, hit.spriteId)
     }
     assetStore.selectAsset(hit.asset.id)
 
-    beginTransformAction()
     isDragging.value = true
     dragStartPointer.value = { ...pos }
 
@@ -411,8 +403,8 @@ function onCanvasPointerDown(e: PointerEvent) {
     const target = e.currentTarget as HTMLElement
     target?.setPointerCapture?.(e.pointerId)
   } else {
-    // Clic sur le vide
-    timelineStore.clearStudioSelection()
+    // Une session reste active jusqu'à validation explicite par OK ou annulation par Escape.
+    if (!timelineStore.hasActiveTransformSession) timelineStore.clearStudioSelection(false)
   }
 }
 
@@ -420,20 +412,17 @@ function onCanvasPointerMove(e: PointerEvent) {
   const pos = getStageCoordinates(e)
   if (!pos) return
 
-  // A. Redimensionnement fluide par poignée d'angle
-  if (isResizing.value && selectedBounds.value) {
-    const b = dragStartBounds.value
-    const centerX = b.x + b.width / 2
-    const centerY = b.y + b.height / 2
-
-    const initialDist = Math.hypot(dragStartPointer.value.x - centerX, dragStartPointer.value.y - centerY)
-    const currentDist = Math.hypot(pos.x - centerX, pos.y - centerY)
-
-    if (initialDist > 0) {
-      const ratio = currentDist / initialDist
-      const newScale = dragStartScale.value * ratio
-      applyScale(newScale)
-    }
+  // A. Les coins conservent le ratio ; les poignées latérales ciblent un axe.
+  if (isResizing.value && activeHandle.value) {
+    const scales = computeResizeScales(
+      activeHandle.value,
+      dragStartBounds.value,
+      dragStartPointer.value,
+      pos,
+      dragStartScale.value.x,
+      dragStartScale.value.y
+    )
+    applyScaleAxes(scales.scaleX, scales.scaleY)
     return
   }
 
@@ -451,9 +440,10 @@ function onCanvasPointerMove(e: PointerEvent) {
       // Déplacement de l'élément individuel (coordonnées locales dans le groupe)
       const newX = Math.round(dragStartLayerPos.value.x + dx)
       const newY = Math.round(dragStartLayerPos.value.y + dy)
-      timelineStore.updateKeyframeTransform(
+      timelineStore.updateKeyframeSpriteTransform(
         activeSelectedLayer.value.trackId,
         activeSelectedLayer.value.keyframeId,
+        activeSelectedLayer.value.spriteId,
         { x: newX, y: newY }
       )
     }
@@ -462,18 +452,17 @@ function onCanvasPointerMove(e: PointerEvent) {
 
   // C. Survol (Hover Cursor Tracking)
   if (selectedBounds.value) {
-    hoveredCorner.value = hitTestCornerHandle(pos, selectedBounds.value)
+    hoveredHandle.value = hitTestResizeHandle(pos, selectedBounds.value)
   } else {
-    hoveredCorner.value = null
+    hoveredHandle.value = null
   }
   hoveredLayer.value = hitTestLayer(pos)
 }
 
 function onCanvasPointerUp(e: PointerEvent) {
-  commitTransformAction()
   isDragging.value = false
   isResizing.value = false
-  activeCorner.value = null
+  activeHandle.value = null
 
   const target = e.currentTarget as HTMLElement
   if (target?.hasPointerCapture?.(e.pointerId)) {
@@ -489,13 +478,13 @@ function onCanvasDoubleClick(e: MouseEvent) {
   const hit = hitTestLayer(pos)
   if (hit && hit.groupId) {
     if (editScope.value === 'group') {
-      timelineStore.selectTrackForEditing(hit.trackId)
+      timelineStore.selectSpriteForEditing(hit.trackId, hit.keyframeId, hit.spriteId)
     } else {
       timelineStore.selectGroupForEditing(hit.groupId)
     }
     assetStore.selectAsset(hit.asset.id)
-  } else if (!hit) {
-    timelineStore.clearStudioSelection()
+  } else if (!hit && !timelineStore.hasActiveTransformSession) {
+    timelineStore.clearStudioSelection(false)
   }
 }
 </script>
@@ -504,21 +493,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
   <div class="relative flex items-center justify-center w-full h-full overflow-hidden p-4 select-none">
     <div
       class="relative shadow-glass-2xl rounded-xl overflow-hidden border transition-all duration-200 bg-black/90 border-border-subtle/80 ring-1 ring-white/5"
-      :class="[
-        isResizing
-          ? activeCorner === 'tl' || activeCorner === 'br'
-            ? 'cursor-nwse-resize'
-            : 'cursor-nesw-resize'
-          : hoveredCorner
-            ? hoveredCorner === 'tl' || hoveredCorner === 'br'
-              ? 'cursor-nwse-resize'
-              : 'cursor-nesw-resize'
-            : isDragging
-              ? 'cursor-grabbing'
-              : hoveredLayer
-                ? 'cursor-grab'
-                : 'cursor-default'
-      ]"
+      :class="resizeCursorClass"
       :style="{
         aspectRatio: `${stage.width} / ${stage.height}`,
         maxHeight: '100%',
@@ -544,6 +519,47 @@ function onCanvasDoubleClick(e: MouseEvent) {
         @pointerdown.stop
         @dblclick.stop
       >
+        <Badge variant="neutral" size="sm" class="font-mono text-[10px] mx-1">
+          {{ stage.width }} × {{ stage.height }}
+        </Badge>
+        <Separator orientation="vertical" variant="subtle" class="h-4 mx-0.5" />
+        <IconButton
+          :icon="stage.showGrid ? 'grid_on' : 'grid_off'"
+          size="xs"
+          variant="ghost"
+          :active="stage.showGrid"
+          aria-label="Afficher ou masquer la grille"
+          title="Afficher/Masquer la grille"
+          @click="toggleGrid"
+        />
+        <IconButton
+          :icon="stage.safeArea ? 'crop_free' : 'crop'"
+          size="xs"
+          variant="ghost"
+          :active="stage.safeArea"
+          aria-label="Afficher ou masquer la safe-area"
+          title="Afficher/Masquer la Safe-Area TV"
+          @click="toggleSafeArea"
+        />
+        <IconButton
+          icon="photo_library"
+          size="xs"
+          variant="ghost"
+          :active="showAssets"
+          aria-label="Afficher ou masquer la bibliothèque d’assets"
+          title="Afficher/Masquer la bibliothèque d’assets"
+          @click="showAssets = !showAssets"
+        />
+        <IconButton
+          icon="account_tree"
+          size="xs"
+          variant="ghost"
+          :active="showHierarchy"
+          aria-label="Afficher ou masquer la hiérarchie"
+          title="Afficher/Masquer la hiérarchie"
+          @click="showHierarchy = !showHierarchy"
+        />
+        <Separator orientation="vertical" variant="subtle" class="h-4 mx-0.5" />
         <IconButton
           icon="undo"
           size="xs"
@@ -564,6 +580,17 @@ function onCanvasDoubleClick(e: MouseEvent) {
           :disabled="!timelineStore.canRedoTransform || isDragging || isResizing"
           @click="redoCanvasTransform"
         />
+        <Button
+          v-if="timelineStore.hasActiveTransformSession"
+          size="xs"
+          variant="primary"
+          class="ml-1 gap-1 font-bold"
+          title="Valider toutes les modifications depuis le focus"
+          @click="timelineStore.commitTransformSession()"
+        >
+          <Icon name="check" size="xs" />
+          OK
+        </Button>
       </div>
 
       <!-- HUD contextuel d'Édition Directe (Bannière Inférieure) -->
@@ -606,8 +633,8 @@ function onCanvasDoubleClick(e: MouseEvent) {
               title="Réduire l'échelle (-0.05) [ou glissez un coin]"
               @click="adjustScale(-0.05)"
             />
-            <span class="font-mono text-[10px] font-bold text-primary min-w-[38px] text-center">
-              {{ currentScale.toFixed(2) }}×
+            <span class="font-mono text-[10px] font-bold text-primary min-w-[82px] text-center">
+              X {{ currentScaleX.toFixed(2) }}× · Y {{ currentScaleY.toFixed(2) }}×
             </span>
             <IconButton
               icon="add"
@@ -618,7 +645,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
               @click="adjustScale(0.05)"
             />
             <Button
-              v-if="currentScale !== 1"
+              v-if="currentScaleX !== 1 || currentScaleY !== 1"
               size="xs"
               variant="ghost"
               class="text-[9px] font-bold text-text-muted hover:text-text-primary px-1 py-0.5 rounded border border-border-subtle hover:bg-bg-surface-hover cursor-pointer ml-0.5"

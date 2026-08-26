@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useTimelineStore } from './useTimelineStore'
-import type { Keyframe } from '@core/types/timeline.types'
+import type { Keyframe, Sequence } from '@core/types/timeline.types'
+import { sequenceRepository } from '@infrastructure/db/repositories/sequence.repository'
 
 vi.mock('@infrastructure/db/repositories/sequence.repository', () => ({
   sequenceRepository: {
@@ -43,6 +44,16 @@ describe('sélection du périmètre d’édition du studio', () => {
     expect(store.editScope).toBe('layer')
   })
 
+  it('déplie automatiquement le groupe ciblé par une sélection', () => {
+    const store = useTimelineStore()
+    const group = store.currentSequence.groups![0]
+    group.collapsed = true
+
+    store.selectGroupForEditing(group.id)
+
+    expect(group.collapsed).toBe(false)
+  })
+
   it('réinitialise ensemble la piste, le groupe et le mode', () => {
     const store = useTimelineStore()
     const track = store.currentSequence.tracks[0]
@@ -54,6 +65,171 @@ describe('sélection du périmètre d’édition du studio', () => {
     expect(store.selectedGroupId).toBeNull()
     expect(store.selectedKeyframeId).toBeNull()
     expect(store.editScope).toBe('group')
+  })
+})
+
+describe('migration des catégories de timeline', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('migre les anciennes catégories et complète les nouvelles pistes', async () => {
+    const legacySequence = {
+      id: 'seq_legacy',
+      projectId: 'proj_default',
+      name: 'Ancienne séquence',
+      durationMs: 15000,
+      fps: 24,
+      groups: [
+        { id: 'grp_backdrop', name: 'Décor', zIndex: 0 },
+        { id: 'grp_character_1', name: 'Personnage', zIndex: 20 },
+        { id: 'grp_props', name: 'Props', zIndex: 30 },
+        { id: 'grp_overlay', name: 'Overlay', zIndex: 50 }
+      ],
+      tracks: [
+        {
+          id: 'backdrop',
+          name: 'Décor',
+          category: 'backdrop',
+          targetSlot: 'backdrop',
+          groupId: 'grp_backdrop',
+          zIndex: 0,
+          muted: false,
+          locked: false,
+          keyframes: []
+        },
+        {
+          id: 'props_set',
+          name: 'Props',
+          category: 'props_set',
+          targetSlot: 'props_set',
+          groupId: 'grp_props',
+          zIndex: 30,
+          muted: false,
+          locked: false,
+          keyframes: []
+        },
+        {
+          id: 'overlay',
+          name: 'Overlay',
+          category: 'overlay',
+          targetSlot: 'overlay',
+          groupId: 'grp_overlay',
+          zIndex: 50,
+          muted: false,
+          locked: false,
+          keyframes: []
+        }
+      ],
+      createdAt: 1,
+      updatedAt: 1
+    } as unknown as Sequence
+
+    vi.mocked(sequenceRepository.getById).mockResolvedValue(legacySequence)
+    const store = useTimelineStore()
+
+    await store.loadSequence('seq_legacy', 'proj_default')
+
+    expect(store.currentSequence.groups?.map((group) => group.id)).toEqual(
+      expect.arrayContaining(['grp_background', 'grp_foreground'])
+    )
+    expect(store.currentSequence.tracks.map((track) => track.category)).toEqual(
+      expect.arrayContaining([
+        'background',
+        'props_host',
+        'props_set',
+        'desk',
+        'props_desk',
+        'foreground'
+      ])
+    )
+    expect(sequenceRepository.save).toHaveBeenCalledWith(legacySequence)
+  })
+
+  it('convertit les anciens champs de keyframe vers une entrée sprite', async () => {
+    const legacySequence = {
+      id: 'seq_keyframe_legacy',
+      projectId: 'proj_default',
+      name: 'Anciennes keyframes',
+      durationMs: 15000,
+      fps: 24,
+      groups: [],
+      tracks: [
+        {
+          id: 'head',
+          name: 'Tête',
+          category: 'head',
+          targetSlot: 'head',
+          zIndex: 20,
+          muted: false,
+          locked: false,
+          keyframes: [
+            {
+              id: 'legacy-kf',
+              timeMs: 500,
+              assetId: 'asset-head',
+              label: 'Sourire',
+              transform: { x: 12, scaleX: 1.2 }
+            }
+          ]
+        }
+      ],
+      createdAt: 1,
+      updatedAt: 1
+    } as unknown as Sequence
+
+    vi.mocked(sequenceRepository.getById).mockResolvedValue(legacySequence)
+    const store = useTimelineStore()
+    await store.loadSequence(legacySequence.id, legacySequence.projectId)
+
+    const migratedKeyframe = store.currentSequence.tracks
+      .find((track) => track.id === 'head')!
+      .keyframes[0]
+    expect(migratedKeyframe.sprites).toEqual([
+      expect.objectContaining({
+        assetId: 'asset-head',
+        label: 'Sourire',
+        transform: { x: 12, scaleX: 1.2 },
+        order: 0
+      })
+    ])
+    expect(migratedKeyframe).not.toHaveProperty('assetId')
+  })
+})
+
+describe('contenu multi-sprites des keyframes', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('ajoute plusieurs props au même instant sans remplacer les précédents', () => {
+    const store = useTimelineStore()
+
+    store.addKeyframe('props_host', 1000, 'asset-hat', 'Chapeau')
+    store.addKeyframe('props_host', 1000, 'asset-nose', 'Nez')
+
+    const keyframe = store.currentSequence.tracks
+      .find((track) => track.id === 'props_host')!
+      .keyframes[0]
+    expect(keyframe.sprites.map((sprite) => sprite.assetId)).toEqual([
+      'asset-hat',
+      'asset-nose'
+    ])
+    expect(keyframe.sprites.map((sprite) => sprite.order)).toEqual([0, 1])
+  })
+
+  it('remplace le contenu des catégories singleton au même instant', () => {
+    const store = useTimelineStore()
+
+    store.addKeyframe('head', 1000, 'asset-head-1')
+    store.addKeyframe('head', 1000, 'asset-head-2')
+
+    const keyframe = store.currentSequence.tracks.find((track) => track.id === 'head')!
+      .keyframes[0]
+    expect(keyframe.sprites).toHaveLength(1)
+    expect(keyframe.sprites[0].assetId).toBe('asset-head-2')
   })
 })
 
@@ -87,22 +263,34 @@ describe('historique des transformations du canvas', () => {
     const keyframe: Keyframe = {
       id: 'kf_history',
       timeMs: 0,
-      assetId: null,
-      transform: undefined
+      sprites: [
+        {
+          id: 'sprite-history',
+          assetId: 'asset-history',
+          transform: undefined,
+          order: 0
+        }
+      ]
     }
     track.keyframes.push(keyframe)
-    keyframe.transform = { x: 24, y: 18, scaleX: 0.8, scaleY: 0.8 }
+    const sprite = keyframe.sprites[0]
+    sprite.transform = { x: 24, y: 18, scaleX: 0.8, scaleY: 0.8 }
 
     store.recordTransformAction(
-      { kind: 'keyframe', trackId: track.id, keyframeId: keyframe.id },
+      {
+        kind: 'keyframe-sprite',
+        trackId: track.id,
+        keyframeId: keyframe.id,
+        spriteId: sprite.id
+      },
       undefined,
-      keyframe.transform
+      sprite.transform
     )
     store.undoLastTransform()
-    expect(keyframe.transform).toBeUndefined()
+    expect(sprite.transform).toBeUndefined()
 
     store.redoLastTransform()
-    expect(keyframe.transform).toEqual({ x: 24, y: 18, scaleX: 0.8, scaleY: 0.8 })
+    expect(sprite.transform).toEqual({ x: 24, y: 18, scaleX: 0.8, scaleY: 0.8 })
   })
 
   it('invalide le redo dès qu’une nouvelle transformation est enregistrée', () => {
@@ -141,5 +329,29 @@ describe('historique des transformations du canvas', () => {
     )
 
     expect(store.canUndoTransform).toBe(false)
+  })
+
+  it('regroupe toutes les modifications entre le focus et OK dans une seule entrée', () => {
+    const store = useTimelineStore()
+    const sprite = store.addKeyframe('props_set', 0, 'asset-stop')!
+    const track = store.currentSequence.tracks.find((candidate) => candidate.id === 'props_set')!
+    const keyframe = track.keyframes[0]
+
+    store.selectSpriteForEditing(track.id, keyframe.id, sprite.id)
+    store.updateKeyframeSpriteTransform(track.id, keyframe.id, sprite.id, { x: 20, y: 30 })
+    store.updateKeyframeSpriteTransform(track.id, keyframe.id, sprite.id, {
+      scaleX: 1.4,
+      scaleY: 1.4
+    })
+
+    expect(store.canUndoTransform).toBe(false)
+    store.commitTransformSession()
+    expect(store.canUndoTransform).toBe(true)
+    expect(store.selectedSpriteId).toBeNull()
+
+    store.undoLastTransform()
+    expect(sprite.transform).toBeUndefined()
+    store.redoLastTransform()
+    expect(sprite.transform).toEqual({ x: 20, y: 30, scaleX: 1.4, scaleY: 1.4 })
   })
 })

@@ -7,7 +7,7 @@ import { Icon } from '@/components/ui/icon'
 import type { IconButtonProps, IconButtonEmits } from './types'
 
 const iconButtonVariants = cva(
-  'relative inline-flex items-center justify-center rounded-full border border-transparent bg-transparent shrink-0 cursor-pointer select-none transition-all duration-150 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary touch-manipulation',
+  'relative inline-flex items-center justify-center rounded-full border border-transparent bg-transparent shrink-0 cursor-pointer select-none transition-all duration-300 ease-out outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary touch-manipulation',
   {
     variants: {
       variant: {
@@ -77,7 +77,7 @@ const classes = computed(() => {
       size
     }),
     active && variant === 'fav' && 'text-warning bg-bg-surface border-warning/50 shadow-glass-sm',
-    active && variant !== 'fav' && 'bg-primary text-white font-bold border-primary/50 shadow-glass-sm z-10',
+    active && variant !== 'fav' && 'bg-primary text-text-inverse font-bold border-primary/50 shadow-glass-sm z-10',
     disabled &&
       'opacity-40 cursor-not-allowed pointer-events-none hover:scale-100 active:scale-100',
     className

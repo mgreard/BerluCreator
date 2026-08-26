@@ -70,6 +70,21 @@ export function drawLayersOnContext(
 }
 
 /**
+ * Le fond de plateau est un matte d'édition. Pour un format avec canal alpha,
+ * il ne doit être exporté que si un véritable calque d'arrière-plan est visible.
+ */
+export function shouldFillExportBackground(
+  layers: RenderableLayer[],
+  format: string
+): boolean {
+  const normalizedFormat = format.split(';', 1)[0].trim().toLowerCase()
+  const supportsTransparency =
+    normalizedFormat === 'image/png' || normalizedFormat === 'image/webp'
+
+  return !supportsTransparency || layers.some((layer) => layer.category === 'background')
+}
+
+/**
  * Capture un instantané PNG/JPEG propre (sans helpers : pas de pointillés, pas de grille, pas de safe-area).
  */
 export async function captureCleanFrame(
@@ -86,8 +101,12 @@ export async function captureCleanFrame(
   if (!ctx) throw new Error("Impossible d'initialiser le contexte 2D pour la capture.")
 
   // 1. Fond du plateau
-  ctx.fillStyle = backgroundColor || '#0c0d14'
-  ctx.fillRect(0, 0, width, height)
+  if (shouldFillExportBackground(layers, format)) {
+    ctx.fillStyle = backgroundColor || '#0c0d14'
+    ctx.fillRect(0, 0, width, height)
+  } else {
+    ctx.clearRect(0, 0, width, height)
+  }
 
   // 2. Précharger tous les assets de la scène
   await Promise.all(layers.map((l) => fetchAndLoadImage(l.asset.blobId, globalImageCache)))
@@ -161,7 +180,7 @@ export function useCanvasRenderer(
 
     drawLayersOnContext(ctx, layers, globalImageCache)
 
-    // 4. Cadre de sélection interactif avec 4 poignées d'angles (Gizmo Transform)
+    // 4. Cadre de sélection interactif avec poignées d'angles et latérales.
     const bounds = selectedBounds?.value
     if (bounds && bounds.width > 0 && bounds.height > 0) {
       ctx.save()
@@ -176,27 +195,33 @@ export function useCanvasRenderer(
       ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height)
       ctx.setLineDash([])
 
-      // 4 Poignées de coin (Corner Handles : TL, TR, BL, BR)
-      const corners = [
-        { x: bounds.x, y: bounds.y }, // Top-Left
-        { x: bounds.x + bounds.width, y: bounds.y }, // Top-Right
-        { x: bounds.x, y: bounds.y + bounds.height }, // Bottom-Left
-        { x: bounds.x + bounds.width, y: bounds.y + bounds.height } // Bottom-Right
+      const centerX = bounds.x + bounds.width / 2
+      const centerY = bounds.y + bounds.height / 2
+      const handles = [
+        { x: bounds.x, y: bounds.y, size: handleSize },
+        { x: bounds.x + bounds.width, y: bounds.y, size: handleSize },
+        { x: bounds.x, y: bounds.y + bounds.height, size: handleSize },
+        { x: bounds.x + bounds.width, y: bounds.y + bounds.height, size: handleSize },
+        { x: centerX, y: bounds.y, size: 8 },
+        { x: bounds.x + bounds.width, y: centerY, size: 8 },
+        { x: centerX, y: bounds.y + bounds.height, size: 8 },
+        { x: bounds.x, y: centerY, size: 8 }
       ]
 
-      for (const corner of corners) {
+      for (const handle of handles) {
+        const halfSize = handle.size / 2
         // Ombre de poignée
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
-        ctx.fillRect(corner.x - handleSize / 2 + 1, corner.y - handleSize / 2 + 1, handleSize, handleSize)
+        ctx.fillRect(handle.x - halfSize + 1, handle.y - halfSize + 1, handle.size, handle.size)
 
         // Corps blanc
         ctx.fillStyle = '#ffffff'
-        ctx.fillRect(corner.x - handleSize / 2, corner.y - handleSize / 2, handleSize, handleSize)
+        ctx.fillRect(handle.x - halfSize, handle.y - halfSize, handle.size, handle.size)
 
         // Contour accentué
         ctx.strokeStyle = primaryColor
         ctx.lineWidth = 2
-        ctx.strokeRect(corner.x - handleSize / 2, corner.y - handleSize / 2, handleSize, handleSize)
+        ctx.strokeRect(handle.x - halfSize, handle.y - halfSize, handle.size, handle.size)
       }
 
       // Étiquette informative au-dessus de la sélection

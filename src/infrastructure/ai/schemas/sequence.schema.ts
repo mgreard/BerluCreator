@@ -1,16 +1,7 @@
 import { z } from 'zod'
+import { ASSET_CATEGORY_IDS } from '@core/types/asset.types'
 
-export const AssetCategoryEnum = z.enum([
-  'backdrop',
-  'torso',
-  'head',
-  'mouth',
-  'eyes',
-  'arms_left',
-  'arms_right',
-  'props',
-  'overlay'
-])
+export const AssetCategoryEnum = z.enum(ASSET_CATEGORY_IDS)
 
 export const AIScriptBeatSchema = z.object({
   timeMs: z.number().nonnegative(),

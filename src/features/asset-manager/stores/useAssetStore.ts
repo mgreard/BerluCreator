@@ -80,6 +80,8 @@ export const useAssetStore = defineStore('asset', () => {
       blobId,
       width: dimensions.width,
       height: dimensions.height,
+      displayWidth: dimensions.width,
+      displayHeight: dimensions.height,
       isMovable: spriteConfig.isMovable,
       createdAt: Date.now(),
       updatedAt: Date.now()

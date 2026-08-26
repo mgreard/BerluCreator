@@ -101,10 +101,10 @@ export class AIClientService {
     if (text.includes('urgent') || text.includes('breaking') || text.includes('exclusif') || text.includes('choc')) {
       beats.push({
         timeMs: Math.min(2500, duration * 0.3),
-        targetSlot: 'overlay',
-        action: 'breaking_news_banner',
-        suggestedTag: 'breaking',
-        reasoning: 'Apparition bandeau information urgente'
+        targetSlot: 'foreground',
+        action: 'ambiance_premier_plan',
+        suggestedTag: 'ambiance',
+        reasoning: 'Renforcement visuel de l’information urgente au premier plan'
       })
       beats.push({
         timeMs: Math.min(2600, duration * 0.32),

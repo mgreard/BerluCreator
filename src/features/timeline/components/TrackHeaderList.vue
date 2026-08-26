@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { DropdownMenu, type DropdownMenuItemDef } from '@/components/ui/dropdown-menu'
 import { SelectableSurface } from '@/components/ui/selectable-surface'
 import type { TimelineTrack, TrackGroup, TrackGroupColor } from '@core/types/timeline.types'
+import type { AssetCategory } from '@core/types/asset.types'
 import CreateGroupModal from './CreateGroupModal.vue'
 
 const emit = defineEmits<{
@@ -45,23 +46,29 @@ const groupColorClasses: Record<TrackGroupColor, { border: string; text: string;
   cyan: { border: 'border-l-cyan-500', text: 'text-cyan-400', bg: 'bg-cyan-500/10', dot: 'bg-cyan-500' }
 }
 
-function getGroupMenuItems(group: TrackGroup): DropdownMenuItemDef[] {
-  const items: DropdownMenuItemDef[] = [
-    {
-      id: 'add_track_props',
-      label: 'Ajouter Accessoire (Props)',
-      icon: 'mic',
-      onClick: () => timelineStore.addTrack('props', undefined, undefined, group.id)
-    },
-    {
-      id: 'add_track_overlay',
-      label: 'Ajouter Habillage (Overlay)',
-      icon: 'newspaper',
-      onClick: () => timelineStore.addTrack('overlay', undefined, undefined, group.id)
-    }
-  ]
+const MULTI_TRACK_CATEGORIES: AssetCategory[] = [
+  'props_host',
+  'props_set',
+  'props_desk',
+  'foreground'
+]
 
-  if (!['grp_character_1', 'grp_backdrop'].includes(group.id)) {
+function createAddTrackItems(groupId?: string): DropdownMenuItemDef[] {
+  return MULTI_TRACK_CATEGORIES.map((category) => {
+    const definition = ASSET_CATEGORIES[category]
+    return {
+      id: `add_track_${category}`,
+      label: `Ajouter ${definition.label}`,
+      icon: definition.icon,
+      onClick: () => timelineStore.addTrack(category, undefined, undefined, groupId)
+    }
+  })
+}
+
+function getGroupMenuItems(group: TrackGroup): DropdownMenuItemDef[] {
+  const items = createAddTrackItems(group.id)
+
+  if (!['grp_character_1', 'grp_background'].includes(group.id)) {
     items.push({
       id: 'sep_del',
       label: '---',
@@ -92,23 +99,12 @@ const addTrackGlobalMenuItems: DropdownMenuItemDef[] = [
     label: '---',
     icon: 'add'
   },
-  {
-    id: 'add_props',
-    label: 'Nouvel Accessoire (Props)',
-    icon: 'mic',
-    onClick: () => timelineStore.addTrack('props')
-  },
-  {
-    id: 'add_overlay',
-    label: 'Nouvel Habillage (Overlay)',
-    icon: 'newspaper',
-    onClick: () => timelineStore.addTrack('overlay')
-  }
+  ...createAddTrackItems()
 ]
 
 function canRemoveTrack(track: TimelineTrack): boolean {
   const catDef = ASSET_CATEGORIES[track.category]
-  if (catDef && catDef.cardinality === 'multi') {
+  if (catDef && catDef.trackCardinality === 'multi') {
     return true
   }
   const sameCatCount = timelineStore.currentSequence.tracks.filter((t) => t.category === track.category).length

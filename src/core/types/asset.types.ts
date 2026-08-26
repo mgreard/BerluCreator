@@ -1,13 +1,34 @@
-export type AssetCategory =
-  | 'backdrop'
-  | 'torso'
-  | 'head'
-  | 'mouth'
-  | 'eyes'
-  | 'arms_left'
-  | 'arms_right'
-  | 'props'
-  | 'overlay'
+export const ASSET_CATEGORY_IDS = [
+  'background',
+  'torso',
+  'head',
+  'mouth',
+  'eyes',
+  'props_host',
+  'arms_left',
+  'arms_right',
+  'props_set',
+  'desk',
+  'props_desk',
+  'foreground'
+] as const
+
+export type AssetCategory = (typeof ASSET_CATEGORY_IDS)[number]
+
+const LEGACY_ASSET_CATEGORY_MAP: Record<string, AssetCategory> = {
+  backdrop: 'background',
+  props: 'props_host',
+  overlay: 'foreground'
+}
+
+export function isAssetCategory(value: unknown): value is AssetCategory {
+  return ASSET_CATEGORY_IDS.includes(value as AssetCategory)
+}
+
+export function normalizeAssetCategory(value: unknown): AssetCategory | undefined {
+  if (isAssetCategory(value)) return value
+  return typeof value === 'string' ? LEGACY_ASSET_CATEGORY_MAP[value] : undefined
+}
 
 export type CategoryCardinality = 'singleton' | 'multi'
 export type CategoryPlacementMode = 'character-anchored' | 'free-transform'
@@ -18,7 +39,8 @@ export interface AssetCategoryDefinition {
   icon: string
   description: string
   defaultZIndex: number
-  cardinality: CategoryCardinality
+  trackCardinality: CategoryCardinality
+  keyframeCardinality: CategoryCardinality
   placementMode: CategoryPlacementMode
 }
 
@@ -54,6 +76,9 @@ export interface Asset {
   blobId: string
   width: number
   height: number
+  /** Logical size used on the canvas, independent from the source resolution. */
+  displayWidth?: number
+  displayHeight?: number
   /** Indique si le sprite peut être déplacé librement à la souris sur le canvas */
   isMovable: boolean
   createdAt: number

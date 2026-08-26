@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeTransformedBounds } from './transform-matrix'
+import { computeResizeScales, computeTransformedBounds } from './transform-matrix'
 
 describe('computeTransformedBounds', () => {
   it('calcule les bornes exactes sans mise à l’échelle (scale = 1)', () => {
@@ -30,5 +30,49 @@ describe('computeTransformedBounds', () => {
       width: 150,
       height: 200
     })
+  })
+})
+
+describe('computeResizeScales', () => {
+  const bounds = { x: 100, y: 100, width: 200, height: 100 }
+
+  it('conserve le ratio existant avec une poignée d’angle', () => {
+    const scales = computeResizeScales(
+      'br',
+      bounds,
+      { x: 300, y: 200 },
+      { x: 400, y: 250 },
+      1,
+      0.5
+    )
+
+    expect(scales.scaleX).toBeCloseTo(2)
+    expect(scales.scaleY).toBeCloseTo(1)
+  })
+
+  it('ne modifie que scaleX avec une poignée latérale horizontale', () => {
+    expect(
+      computeResizeScales(
+        'right',
+        bounds,
+        { x: 300, y: 150 },
+        { x: 400, y: 150 },
+        1,
+        0.75
+      )
+    ).toEqual({ scaleX: 2, scaleY: 0.75 })
+  })
+
+  it('ne modifie que scaleY avec une poignée latérale verticale', () => {
+    expect(
+      computeResizeScales(
+        'bottom',
+        bounds,
+        { x: 200, y: 200 },
+        { x: 200, y: 250 },
+        1.25,
+        1
+      )
+    ).toEqual({ scaleX: 1.25, scaleY: 2 })
   })
 })

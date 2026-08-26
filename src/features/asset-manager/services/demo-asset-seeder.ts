@@ -1,5 +1,9 @@
 import { assetRepository } from '@infrastructure/db/repositories/asset.repository'
-import type { Asset, AssetCategory } from '@core/types/asset.types'
+import {
+  isAssetCategory,
+  type Asset,
+  type AssetCategory
+} from '@core/types/asset.types'
 import { resolveSpriteConfig } from '@core/constants/sprites-config'
 import { generateId } from '@/lib/utils'
 
@@ -16,17 +20,17 @@ const spriteModules = import.meta.glob<string>('@/assets/sprites/**/*.png', {
 export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
   const existing = await assetRepository.getAll()
 
-  // Détecter si la base contient les anciens placeholders SVG vectoriels ou s'il manque isMovable
-  const hasOldPlaceholders = existing.some(
-    (a) => a.id.startsWith('asset_backdrop') || a.id.startsWith('asset_torso') || a.isMovable === undefined
+  // Une ancienne catégorie indique que la base référence encore l'ancien pack de sprites.
+  const needsSpritePackMigration = existing.some(
+    (asset) => !isAssetCategory(asset.category) || asset.isMovable === undefined
   )
 
-  if (!force && existing.length > 0 && !hasOldPlaceholders) {
+  if (!force && existing.length > 0 && !needsSpritePackMigration) {
     return
   }
 
-  // Nettoyer les anciens assets si placeholders ou forçage
-  if (hasOldPlaceholders || force) {
+  // Nettoyer les anciens assets si leur structure est obsolète ou en cas de forçage.
+  if (needsSpritePackMigration || force) {
     for (const old of existing) {
       await assetRepository.delete(old.id)
     }
@@ -52,6 +56,8 @@ export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
         blobId,
         width: dimensions.width,
         height: dimensions.height,
+        displayWidth: dimensions.width,
+        displayHeight: dimensions.height,
         isMovable: spriteConfig.isMovable,
         createdAt: Date.now(),
         updatedAt: Date.now()
@@ -64,7 +70,7 @@ export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
   }
 }
 
-function parseSpriteMetadata(filePath: string): {
+export function parseSpriteMetadata(filePath: string): {
   name: string
   category: AssetCategory
   tags: string[]
@@ -73,7 +79,7 @@ function parseSpriteMetadata(filePath: string): {
   const fileName = parts[parts.length - 1].replace(/\.png$/i, '')
   const folder = parts[parts.length - 2]
 
-  let category: AssetCategory = 'props'
+  let category: AssetCategory
   const tags: string[] = [folder]
 
   // Formater un nom propre lisible (ex: "Bras_baisse_droit" -> "Bras Baissé Droit")
@@ -83,12 +89,20 @@ function parseSpriteMetadata(filePath: string): {
     .trim()
 
   if (folder === 'arms') {
-    if (fileName.toLowerCase().includes('gauche')) {
+    const normalizedFileName = fileName.toLowerCase()
+    if (normalizedFileName.includes('_left_arm')) {
       category = 'arms_left'
       tags.push('arms_left', 'bras')
-    } else {
+    } else if (
+      normalizedFileName.includes('_right_arm') ||
+      normalizedFileName.includes('_both_arms')
+    ) {
+      // Les poses combinant les deux bras restent pilotées par la piste droite,
+      // comme dans l'ancien pack où toute pose non gauche y était affectée.
       category = 'arms_right'
       tags.push('arms_right', 'bras')
+    } else {
+      throw new Error(`Nom de sprite de bras non reconnu : ${fileName}`)
     }
   } else if (folder === 'head') {
     category = 'head'
@@ -96,34 +110,32 @@ function parseSpriteMetadata(filePath: string): {
   } else if (folder === 'mouth') {
     category = 'mouth'
     tags.push('mouth', 'bouche', 'phoneme')
-  } else if (folder === 'torse') {
+  } else if (folder === 'torso') {
     category = 'torso'
     tags.push('torso', 'corps')
-  } else if (folder === 'plateau') {
-    if (fileName.toLowerCase().startsWith('fond')) {
-      category = 'backdrop'
-      tags.push('backdrop', 'decor', 'fond')
-    } else if (
-      fileName.toLowerCase().startsWith('atmo') ||
-      fileName.toLowerCase().startsWith('light')
-    ) {
-      category = 'overlay'
-      tags.push('overlay', 'ambiance', 'lumiere')
-    } else {
-      category = 'props'
-      tags.push('props', 'plateau', 'bureau')
-    }
-  } else if (folder === 'items') {
-    if (fileName.toLowerCase().startsWith('eyes')) {
-      category = 'eyes'
-      tags.push('eyes', 'regard', 'yeux')
-    } else {
-      category = 'props'
-      tags.push('props', 'accessoire')
-    }
-  } else if (folder === 'items-desk') {
-    category = 'props'
-    tags.push('props', 'bureau', 'objet')
+  } else if (folder === 'background') {
+    category = 'background'
+    tags.push('background', 'fond')
+  } else if (folder === 'desk') {
+    category = 'desk'
+    tags.push('desk', 'bureau')
+  } else if (folder === 'eyes') {
+    category = 'eyes'
+    tags.push('eyes', 'regard', 'lunettes')
+  } else if (folder === 'props-host') {
+    category = 'props_host'
+    tags.push('props_host', 'presentateur', 'accessoire')
+  } else if (folder === 'props-set') {
+    category = 'props_set'
+    tags.push('props_set', 'plateau', 'objet')
+  } else if (folder === 'props-desk') {
+    category = 'props_desk'
+    tags.push('props_desk', 'bureau', 'objet')
+  } else if (folder === 'foreground') {
+    category = 'foreground'
+    tags.push('foreground', 'premier-plan', 'ambiance')
+  } else {
+    throw new Error(`Dossier de sprites non reconnu : ${folder}`)
   }
 
   return { name: formattedName, category, tags }

@@ -16,20 +16,23 @@ export const DEFAULT_STAGE_RESOLUTION = {
 import type { TrackGroup } from '../types/timeline.types'
 
 export const DEFAULT_TRACK_GROUPS: TrackGroup[] = [
-  { id: 'grp_backdrop', name: 'Décor & Plateau', zIndex: 0, color: 'blue' },
+  { id: 'grp_background', name: 'Arrière-plan & Plateau', zIndex: 0, color: 'blue' },
   { id: 'grp_character_1', name: 'Personnage Principal', zIndex: 20, color: 'indigo' },
   { id: 'grp_props', name: 'Accessoires & Mobilier', zIndex: 30, color: 'amber' },
-  { id: 'grp_overlay', name: 'Habillage & Overlays', zIndex: 50, color: 'purple' }
+  { id: 'grp_foreground', name: 'Premier Plan', zIndex: 50, color: 'purple' }
 ]
 
 export const DEFAULT_TRACK_SLOTS = [
-  { id: 'backdrop', name: 'Décor de Plateau', category: 'backdrop', zIndex: 0, groupId: 'grp_backdrop' },
+  { id: 'background', name: 'Arrière-plan', category: 'background', zIndex: 0, groupId: 'grp_background' },
   { id: 'torso', name: 'Torse Présentateur', category: 'torso', zIndex: 10, groupId: 'grp_character_1' },
   { id: 'arms_left', name: 'Bras Gauche', category: 'arms_left', zIndex: 12, groupId: 'grp_character_1' },
   { id: 'arms_right', name: 'Bras Droit', category: 'arms_right', zIndex: 15, groupId: 'grp_character_1' },
   { id: 'head', name: 'Tête', category: 'head', zIndex: 20, groupId: 'grp_character_1' },
-  { id: 'eyes', name: 'Regard / Yeux', category: 'eyes', zIndex: 24, groupId: 'grp_character_1' },
+  { id: 'eyes', name: 'Yeux & Lunettes', category: 'eyes', zIndex: 26, groupId: 'grp_character_1' },
   { id: 'mouth', name: 'Bouche (Phonèmes)', category: 'mouth', zIndex: 25, groupId: 'grp_character_1' },
-  { id: 'props', name: 'Accessoires (Micro/Fiches)', category: 'props', zIndex: 30, groupId: 'grp_props' },
-  { id: 'overlay', name: 'Habillage TV & Synthés', category: 'overlay', zIndex: 50, groupId: 'grp_overlay' }
+  { id: 'props_host', name: 'Accessoires Présentateur', category: 'props_host', zIndex: 27, groupId: 'grp_character_1' },
+  { id: 'desk', name: 'Bureau', category: 'desk', zIndex: 28, groupId: 'grp_props' },
+  { id: 'props_set', name: 'Accessoires Plateau', category: 'props_set', zIndex: 30, groupId: 'grp_props' },
+  { id: 'props_desk', name: 'Objets du Bureau', category: 'props_desk', zIndex: 35, groupId: 'grp_props' },
+  { id: 'foreground', name: 'Premier Plan', category: 'foreground', zIndex: 50, groupId: 'grp_foreground' }
 ] as const

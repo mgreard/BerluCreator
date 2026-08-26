@@ -41,7 +41,11 @@ describe('asset timeline assignment', () => {
 
   it('uses the exact time of the selected keyframe on the selected track', () => {
     const selectedTrack = createTrack('head', 'head', [
-      { id: 'keyframe-1', timeMs: 1_275, assetId: 'asset-old' }
+      {
+        id: 'keyframe-1',
+        timeMs: 1_275,
+        sprites: [{ id: 'sprite-1', assetId: 'asset-old', order: 0 }]
+      }
     ])
 
     expect(resolveAssetAssignmentTime(selectedTrack, selectedTrack, 'keyframe-1', 1_300)).toBe(
@@ -52,7 +56,11 @@ describe('asset timeline assignment', () => {
   it('uses the playback time when no keyframe is selected on the target track', () => {
     const targetTrack = createTrack('head', 'head')
     const selectedTrack = createTrack('mouth', 'mouth', [
-      { id: 'keyframe-1', timeMs: 1_275, assetId: 'asset-old' }
+      {
+        id: 'keyframe-1',
+        timeMs: 1_275,
+        sprites: [{ id: 'sprite-1', assetId: 'asset-old', order: 0 }]
+      }
     ])
 
     expect(resolveAssetAssignmentTime(targetTrack, selectedTrack, 'keyframe-1', 1_300)).toBe(

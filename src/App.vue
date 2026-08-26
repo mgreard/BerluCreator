@@ -4,6 +4,7 @@ import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
 import { seedDemoAssetsIfEmpty } from '@/features/asset-manager/services/demo-asset-seeder'
+import type { Asset, AssetCategory } from '@core/types/asset.types'
 
 import StudioHeader from '@/features/project/components/StudioHeader.vue'
 import AssetLibraryPanel from '@/features/asset-manager/components/AssetLibraryPanel.vue'
@@ -13,6 +14,7 @@ import TimelinePanel from '@/features/timeline/components/TimelinePanel.vue'
 import ProjectSettingsModal from '@/features/project/components/ProjectSettingsModal.vue'
 import ExportSequenceModal from '@/features/project/components/ExportSequenceModal.vue'
 import AIDirectorModal from '@/features/ai-director/components/AIDirectorModal.vue'
+import ResizableSidebar from '@/features/studio/components/ResizableSidebar.vue'
 import ToastContainer from '@/components/ui/toast-container/ToastContainer.vue'
 
 const projectStore = useProjectStore()
@@ -23,6 +25,19 @@ const isSettingsOpen = ref(false)
 const isExportOpen = ref(false)
 const isAiDirectorOpen = ref(false)
 const showHierarchy = ref(true)
+const showAssetLibrary = ref(true)
+
+function addInitialKeyframe(
+  category: AssetCategory,
+  asset: Asset | undefined,
+  timeMs = 0
+) {
+  if (!asset) return
+  const track = timelineStore.currentSequence.tracks.find(
+    (candidate) => candidate.targetSlot === category || candidate.category === category
+  )
+  if (track) timelineStore.addKeyframe(track.id, timeMs, asset.id, asset.name)
+}
 
 onMounted(async () => {
   // 1. Initialiser le projet
@@ -37,13 +52,17 @@ onMounted(async () => {
 
   // 4. Si la séquence n'a aucune keyframe ou utilise des IDs obsolètes, configurer une composition initiale
   const hasValidKeyframes = timelineStore.currentSequence.tracks.some((t) =>
-    t.keyframes.some((k) => assetStore.assets.some((a) => a.id === k.assetId))
+    t.keyframes.some((keyframe) =>
+      keyframe.sprites.some((sprite) =>
+        assetStore.assets.some((asset) => asset.id === sprite.assetId)
+      )
+    )
   )
 
   if (!hasValidKeyframes && assetStore.assets.length > 0) {
-    const backdrop =
-      assetStore.assets.find((a) => a.category === 'backdrop' && a.name.toLowerCase().includes('fond')) ||
-      assetStore.assets.find((a) => a.category === 'backdrop')
+    const background =
+      assetStore.assets.find((a) => a.category === 'background' && a.name.toLowerCase().includes('background')) ||
+      assetStore.assets.find((a) => a.category === 'background')
     const torso = assetStore.assets.find((a) => a.category === 'torso')
     const head =
       assetStore.assets.find((a) => a.category === 'head' && a.name.toLowerCase().includes('smile')) ||
@@ -55,13 +74,15 @@ onMounted(async () => {
     const mouth3 = assetStore.assets.find((a) => a.category === 'mouth' && a.name.toLowerCase().includes('smile3'))
     const eyes = assetStore.assets.find((a) => a.category === 'eyes')
     const armLeft =
-      assetStore.assets.find((a) => a.category === 'arms_left' && a.name.toLowerCase().includes('baisse')) ||
+      assetStore.assets.find((a) => a.category === 'arms_left' && a.name.toLowerCase().includes('default')) ||
       assetStore.assets.find((a) => a.category === 'arms_left')
     const armRight =
-      assetStore.assets.find((a) => a.category === 'arms_right' && a.name.toLowerCase().includes('ouvert')) ||
+      assetStore.assets.find((a) => a.category === 'arms_right' && a.name.toLowerCase().includes('open')) ||
       assetStore.assets.find((a) => a.category === 'arms_right')
-    const desk = assetStore.assets.find((a) => a.name.toLowerCase().includes('bureau'))
-    const light = assetStore.assets.find((a) => a.category === 'overlay' && a.name.toLowerCase().includes('light'))
+    const desk = assetStore.assets.find((a) => a.category === 'desk')
+    const light = assetStore.assets.find(
+      (a) => a.category === 'props_set' && a.name.toLowerCase().includes('light')
+    )
 
     // Réinitialiser les pistes
     for (const track of timelineStore.currentSequence.tracks) {
@@ -71,18 +92,19 @@ onMounted(async () => {
       track.keyframes = []
     }
 
-    if (backdrop) timelineStore.addKeyframe('backdrop', 0, backdrop.id, backdrop.name)
-    if (torso) timelineStore.addKeyframe('torso', 0, torso.id, torso.name)
-    if (head) timelineStore.addKeyframe('head', 0, head.id, head.name)
-    if (mouth1) timelineStore.addKeyframe('mouth', 0, mouth1.id, mouth1.name)
-    if (mouth2) timelineStore.addKeyframe('mouth', 800, mouth2.id, mouth2.name)
-    if (mouth3) timelineStore.addKeyframe('mouth', 1600, mouth3.id, mouth3.name)
-    if (mouth1) timelineStore.addKeyframe('mouth', 2400, mouth1.id, mouth1.name)
-    if (eyes) timelineStore.addKeyframe('eyes', 0, eyes.id, eyes.name)
-    if (armLeft) timelineStore.addKeyframe('arms_left', 0, armLeft.id, armLeft.name)
-    if (armRight) timelineStore.addKeyframe('arms_right', 0, armRight.id, armRight.name)
-    if (desk) timelineStore.addKeyframe('props', 0, desk.id, desk.name)
-    if (light) timelineStore.addKeyframe('overlay', 0, light.id, light.name)
+    addInitialKeyframe('background', background)
+    addInitialKeyframe('torso', torso)
+    addInitialKeyframe('head', head)
+    addInitialKeyframe('mouth', mouth1)
+    addInitialKeyframe('mouth', mouth2, 800)
+    addInitialKeyframe('mouth', mouth3, 1600)
+    addInitialKeyframe('mouth', mouth1, 2400)
+    addInitialKeyframe('eyes', eyes)
+    addInitialKeyframe('arms_left', armLeft)
+    addInitialKeyframe('arms_right', armRight)
+    addInitialKeyframe('desk', desk)
+    addInitialKeyframe('props_set', light)
+    timelineStore.clearStudioSelection(false)
   }
 })
 </script>
@@ -99,13 +121,34 @@ onMounted(async () => {
     <!-- Zone Centrale du Studio (3 Colonnes) -->
     <div class="flex-1 flex overflow-hidden">
       <!-- Bibliothèque d'Assets (Gauche) -->
-      <AssetLibraryPanel />
+      <ResizableSidebar
+        v-model:open="showAssetLibrary"
+        side="left"
+        :default-width="370"
+        :min-width="300"
+        :max-width="560"
+        storage-key="berlu.asset-sidebar-width"
+      >
+        <AssetLibraryPanel />
+      </ResizableSidebar>
 
       <!-- Viewport & Canvas de Composition (Centre) -->
-      <StudioViewport v-model:show-hierarchy="showHierarchy" />
+      <StudioViewport
+        v-model:show-hierarchy="showHierarchy"
+        v-model:show-assets="showAssetLibrary"
+      />
 
       <!-- Inspecteur de Hiérarchie des Calques (Droite) -->
-      <HierarchyInspector v-if="showHierarchy" />
+      <ResizableSidebar
+        v-model:open="showHierarchy"
+        side="right"
+        :default-width="320"
+        :min-width="260"
+        :max-width="520"
+        storage-key="berlu.hierarchy-sidebar-width"
+      >
+        <HierarchyInspector />
+      </ResizableSidebar>
     </div>
 
     <!-- Séquenceur & Timeline Discrète (Bas) -->

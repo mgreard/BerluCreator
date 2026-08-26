@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { AIGenerationResponseSchema } from './sequence.schema'
+import { ASSET_CATEGORY_IDS } from '@core/types/asset.types'
+import { AIGenerationResponseSchema, AssetCategoryEnum } from './sequence.schema'
 
 describe('AIGenerationResponseSchema', () => {
+  it('uses the canonical asset categories', () => {
+    expect(AssetCategoryEnum.options).toEqual([...ASSET_CATEGORY_IDS])
+  })
+
   it('should successfully validate a properly formed LLM response', () => {
     const validData = {
       summary: 'Découpage du présentateur JT',

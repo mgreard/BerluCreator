@@ -19,6 +19,58 @@ export interface ResolvedLayerPosition {
   opacity: number
 }
 
+export type ResizeHandle = 'tl' | 'tr' | 'bl' | 'br' | 'top' | 'right' | 'bottom' | 'left'
+
+export interface ResizeScales {
+  scaleX: number
+  scaleY: number
+}
+
+/**
+ * Calcule les échelles d'un gizmo centré : les coins conservent le ratio
+ * existant, tandis que les poignées latérales ne modifient qu'un seul axe.
+ */
+export function computeResizeScales(
+  handle: ResizeHandle,
+  bounds: BoxBounds,
+  startPointer: Point2D,
+  pointer: Point2D,
+  startScaleX: number,
+  startScaleY: number
+): ResizeScales {
+  const centerX = bounds.x + bounds.width / 2
+  const centerY = bounds.y + bounds.height / 2
+  const isHorizontal = handle === 'left' || handle === 'right'
+  const isVertical = handle === 'top' || handle === 'bottom'
+
+  if (isHorizontal) {
+    const initialDistance = Math.abs(startPointer.x - centerX)
+    const currentDistance = Math.abs(pointer.x - centerX)
+    return {
+      scaleX: initialDistance > 0 ? startScaleX * (currentDistance / initialDistance) : startScaleX,
+      scaleY: startScaleY
+    }
+  }
+
+  if (isVertical) {
+    const initialDistance = Math.abs(startPointer.y - centerY)
+    const currentDistance = Math.abs(pointer.y - centerY)
+    return {
+      scaleX: startScaleX,
+      scaleY: initialDistance > 0 ? startScaleY * (currentDistance / initialDistance) : startScaleY
+    }
+  }
+
+  const initialDistance = Math.hypot(startPointer.x - centerX, startPointer.y - centerY)
+  const currentDistance = Math.hypot(pointer.x - centerX, pointer.y - centerY)
+  const ratio = initialDistance > 0 ? currentDistance / initialDistance : 1
+
+  return {
+    scaleX: startScaleX * ratio,
+    scaleY: startScaleY * ratio
+  }
+}
+
 /**
  * Calcule les bornes visuelles réelles d'un élément tenant compte de son échelle (centrée).
  */

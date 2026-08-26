@@ -9,16 +9,21 @@ export interface Transform2D {
   opacity: number
 }
 
+export interface KeyframeSprite {
+  id: string
+  assetId: string
+  transform?: Partial<Transform2D>
+  label?: string
+  /** Ordre local au sein d'une même piste et d'une même keyframe. */
+  order: number
+}
+
 export interface Keyframe {
   id: string
   /** Temps d'activation en millisecondes */
   timeMs: number
-  /** ID de l'asset sprite à afficher (ou null pour masquer) */
-  assetId: string | null
-  /** Décalages géométriques optionnels par rapport à l'ancrage résolu */
-  transform?: Partial<Transform2D>
-  /** Étiquette contextuelle ou émotion (ex: 'smile', 'talk_O', 'gaze_left') */
-  label?: string
+  /** Sprites affichés simultanément par cette piste à cet instant. */
+  sprites: KeyframeSprite[]
 }
 
 export type TrackGroupColor = 'indigo' | 'emerald' | 'amber' | 'rose' | 'blue' | 'purple' | 'cyan'

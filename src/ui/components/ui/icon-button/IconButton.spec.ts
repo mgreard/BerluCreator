@@ -52,6 +52,19 @@ describe('IconButton (Colocated Unit Tests)', () => {
     })
     expect(wrapperAccent.classes()).toContain('bg-accent')
     expect(wrapperAccent.classes()).toContain('text-violet-950')
+
+    const wrapperActive = mount(IconButton, {
+      props: {
+        variant: 'ghost',
+        active: true,
+        ariaLabel: 'Afficher la grille'
+      }
+    })
+    expect(wrapperActive.classes()).toContain('bg-primary')
+    expect(wrapperActive.classes()).toContain('text-text-inverse')
+    expect(wrapperActive.classes()).not.toContain('text-white')
+    expect(wrapperActive.classes()).toContain('duration-300')
+    expect(wrapperActive.classes()).toContain('ease-out')
   })
 
   it('4. Émet un événement click lors d’un clic normal', async () => {

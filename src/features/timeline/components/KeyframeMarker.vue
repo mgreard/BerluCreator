@@ -19,10 +19,13 @@ const leftPositionPx = computed(() => {
 
 function handleClick(e: MouseEvent | KeyboardEvent) {
   e.stopPropagation()
-  timelineStore.selectedKeyframeId = keyframe.id
-  timelineStore.selectTrackForEditing(trackId)
+  timelineStore.selectKeyframeForEditing(trackId, keyframe.id)
   timelineStore.seek(keyframe.timeMs)
 }
+
+const keyframeLabel = computed(() =>
+  keyframe.sprites.map((sprite) => sprite.label).filter(Boolean).join(', ')
+)
 
 function handleContextMenu(e: MouseEvent) {
   e.preventDefault()
@@ -52,12 +55,19 @@ function handleContextMenu(e: MouseEvent) {
       ]"
     />
 
+    <span
+      v-if="keyframe.sprites.length > 1"
+      class="absolute -right-0.5 -top-0.5 min-w-4 h-4 px-1 rounded-full bg-accent text-[9px] font-bold text-white flex items-center justify-center shadow-sm"
+    >
+      {{ keyframe.sprites.length }}
+    </span>
+
     <!-- Label contextuel en survol -->
     <span
-      v-if="keyframe.label"
+      v-if="keyframeLabel"
       class="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-1.5 py-0.5 rounded text-[9px] font-mono bg-black/80 text-white whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30"
     >
-      {{ keyframe.label }} ({{ keyframe.timeMs }}ms)
+      {{ keyframeLabel }} ({{ keyframe.timeMs }}ms)
     </span>
   </SelectableSurface>
 </template>

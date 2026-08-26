@@ -42,8 +42,8 @@ const activeAssetIds = computed(() => {
   for (const track of timelineStore.currentSequence.tracks) {
     if (track.muted) continue
     const activeKf = timelineStore.getActiveKeyframeAtTime(track.id, timeMs)
-    if (activeKf && activeKf.assetId) {
-      ids.add(activeKf.assetId)
+    if (activeKf) {
+      for (const sprite of activeKf.sprites) ids.add(sprite.assetId)
     }
   }
   return ids
@@ -53,7 +53,7 @@ function onSelectAsset(asset: Asset) {
   assetStore.selectAsset(asset.id)
 
   const catDef = ASSET_CATEGORIES[asset.category]
-  const isMulti = catDef?.cardinality === 'multi'
+  const allowsMultipleTracks = catDef?.trackCardinality === 'multi'
   const selectedTrack = timelineStore.selectedTrack
   let targetTrack = findAssetTargetTrack(
     timelineStore.currentSequence.tracks,
@@ -61,7 +61,7 @@ function onSelectAsset(asset: Asset) {
     asset.category
   )
 
-  if (!targetTrack && isMulti) {
+  if (!targetTrack && allowsMultipleTracks) {
     targetTrack = timelineStore.addTrack(asset.category, asset.name)
   }
 
@@ -73,8 +73,20 @@ function onSelectAsset(asset: Asset) {
       timelineStore.playback.currentTimeMs
     )
 
-    timelineStore.addKeyframe(targetTrack.id, targetTime, asset.id, asset.name)
-    timelineStore.selectTrackForEditing(targetTrack.id)
+    const sprite = timelineStore.addKeyframe(
+      targetTrack.id,
+      targetTime,
+      asset.id,
+      asset.name
+    )
+    const keyframe = targetTrack.keyframes.find(
+      (candidate) => Math.abs(candidate.timeMs - targetTime) < 10
+    )
+    if (sprite && keyframe) {
+      timelineStore.selectSpriteForEditing(targetTrack.id, keyframe.id, sprite.id)
+    } else {
+      timelineStore.selectTrackForEditing(targetTrack.id)
+    }
   }
 }
 
@@ -85,6 +97,21 @@ interface CategoryTab extends TabItem {
   color: string
 }
 
+const CATEGORY_TAB_STYLES: Record<AssetCategory, Pick<CategoryTab, 'tone' | 'color'>> = {
+  background: { tone: 'sky', color: 'text-sky-400' },
+  torso: { tone: 'amber', color: 'text-amber-400' },
+  head: { tone: 'rose', color: 'text-rose-400' },
+  mouth: { tone: 'red', color: 'text-red-400' },
+  eyes: { tone: 'cyan', color: 'text-cyan-400' },
+  props_host: { tone: 'purple', color: 'text-purple-400' },
+  arms_left: { tone: 'emerald', color: 'text-emerald-400' },
+  arms_right: { tone: 'lime', color: 'text-lime-400' },
+  props_set: { tone: 'yellow', color: 'text-yellow-400' },
+  desk: { tone: 'neutral', color: 'text-neutral-400' },
+  props_desk: { tone: 'indigo', color: 'text-indigo-400' },
+  foreground: { tone: 'red', color: 'text-red-400' }
+}
+
 const CATEGORY_TABS: CategoryTab[] = [
   {
     key: 'all',
@@ -93,69 +120,12 @@ const CATEGORY_TABS: CategoryTab[] = [
     tone: 'indigo',
     color: 'text-indigo-400'
   },
-  {
-    key: 'backdrop',
-    label: 'Décors de Plateau',
-    icon: 'tv_gen',
-    tone: 'sky',
-    color: 'text-sky-400'
-  },
-  {
-    key: 'torso',
-    label: 'Torses & Bustes',
-    icon: 'body_system',
-    tone: 'amber',
-    color: 'text-amber-400'
-  },
-  {
-    key: 'head',
-    label: 'Têtes & Visages',
-    icon: 'face',
-    tone: 'rose',
-    color: 'text-rose-400'
-  },
-  {
-    key: 'mouth',
-    label: 'Bouches & Phonèmes',
-    icon: 'sentiment_satisfied',
-    tone: 'red',
-    color: 'text-red-400'
-  },
-  {
-    key: 'eyes',
-    label: 'Yeux & Regard',
-    icon: 'visibility',
-    tone: 'cyan',
-    color: 'text-cyan-400'
-  },
-  {
-    key: 'arms_left',
-    label: 'Bras Gauche',
-    icon: 'front_hand',
-    tone: 'emerald',
-    color: 'text-emerald-400'
-  },
-  {
-    key: 'arms_right',
-    label: 'Bras Droit',
-    icon: 'waving_hand',
-    tone: 'lime',
-    color: 'text-lime-400'
-  },
-  {
-    key: 'props',
-    label: 'Accessoires & Objets',
-    icon: 'mic',
-    tone: 'purple',
-    color: 'text-purple-400'
-  },
-  {
-    key: 'overlay',
-    label: 'Habillage & Lumières',
-    icon: 'newspaper',
-    tone: 'yellow',
-    color: 'text-yellow-400'
-  }
+  ...CATEGORY_LIST.map((category) => ({
+    key: category.id,
+    label: category.label,
+    icon: category.icon,
+    ...CATEGORY_TAB_STYLES[category.id]
+  }))
 ]
 
 const categoryCounts = computed(() => {
@@ -211,7 +181,7 @@ function onDeleteAsset(asset: Asset) {
 </script>
 
 <template>
-  <div class="w-[370px] h-full border-r border-border-subtle bg-bg-surface/30 backdrop-blur-md flex flex-row select-none overflow-hidden">
+  <div class="w-full h-full border-r border-border-subtle bg-bg-surface/30 backdrop-blur-md flex flex-row select-none overflow-hidden">
     <!-- 1. Rail vertical des catégories (à gauche) -->
     <Tabs
       v-model="selectedCategoryTab"
