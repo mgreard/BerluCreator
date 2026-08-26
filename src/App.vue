@@ -67,8 +67,8 @@ const productTourSteps: ProductTourStep[] = [
   {
     element: '[data-tour="timeline"]',
     popover: {
-      title: '4. Animez dans le temps',
-      description: 'Placez la tête de lecture et créez uniquement les changements de pose nécessaires.',
+      title: '4. Construisez votre séquence',
+      description: 'Ajoutez des étapes discrètes et ne renseignez que les pistes dont l’état change.',
       side: 'top',
       align: 'center'
     }
@@ -86,7 +86,7 @@ const productTourSteps: ProductTourStep[] = [
     element: '[data-tour="export"]',
     popover: {
       title: '6. Exportez les changements',
-      description: 'Téléchargez une image, les données JSON ou une archive de keyframes nommées séquentiellement.',
+      description: 'Téléchargez une étape, les données JSON ou une archive des changements nommés séquentiellement.',
       side: 'bottom',
       align: 'end'
     }
@@ -96,13 +96,13 @@ const productTourSteps: ProductTourStep[] = [
 function addInitialKeyframe(
   category: AssetCategory,
   asset: Asset | undefined,
-  timeMs = 0
+  stepId: string
 ) {
   if (!asset) return
   const track = timelineStore.currentSequence.tracks.find(
     (candidate) => candidate.targetSlot === category || candidate.category === category
   )
-  if (track) timelineStore.addKeyframe(track.id, timeMs, asset.id, asset.name)
+  if (track) timelineStore.addKeyframe(track.id, stepId, asset.id, asset.name)
 }
 
 onMounted(async () => {
@@ -158,18 +158,24 @@ onMounted(async () => {
       track.keyframes = []
     }
 
-    addInitialKeyframe('background', background)
-    addInitialKeyframe('torso', torso)
-    addInitialKeyframe('head', head)
-    addInitialKeyframe('mouth', mouth1)
-    addInitialKeyframe('mouth', mouth2, 800)
-    addInitialKeyframe('mouth', mouth3, 1600)
-    addInitialKeyframe('mouth', mouth1, 2400)
-    addInitialKeyframe('eyes', eyes)
-    addInitialKeyframe('arms_left', armLeft)
-    addInitialKeyframe('arms_right', armRight)
-    addInitialKeyframe('desk', desk)
-    addInitialKeyframe('props_set', light)
+    const firstStep = timelineStore.orderedSteps[0]
+    if (!firstStep) return
+    const secondStep = timelineStore.addStepAfter(firstStep.id)
+    const thirdStep = timelineStore.addStepAfter(secondStep.id)
+    const fourthStep = timelineStore.addStepAfter(thirdStep.id)
+    addInitialKeyframe('background', background, firstStep.id)
+    addInitialKeyframe('torso', torso, firstStep.id)
+    addInitialKeyframe('head', head, firstStep.id)
+    addInitialKeyframe('mouth', mouth1, firstStep.id)
+    addInitialKeyframe('mouth', mouth2, secondStep.id)
+    addInitialKeyframe('mouth', mouth3, thirdStep.id)
+    addInitialKeyframe('mouth', mouth1, fourthStep.id)
+    addInitialKeyframe('eyes', eyes, firstStep.id)
+    addInitialKeyframe('arms_left', armLeft, firstStep.id)
+    addInitialKeyframe('arms_right', armRight, firstStep.id)
+    addInitialKeyframe('desk', desk, firstStep.id)
+    addInitialKeyframe('props_set', light, firstStep.id)
+    timelineStore.selectStep(firstStep.id)
     timelineStore.clearStudioSelection(false)
     await timelineStore.saveSequence()
   }
@@ -249,7 +255,7 @@ onBeforeUnmount(() => {
       ref="productTourRef"
       :steps="productTourSteps"
       auto-start
-      storage-key="berlu-creator.product-tour.v1"
+      storage-key="berlu-creator.product-tour.v2"
       :start-delay-ms="1400"
       :config="{ skipMissingElement: true }"
     />

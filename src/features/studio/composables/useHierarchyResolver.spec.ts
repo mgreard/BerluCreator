@@ -36,8 +36,8 @@ describe('useHierarchyResolver multi-sprites', () => {
     const assetStore = useAssetStore()
     assetStore.assets = [createAsset('asset-stop'), createAsset('asset-banana')]
 
-    timelineStore.addKeyframe('props_set', 0, 'asset-stop')
-    timelineStore.addKeyframe('props_set', 0, 'asset-banana')
+    timelineStore.addKeyframe('props_set', timelineStore.activeStep!.id, 'asset-stop')
+    timelineStore.addKeyframe('props_set', timelineStore.activeStep!.id, 'asset-banana')
 
     const { activeLayers } = useHierarchyResolver()
     const propsLayers = activeLayers.value.filter((layer) => layer.category === 'props_set')
@@ -59,7 +59,7 @@ describe('useHierarchyResolver multi-sprites', () => {
       })
     ]
 
-    const sprite = timelineStore.addKeyframe('props_set', 0, 'asset-free')
+    const sprite = timelineStore.addKeyframe('props_set', timelineStore.activeStep!.id, 'asset-free')
     const { activeLayers } = useHierarchyResolver()
     const initialLayer = activeLayers.value.find((layer) => layer.spriteId === sprite?.id)
 
@@ -94,7 +94,7 @@ describe('useHierarchyResolver multi-sprites', () => {
       })
     ]
 
-    const sprite = timelineStore.addKeyframe('props_set', 0, 'asset-trimmed')
+    const sprite = timelineStore.addKeyframe('props_set', timelineStore.activeStep!.id, 'asset-trimmed')
     const { activeLayers } = useHierarchyResolver()
     const resolved = activeLayers.value.find((layer) => layer.spriteId === sprite?.id)
 

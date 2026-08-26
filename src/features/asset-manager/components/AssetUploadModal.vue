@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, useTemplateRef } from 'vue'
 import type { AssetCategory } from '@core/types/asset.types'
-import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { generateId } from '@/lib/utils'
 import { useAssetStore } from '../stores/useAssetStore'
 import { useSpritesheetSlicer } from '../composables/useSpritesheetSlicer'
@@ -9,14 +8,13 @@ import type { PreparedAssetImport } from '../types/background-removal.types'
 import { applyBackgroundRemovalToBlob } from '../services/background-removal'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
-import { Select } from '@/components/ui/select'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Icon } from '@/components/ui/icon'
 import { Badge } from '@/components/ui/badge'
 import { Heading } from '@/components/ui/heading'
 import { Text } from '@/components/ui/text'
-import { FormGroup } from '@/components/ui/form-group'
-import { toast } from '@/ui/shared/services/toast.service'
+import { Switch } from '@/components/ui/switch'
+import { CategorySelect } from '@/components/ui/category-select'
 import BackgroundRemovalEditor from './BackgroundRemovalEditor.vue'
 import SpritesheetSlicerCanvas from './SpritesheetSlicerCanvas.vue'
 import SpritesheetSliceList from './SpritesheetSliceList.vue'
@@ -35,24 +33,22 @@ const uploadedCount = ref(0)
 const preparedFiles = ref<PreparedAssetImport[]>([])
 const selectedPreparedId = ref<string | null>(null)
 const preparedSpritesheet = ref<PreparedAssetImport | null>(null)
+const backgroundRemovalEnabled = ref(false)
+const feedback = ref<{ tone: 'info' | 'success' | 'warning' | 'error'; message: string } | null>(null)
 
 const modeOptions = [
   { value: 'single', label: 'Sprite(s) Simple(s)', icon: 'image' },
   { value: 'spritesheet', label: 'Planche de Sprites', icon: 'grid_view' }
 ]
-const categoryOptions = Object.values(ASSET_CATEGORIES).map((category) => ({
-  value: category.id,
-  label: `${category.label} (${category.id})`
-}))
 const selectedPreparedFile = computed(() =>
   preparedFiles.value.find((entry) => entry.id === selectedPreparedId.value)
     ?? preparedFiles.value[0]
     ?? null
 )
 const isPreparingImage = computed(() =>
-  importMode.value === 'single'
+  backgroundRemovalEnabled.value && (importMode.value === 'single'
     ? preparedFiles.value.length > 0
-    : Boolean(preparedSpritesheet.value && !slicer.imageElement.value)
+    : Boolean(preparedSpritesheet.value && !slicer.imageElement.value))
 )
 const isFullscreen = computed(() => isPreparingImage.value || Boolean(slicer.imageElement.value))
 
@@ -67,9 +63,14 @@ watch(
   { immediate: true }
 )
 
+watch(selectedCategory, (category) => {
+  slicer.setCategoryForAll(category)
+})
+
 watch(open, (isOpen) => {
   if (isOpen) {
     isImporting.value = false
+    feedback.value = null
     return
   }
   setTimeout(() => {
@@ -78,6 +79,8 @@ watch(open, (isOpen) => {
     clearPreparedSpritesheet()
     slicer.reset()
     isImporting.value = false
+    backgroundRemovalEnabled.value = false
+    feedback.value = null
   }, 350)
 })
 
@@ -109,7 +112,7 @@ function handleSingleFiles(files: FileList | null) {
   if (!files?.length) return
   const validFiles = Array.from(files).filter((file) => file.type.startsWith('image/'))
   if (validFiles.length === 0) {
-    toast.warning('Aucun fichier', 'Aucun fichier image valide détecté.')
+    feedback.value = { tone: 'warning', message: 'Aucun fichier image valide détecté.' }
     return
   }
   clearPreparedFiles()
@@ -123,18 +126,17 @@ async function importPreparedFiles() {
   uploadedCount.value = 0
   try {
     for (const entry of preparedFiles.value) {
-      const blob = await applyBackgroundRemovalToBlob(entry.file, entry.settings)
+      const blob = backgroundRemovalEnabled.value
+        ? await applyBackgroundRemovalToBlob(entry.file, entry.settings)
+        : entry.file
       const name = entry.file.name.replace(/\.[^/.]+$/, '')
       await assetStore.importAsset(blob, selectedCategory.value, name)
       uploadedCount.value++
     }
-    toast.success(
-      'Importation terminée !',
-      `${uploadedCount.value} sprite(s) ajouté(s) à la catégorie ${ASSET_CATEGORIES[selectedCategory.value]?.label || selectedCategory.value}.`
-    )
+    feedback.value = { tone: 'success', message: `${uploadedCount.value} sprite(s) importé(s).` }
     open.value = false
   } catch (error: unknown) {
-    toast.error('Erreur d’importation', error instanceof Error ? error.message : 'Une erreur inconnue est survenue.')
+    feedback.value = { tone: 'error', message: error instanceof Error ? error.message : 'Une erreur inconnue est survenue.' }
   } finally {
     isImporting.value = false
   }
@@ -159,7 +161,7 @@ function handleSpritesheetFile(files: FileList | null) {
   if (!files?.length) return
   const file = files[0]
   if (!file?.type.startsWith('image/')) {
-    toast.warning('Format invalide', 'Veuillez sélectionner un fichier image valide (PNG ou WEBP).')
+    feedback.value = { tone: 'warning', message: 'Veuillez sélectionner un fichier image valide (PNG ou WEBP).' }
     return
   }
   clearPreparedSpritesheet()
@@ -186,18 +188,17 @@ async function continueToSlicer() {
   if (!prepared || isImporting.value) return
   isImporting.value = true
   try {
-    const blob = await applyBackgroundRemovalToBlob(prepared.file, prepared.settings)
+    const blob = backgroundRemovalEnabled.value
+      ? await applyBackgroundRemovalToBlob(prepared.file, prepared.settings)
+      : prepared.file
     const baseName = prepared.file.name.replace(/\.[^/.]+$/, '')
     const file = blob === prepared.file
       ? prepared.file
       : new File([blob], `${baseName}.png`, { type: 'image/png' })
     await slicer.loadFile(file)
-    toast.info(
-      'Planche chargée',
-      `${prepared.file.name} (${slicer.naturalWidth.value}×${slicer.naturalHeight.value}px). Tracez vos découpes.`
-    )
+    feedback.value = { tone: 'info', message: `${prepared.file.name} chargée. Tracez vos découpes.` }
   } catch (error: unknown) {
-    toast.error('Erreur de chargement', error instanceof Error ? error.message : 'Impossible de lire la planche')
+    feedback.value = { tone: 'error', message: error instanceof Error ? error.message : 'Impossible de lire la planche' }
   } finally {
     isImporting.value = false
   }
@@ -211,9 +212,9 @@ function changeSpritesheet() {
 function handleAddSlice(rect: { x: number; y: number; width: number; height: number }) {
   try {
     const slice = slicer.addSlice(rect, selectedCategory.value)
-    toast.info('Sprite découpé', `« ${slice.name} » ajouté (${slice.width}×${slice.height}px)`)
+    feedback.value = { tone: 'success', message: `« ${slice.name} » ajouté (${slice.width}×${slice.height}px).` }
   } catch (error: unknown) {
-    toast.warning('Découpe ignorée', error instanceof Error ? error.message : 'Zone invalide')
+    feedback.value = { tone: 'warning', message: error instanceof Error ? error.message : 'Zone invalide' }
   }
 }
 
@@ -223,10 +224,10 @@ async function handleBatchImportSlices() {
   try {
     const extracted = await slicer.extractSlicesBlobs()
     const imported = await assetStore.importSlicedAssets(extracted)
-    toast.success('Planche découpée avec succès !', `${imported.length} sprite(s) prêt(s) dans votre bibliothèque.`)
+    feedback.value = { tone: 'success', message: `${imported.length} sprite(s) importé(s).` }
     open.value = false
   } catch (error: unknown) {
-    toast.error('Erreur lors de l’export', error instanceof Error ? error.message : 'Échec de découpe des sprites')
+    feedback.value = { tone: 'error', message: error instanceof Error ? error.message : 'Échec de découpe des sprites' }
   } finally {
     isImporting.value = false
   }
@@ -251,14 +252,36 @@ async function handleBatchImportSlices() {
             {{ slicer.imageElement.value ? 'Découpez vos sprites en traçant des rectangles.' : 'La pipette peut rendre un fond uni transparent avant import.' }}
           </Text>
         </div>
-        <SegmentedControl v-model="importMode" :options="modeOptions" size="sm" variant="primary" />
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="w-56">
+            <CategorySelect v-model="selectedCategory" label="Catégorie commune des sprites" />
+          </div>
+          <Switch
+            v-model="backgroundRemovalEnabled"
+            label="Supprimer un fond uni"
+            size="sm"
+          />
+          <SegmentedControl v-model="importMode" :options="modeOptions" size="sm" variant="primary" />
+        </div>
       </div>
     </template>
 
+    <div
+      v-if="feedback"
+      role="status"
+      aria-live="polite"
+      class="mb-3 rounded-lg border px-3 py-2 text-xs"
+      :class="{
+        'border-primary/30 bg-primary/10 text-text-primary': feedback.tone === 'info',
+        'border-success/30 bg-success/10 text-success': feedback.tone === 'success',
+        'border-warning/30 bg-warning/10 text-warning': feedback.tone === 'warning',
+        'border-danger/30 bg-danger/10 text-danger': feedback.tone === 'error'
+      }"
+    >
+      {{ feedback.message }}
+    </div>
+
     <div v-if="importMode === 'single' && preparedFiles.length === 0" class="flex flex-col gap-4">
-      <FormGroup label="Catégorie de destination" :helper-text="ASSET_CATEGORIES[selectedCategory]?.description" class="mb-0">
-        <Select v-model="selectedCategory" :options="categoryOptions" size="md" />
-      </FormGroup>
       <div
         class="flex cursor-pointer select-none flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed bg-surface/20 p-8 text-center transition-all"
         :class="isDragging ? 'scale-[0.99] border-primary bg-primary/10' : 'border-border/60 hover:border-primary/60 hover:bg-surface-hover/40'"
@@ -304,11 +327,19 @@ async function handleBatchImportSlices() {
       </aside>
       <main class="min-w-0 flex-1">
         <BackgroundRemovalEditor
+          v-if="backgroundRemovalEnabled"
           :key="selectedPreparedFile.id"
           v-model:settings="selectedPreparedFile.settings"
           :source="selectedPreparedFile.file"
           :filename="selectedPreparedFile.file.name"
         />
+        <div v-else class="flex h-full min-h-72 flex-col items-center justify-center gap-4 p-6 text-center">
+          <img :src="selectedPreparedFile.previewUrl" :alt="selectedPreparedFile.file.name" class="max-h-64 max-w-full rounded-xl bg-bg-base object-contain shadow-glass-md" />
+          <div>
+            <div class="text-sm font-semibold text-text-primary">{{ selectedPreparedFile.file.name }}</div>
+            <Text variant="caption" color="muted">Activez « Supprimer un fond uni » uniquement si cette image nécessite la pipette.</Text>
+          </div>
+        </div>
       </main>
     </div>
 
@@ -335,10 +366,15 @@ async function handleBatchImportSlices() {
 
     <div v-else-if="importMode === 'spritesheet' && preparedSpritesheet && !slicer.imageElement.value" class="-m-6 h-full min-h-0">
       <BackgroundRemovalEditor
+        v-if="backgroundRemovalEnabled"
         v-model:settings="preparedSpritesheet.settings"
         :source="preparedSpritesheet.file"
         :filename="preparedSpritesheet.file.name"
       />
+      <div v-else class="flex h-full min-h-72 flex-col items-center justify-center gap-4 p-6 text-center">
+        <img :src="preparedSpritesheet.previewUrl" :alt="preparedSpritesheet.file.name" class="max-h-72 max-w-full rounded-xl bg-bg-base object-contain shadow-glass-md" />
+        <Text variant="caption" color="muted">La pipette est désactivée. Continuez directement vers la découpe.</Text>
+      </div>
     </div>
 
     <div v-else-if="importMode === 'spritesheet' && slicer.imageElement.value" class="-m-6 flex h-full flex-row overflow-hidden">
@@ -358,6 +394,7 @@ async function handleBatchImportSlices() {
         :slices="slicer.slices.value"
         :selected-slice-id="slicer.selectedSliceId.value"
         :image-element="slicer.imageElement.value"
+        :category="selectedCategory"
         @select-slice="slicer.selectSlice"
         @update-slice="({ id, updates }) => slicer.updateSlice(id, updates)"
         @remove-slice="slicer.removeSlice"

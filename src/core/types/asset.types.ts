@@ -42,6 +42,10 @@ export interface AssetCategoryDefinition {
   trackCardinality: CategoryCardinality
   keyframeCardinality: CategoryCardinality
   placementMode: CategoryPlacementMode
+  /** Couleur CSS stable partagée par toutes les surfaces de catégorie. */
+  color: string
+  /** Préfixe lisible utilisé pour les noms automatiques de découpes. */
+  filenamePrefix: string
 }
 
 export interface SpriteConfigRule {
@@ -109,6 +113,7 @@ export interface SpritesheetSlice {
   id: string
   name: string
   category: AssetCategory
+  nameMode: 'auto' | 'custom'
   x: number
   y: number
   width: number

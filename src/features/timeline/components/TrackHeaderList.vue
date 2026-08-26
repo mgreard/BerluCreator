@@ -118,12 +118,20 @@ function canRemoveTrack(track: TimelineTrack): boolean {
   const sameCatCount = timelineStore.currentSequence.tracks.filter((t) => t.category === track.category).length
   return sameCatCount > 1
 }
+
+function categoryRowStyle(category: AssetCategory) {
+  const color = ASSET_CATEGORIES[category].color
+  return {
+    '--category-color': color,
+    backgroundColor: `color-mix(in srgb, ${color} 8%, var(--color-bg-surface))`
+  }
+}
 </script>
 
 <template>
   <div class="w-72 border-r border-border-subtle bg-bg-surface/60 backdrop-blur-md flex flex-col shrink-0 select-none">
     <!-- En-tête fixe aligné avec la règle temporelle -->
-    <div class="h-7 border-b border-border-subtle px-2.5 flex items-center justify-between text-[10px] font-bold text-text-muted uppercase tracking-wider bg-bg-surface/80">
+    <div class="h-10 border-b border-border-subtle px-2.5 flex items-center justify-between text-[10px] font-bold text-text-muted uppercase tracking-wider bg-bg-surface/80">
       <span>Groupes & Pistes</span>
       <div class="flex items-center gap-1.5">
         <!-- Bouton Création Rapide de Groupe -->
@@ -171,7 +179,7 @@ function canRemoveTrack(track: TimelineTrack): boolean {
           :selected="timelineStore.selectedGroupId === group.id && timelineStore.editScope === 'group'"
           :class="[
             timelineStore.selectedGroupId === group.id && timelineStore.editScope === 'group'
-              ? 'bg-bg-surface-hover/90 text-text-primary ring-1 ring-primary/40'
+              ? 'bg-primary/20 text-text-primary ring-2 ring-inset ring-primary/60 shadow-glow-sm border-l-4 border-l-primary'
               : 'bg-bg-surface/90 hover:bg-bg-surface-hover/60 text-text-secondary'
           ]"
           @click="timelineStore.selectGroupForEditing(group.id)"
@@ -193,6 +201,12 @@ function canRemoveTrack(track: TimelineTrack): boolean {
             />
 
             <span class="truncate font-bold tracking-tight text-text-primary text-[11px]">{{ group.name }}</span>
+            <Badge
+              v-if="timelineStore.selectedGroupId === group.id && timelineStore.editScope === 'group'"
+              variant="accent"
+              size="sm"
+              class="px-1.5 py-0 text-[8px]"
+            >Actif</Badge>
           </div>
 
           <div class="flex items-center gap-1 shrink-0">
@@ -265,6 +279,7 @@ function canRemoveTrack(track: TimelineTrack): boolean {
             density="compact"
             role="treeitem"
             :selected="timelineStore.selectedTrackId === track.id && timelineStore.editScope === 'layer'"
+            :style="categoryRowStyle(track.category)"
             :class="[
               timelineStore.selectedTrackId === track.id && timelineStore.editScope === 'layer'
                 ? 'bg-primary/15 font-semibold text-text-primary ' + groupColorClasses[group.color || 'indigo'].border
@@ -276,7 +291,8 @@ function canRemoveTrack(track: TimelineTrack): boolean {
               <Icon
                 :name="ASSET_CATEGORIES[track.targetSlot]?.icon || 'layers'"
                 size="xs"
-                class="text-primary/90 shrink-0"
+                class="shrink-0"
+                :style="{ color: ASSET_CATEGORIES[track.category].color }"
               />
               <span class="truncate text-[11px]">{{ track.name }}</span>
             </div>
@@ -333,6 +349,7 @@ function canRemoveTrack(track: TimelineTrack): boolean {
           density="compact"
           role="treeitem"
           :selected="timelineStore.selectedTrackId === track.id && timelineStore.editScope === 'layer'"
+          :style="categoryRowStyle(track.category)"
           :class="[
             timelineStore.selectedTrackId === track.id && timelineStore.editScope === 'layer'
               ? 'bg-primary/15 border-l-2 border-l-primary font-semibold text-text-primary'

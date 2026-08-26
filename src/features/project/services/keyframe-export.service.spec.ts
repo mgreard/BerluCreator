@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Sequence, TimelineTrack } from '@core/types/timeline.types'
 import {
   formatKeyframeFilename,
-  getChangedKeyframeTimes,
+  getChangedKeyframeStepIds,
   sanitizeExportPrefix
 } from './keyframe-export.service'
 
@@ -24,8 +24,12 @@ function sequence(tracks: TimelineTrack[]): Sequence {
     id: 'sequence',
     projectId: 'project',
     name: 'Test',
-    durationMs: 5_000,
-    fps: 25,
+    steps: [
+      { id: 'step-1', label: 'Étape 01', order: 0 },
+      { id: 'step-2', label: 'Étape 02', order: 1 },
+      { id: 'step-3', label: 'Étape 03', order: 2 },
+      { id: 'step-4', label: 'Étape 04', order: 3 }
+    ],
     tracks,
     createdAt: 0,
     updatedAt: 0
@@ -33,29 +37,29 @@ function sequence(tracks: TimelineTrack[]): Sequence {
 }
 
 describe('keyframe export', () => {
-  it('keeps only timestamps that change the visible sprite state', () => {
+  it('conserve seulement les étapes qui changent l’état visible', () => {
     const source = sequence([
       track('head', [
-        { id: 'kf-1', timeMs: 0, sprites: [{ id: 'sprite-1', assetId: 'head-a', order: 0 }] },
-        { id: 'kf-2', timeMs: 500, sprites: [{ id: 'sprite-2', assetId: 'head-a', order: 0 }] },
-        { id: 'kf-3', timeMs: 1_000, sprites: [{ id: 'sprite-3', assetId: 'head-b', order: 0 }] },
-        { id: 'kf-4', timeMs: 1_500, sprites: [] }
+        { id: 'kf-1', stepId: 'step-1', sprites: [{ id: 'sprite-1', assetId: 'head-a', order: 0 }] },
+        { id: 'kf-2', stepId: 'step-2', sprites: [{ id: 'sprite-2', assetId: 'head-a', order: 0 }] },
+        { id: 'kf-3', stepId: 'step-3', sprites: [{ id: 'sprite-3', assetId: 'head-b', order: 0 }] },
+        { id: 'kf-4', stepId: 'step-4', sprites: [] }
       ])
     ])
 
-    expect(getChangedKeyframeTimes(source)).toEqual([0, 1_000, 1_500])
+    expect(getChangedKeyframeStepIds(source)).toEqual(['step-1', 'step-3', 'step-4'])
   })
 
   it('merges simultaneous changes and ignores muted tracks', () => {
     const visible = track('head', [
-      { id: 'kf-1', timeMs: 250, sprites: [{ id: 'sprite-1', assetId: 'head-a', order: 0 }] }
+      { id: 'kf-1', stepId: 'step-1', sprites: [{ id: 'sprite-1', assetId: 'head-a', order: 0 }] }
     ])
     const muted = track('hidden', [
-      { id: 'kf-2', timeMs: 500, sprites: [{ id: 'sprite-2', assetId: 'head-b', order: 0 }] }
+      { id: 'kf-2', stepId: 'step-2', sprites: [{ id: 'sprite-2', assetId: 'head-b', order: 0 }] }
     ])
     muted.muted = true
 
-    expect(getChangedKeyframeTimes(sequence([visible, muted]))).toEqual([250])
+    expect(getChangedKeyframeStepIds(sequence([visible, muted]))).toEqual(['step-1'])
   })
 
   it('sanitizes prefixes and pads sequential filenames', () => {

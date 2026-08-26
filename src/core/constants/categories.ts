@@ -9,7 +9,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     defaultZIndex: 0,
     trackCardinality: 'singleton',
     keyframeCardinality: 'singleton',
-    placementMode: 'character-anchored'
+    placementMode: 'character-anchored',
+    color: '#38bdf8',
+    filenamePrefix: 'arriere-plan'
   },
   torso: {
     id: 'torso',
@@ -19,7 +21,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     defaultZIndex: 10,
     trackCardinality: 'singleton',
     keyframeCardinality: 'singleton',
-    placementMode: 'character-anchored'
+    placementMode: 'character-anchored',
+    color: '#fbbf24',
+    filenamePrefix: 'torse'
   },
   head: {
     id: 'head',
@@ -29,7 +33,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     defaultZIndex: 20,
     trackCardinality: 'singleton',
     keyframeCardinality: 'singleton',
-    placementMode: 'character-anchored'
+    placementMode: 'character-anchored',
+    color: '#fb7185',
+    filenamePrefix: 'tete'
   },
   mouth: {
     id: 'mouth',
@@ -39,7 +45,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     defaultZIndex: 25,
     trackCardinality: 'singleton',
     keyframeCardinality: 'singleton',
-    placementMode: 'character-anchored'
+    placementMode: 'character-anchored',
+    color: '#f87171',
+    filenamePrefix: 'bouche'
   },
   eyes: {
     id: 'eyes',
@@ -49,7 +57,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     defaultZIndex: 26,
     trackCardinality: 'singleton',
     keyframeCardinality: 'singleton',
-    placementMode: 'character-anchored'
+    placementMode: 'character-anchored',
+    color: '#22d3ee',
+    filenamePrefix: 'yeux'
   },
   props_host: {
     id: 'props_host',
@@ -59,7 +69,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     defaultZIndex: 27,
     trackCardinality: 'multi',
     keyframeCardinality: 'multi',
-    placementMode: 'character-anchored'
+    placementMode: 'character-anchored',
+    color: '#c084fc',
+    filenamePrefix: 'accessoire-presentateur'
   },
   arms_left: {
     id: 'arms_left',
@@ -69,7 +81,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     defaultZIndex: 12,
     trackCardinality: 'singleton',
     keyframeCardinality: 'singleton',
-    placementMode: 'character-anchored'
+    placementMode: 'character-anchored',
+    color: '#34d399',
+    filenamePrefix: 'bras-gauche'
   },
   arms_right: {
     id: 'arms_right',
@@ -79,7 +93,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     defaultZIndex: 15,
     trackCardinality: 'singleton',
     keyframeCardinality: 'singleton',
-    placementMode: 'character-anchored'
+    placementMode: 'character-anchored',
+    color: '#a3e635',
+    filenamePrefix: 'bras-droit'
   },
   props_set: {
     id: 'props_set',
@@ -89,7 +105,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     defaultZIndex: 30,
     trackCardinality: 'multi',
     keyframeCardinality: 'multi',
-    placementMode: 'free-transform'
+    placementMode: 'free-transform',
+    color: '#facc15',
+    filenamePrefix: 'accessoire-plateau'
   },
   desk: {
     id: 'desk',
@@ -99,7 +117,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     defaultZIndex: 28,
     trackCardinality: 'singleton',
     keyframeCardinality: 'singleton',
-    placementMode: 'free-transform'
+    placementMode: 'free-transform',
+    color: '#a3a3a3',
+    filenamePrefix: 'bureau'
   },
   props_desk: {
     id: 'props_desk',
@@ -109,7 +129,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     defaultZIndex: 35,
     trackCardinality: 'multi',
     keyframeCardinality: 'multi',
-    placementMode: 'free-transform'
+    placementMode: 'free-transform',
+    color: '#818cf8',
+    filenamePrefix: 'objet-bureau'
   },
   foreground: {
     id: 'foreground',
@@ -119,7 +141,9 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     defaultZIndex: 50,
     trackCardinality: 'multi',
     keyframeCardinality: 'singleton',
-    placementMode: 'free-transform'
+    placementMode: 'free-transform',
+    color: '#f87171',
+    filenamePrefix: 'premier-plan'
   }
 }
 

@@ -20,10 +20,16 @@ export interface KeyframeSprite {
 
 export interface Keyframe {
   id: string
-  /** Temps d'activation en millisecondes */
-  timeMs: number
-  /** Sprites affichés simultanément par cette piste à cet instant. */
+  /** Étape discrète à laquelle ce changement devient actif. */
+  stepId: string
+  /** Sprites affichés simultanément par cette piste à cette étape. */
   sprites: KeyframeSprite[]
+}
+
+export interface SequenceStep {
+  id: string
+  label: string
+  order: number
 }
 
 export type TrackGroupColor = 'indigo' | 'emerald' | 'amber' | 'rose' | 'blue' | 'purple' | 'cyan'
@@ -59,8 +65,7 @@ export interface Sequence {
   id: string
   projectId: string
   name: string
-  durationMs: number
-  fps: number
+  steps: SequenceStep[]
   /** Groupes hiérarchiques de la séquence */
   groups?: TrackGroup[]
   tracks: TimelineTrack[]
@@ -96,7 +101,9 @@ export interface SavedKeyframeGroup {
 export interface SavedKeyframePreset {
   id: string
   name: string
-  sourceTimeMs: number
+  sourceStepLabel?: string
+  /** Champ historique lu uniquement lors de la migration des anciennes données. */
+  sourceTimeMs?: number
   thumbnailDataUrl: string
   tracks: SavedKeyframeTrack[]
   groups: SavedKeyframeGroup[]
@@ -104,12 +111,6 @@ export interface SavedKeyframePreset {
   updatedAt: number
 }
 
-export interface PlaybackState {
-  isPlaying: boolean
-  currentTimeMs: number
-  speed: number
-  loop: boolean
-  zoom: number // Facteur d'échelle d'affichage de la timeline (px / s)
-  snapToGrid: boolean
-  gridStepMs: number
+export interface SequenceNavigationState {
+  activeStepId: string
 }

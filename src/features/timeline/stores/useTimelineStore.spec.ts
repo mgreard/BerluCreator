@@ -195,6 +195,9 @@ describe('migration des catégories de timeline', () => {
       })
     ])
     expect(migratedKeyframe).not.toHaveProperty('assetId')
+    expect(migratedKeyframe.stepId).toBe(store.currentSequence.steps[0]?.id)
+    expect(store.currentSequence).not.toHaveProperty('durationMs')
+    expect(store.currentSequence).not.toHaveProperty('fps')
   })
 })
 
@@ -207,8 +210,9 @@ describe('contenu multi-sprites des keyframes', () => {
   it('ajoute plusieurs props au même instant sans remplacer les précédents', () => {
     const store = useTimelineStore()
 
-    store.addKeyframe('props_host', 1000, 'asset-hat', 'Chapeau')
-    store.addKeyframe('props_host', 1000, 'asset-nose', 'Nez')
+    const stepId = store.activeStep!.id
+    store.addKeyframe('props_host', stepId, 'asset-hat', 'Chapeau')
+    store.addKeyframe('props_host', stepId, 'asset-nose', 'Nez')
 
     const keyframe = store.currentSequence.tracks
       .find((track) => track.id === 'props_host')!
@@ -223,8 +227,9 @@ describe('contenu multi-sprites des keyframes', () => {
   it('remplace le contenu des catégories singleton au même instant', () => {
     const store = useTimelineStore()
 
-    store.addKeyframe('head', 1000, 'asset-head-1')
-    store.addKeyframe('head', 1000, 'asset-head-2')
+    const stepId = store.activeStep!.id
+    store.addKeyframe('head', stepId, 'asset-head-1')
+    store.addKeyframe('head', stepId, 'asset-head-2')
 
     const keyframe = store.currentSequence.tracks.find((track) => track.id === 'head')!
       .keyframes[0]
@@ -262,7 +267,7 @@ describe('historique des transformations du canvas', () => {
     const track = store.currentSequence.tracks[0]
     const keyframe: Keyframe = {
       id: 'kf_history',
-      timeMs: 0,
+      stepId: store.activeStep!.id,
       sprites: [
         {
           id: 'sprite-history',
@@ -331,20 +336,29 @@ describe('historique des transformations du canvas', () => {
     expect(store.canUndoTransform).toBe(false)
   })
 
-  it('regroupe toutes les modifications entre le focus et OK dans une seule entrée', () => {
+  it('annule un geste avant OK puis regroupe la session validée', () => {
     const store = useTimelineStore()
-    const sprite = store.addKeyframe('props_set', 0, 'asset-stop')!
+    const sprite = store.addKeyframe('props_set', store.activeStep!.id, 'asset-stop')!
     const track = store.currentSequence.tracks.find((candidate) => candidate.id === 'props_set')!
     const keyframe = track.keyframes[0]
 
     store.selectSpriteForEditing(track.id, keyframe.id, sprite.id)
+    store.beginTransformGesture()
     store.updateKeyframeSpriteTransform(track.id, keyframe.id, sprite.id, { x: 20, y: 30 })
+    store.commitTransformGesture()
+    expect(store.canUndoTransform).toBe(true)
+    store.undoLastTransform()
+    expect(sprite.transform).toBeUndefined()
+    store.redoLastTransform()
+    expect(sprite.transform).toEqual({ x: 20, y: 30 })
+
+    store.beginTransformGesture()
     store.updateKeyframeSpriteTransform(track.id, keyframe.id, sprite.id, {
       scaleX: 1.4,
       scaleY: 1.4
     })
+    store.commitTransformGesture()
 
-    expect(store.canUndoTransform).toBe(false)
     store.commitTransformSession()
     expect(store.canUndoTransform).toBe(true)
     expect(store.selectedSpriteId).toBeNull()
@@ -353,5 +367,54 @@ describe('historique des transformations du canvas', () => {
     expect(sprite.transform).toBeUndefined()
     store.redoLastTransform()
     expect(sprite.transform).toEqual({ x: 20, y: 30, scaleX: 1.4, scaleY: 1.4 })
+  })
+})
+
+describe('séquence discrète et suppression locale', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
+  it('ajoute, duplique, déplace et supprime des étapes ordonnées', () => {
+    const store = useTimelineStore()
+    const first = store.activeStep!
+    const sprite = store.addKeyframe('head', first.id, 'head-a')!
+    const second = store.addStepAfter(first.id)
+
+    expect(store.getEffectiveKeyframeAtStep('head', second.id)?.sprites[0]?.assetId).toBe('head-a')
+    const duplicate = store.duplicateStep(second.id)!
+    expect(store.getKeyframeAtStep('head', duplicate.id)?.sprites[0]?.assetId).toBe('head-a')
+
+    store.moveStep(duplicate.id, 0)
+    expect(store.orderedSteps[0]?.id).toBe(duplicate.id)
+    store.removeStep(second.id)
+    expect(store.currentSequence.steps.some((step) => step.id === second.id)).toBe(false)
+    expect(sprite.assetId).toBe('head-a')
+  })
+
+  it('retire un sprite uniquement de l’étape active avec undo avant et après OK', () => {
+    const store = useTimelineStore()
+    const track = store.currentSequence.tracks.find((candidate) => candidate.id === 'head')!
+    const first = store.activeStep!
+    store.addKeyframe(track.id, first.id, 'head-a')
+    const second = store.addStepAfter(first.id)
+    const third = store.addStepAfter(second.id)
+    store.selectStep(second.id)
+
+    const inherited = store.getEffectiveKeyframeAtStep(track.id, second.id)!
+    const inheritedSprite = inherited.sprites[0]!
+    store.selectSpriteForEditing(track.id, inherited.id, inheritedSprite.id)
+    const editableSpriteId = store.selectedSpriteId!
+
+    expect(store.removeSpriteFromActiveStep(track.id, editableSpriteId)).toBe(true)
+    expect(store.getEffectiveKeyframeAtStep(track.id, second.id)?.sprites).toEqual([])
+    expect(store.getEffectiveKeyframeAtStep(track.id, third.id)?.sprites[0]?.assetId).toBe('head-a')
+
+    store.undoLastTransform()
+    expect(store.getEffectiveKeyframeAtStep(track.id, second.id)?.sprites[0]?.assetId).toBe('head-a')
+    store.redoLastTransform()
+    expect(store.getEffectiveKeyframeAtStep(track.id, second.id)?.sprites).toEqual([])
+
+    store.commitTransformSession()
+    store.undoLastTransform()
+    expect(store.getEffectiveKeyframeAtStep(track.id, second.id)?.sprites[0]?.assetId).toBe('head-a')
   })
 })

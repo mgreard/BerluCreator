@@ -1,12 +1,3 @@
-export const DEFAULT_TIMELINE_FPS = 24
-
-export const SUPPORTED_FRAME_RATES = [12, 24, 30, 60] as const
-export type SupportedFrameRate = (typeof SUPPORTED_FRAME_RATES)[number]
-
-export const DEFAULT_SEQUENCE_DURATION_MS = 15000 // 15 secondes par défaut
-export const MIN_SEQUENCE_DURATION_MS = 1000 // 1 seconde minimum
-export const MAX_SEQUENCE_DURATION_MS = 300000 // 5 minutes maximum
-
 export const DEFAULT_STAGE_RESOLUTION = {
   width: 1792,
   height: 1024,

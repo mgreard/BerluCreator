@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { TimelineTrack } from '@core/types/timeline.types'
 import {
   findAssetTargetTrack,
-  resolveAssetAssignmentTime
+  resolveAssetAssignmentStep
 } from './asset-timeline-assignment'
 
 function createTrack(
@@ -63,32 +63,28 @@ describe('asset timeline assignment', () => {
     ).toBeUndefined()
   })
 
-  it('uses the exact time of the selected keyframe on the selected track', () => {
+  it('utilise l’étape exacte de la keyframe sélectionnée sur la piste', () => {
     const selectedTrack = createTrack('head', 'head', [
       {
         id: 'keyframe-1',
-        timeMs: 1_275,
+        stepId: 'step-1',
         sprites: [{ id: 'sprite-1', assetId: 'asset-old', order: 0 }]
       }
     ])
 
-    expect(resolveAssetAssignmentTime(selectedTrack, selectedTrack, 'keyframe-1', 1_300)).toBe(
-      1_275
-    )
+    expect(resolveAssetAssignmentStep(selectedTrack, selectedTrack, 'keyframe-1', 'step-2')).toBe('step-1')
   })
 
-  it('uses the playback time when no keyframe is selected on the target track', () => {
+  it('utilise l’étape active quand la keyframe appartient à une autre piste', () => {
     const targetTrack = createTrack('head', 'head')
     const selectedTrack = createTrack('mouth', 'mouth', [
       {
         id: 'keyframe-1',
-        timeMs: 1_275,
+        stepId: 'step-1',
         sprites: [{ id: 'sprite-1', assetId: 'asset-old', order: 0 }]
       }
     ])
 
-    expect(resolveAssetAssignmentTime(targetTrack, selectedTrack, 'keyframe-1', 1_300)).toBe(
-      1_300
-    )
+    expect(resolveAssetAssignmentStep(targetTrack, selectedTrack, 'keyframe-1', 'step-2')).toBe('step-2')
   })
 })

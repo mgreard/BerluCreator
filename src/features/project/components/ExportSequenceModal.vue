@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { zipSync } from 'fflate'
 import { useProjectStore } from '../stores/useProjectStore'
 import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
@@ -9,7 +9,7 @@ import { captureCleanFrame } from '@/features/studio/composables/useCanvasRender
 import {
   dataUrlToBytes,
   formatKeyframeFilename,
-  getChangedKeyframeTimes,
+  getChangedKeyframeStepIds,
   sanitizeExportPrefix
 } from '../services/keyframe-export.service'
 import { Modal } from '@/components/ui/modal'
@@ -33,7 +33,7 @@ const stage = computed(() => projectStore.currentProject.stage)
 const isExporting = ref(false)
 const exportPrefix = ref('keyframe')
 const exportProgress = ref(0)
-const changedKeyframeTimes = computed(() => getChangedKeyframeTimes(timelineStore.currentSequence))
+const changedStepIds = computed(() => getChangedKeyframeStepIds(timelineStore.currentSequence))
 
 function downloadJson() {
   const exportPayload = {
@@ -62,7 +62,7 @@ async function captureCurrentFrame() {
     const dataUrl = await captureCleanFrame(activeLayers.value, stage.value, 'image/png')
     const link = document.createElement('a')
     link.href = dataUrl
-    link.download = `berlu_creator_frame_${timelineStore.playback.currentTimeMs}ms.png`
+    link.download = `berlu_creator_${timelineStore.activeStep?.label.toLowerCase().replace(/\s+/g, '-') ?? 'etape'}.png`
     link.click()
   } catch (error) {
     console.error('Erreur lors de la capture du rendu :', error)
@@ -81,21 +81,21 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 async function exportChangedKeyframes() {
-  if (isExporting.value || changedKeyframeTimes.value.length === 0) return
+  if (isExporting.value || changedStepIds.value.length === 0) return
   isExporting.value = true
   exportProgress.value = 0
-  const previousTime = timelineStore.playback.currentTimeMs
-  const times = [...changedKeyframeTimes.value]
+  const previousStepId = timelineStore.activeStep?.id
+  const stepIds = [...changedStepIds.value]
 
   try {
-    timelineStore.pause()
     timelineStore.commitTransformSession(false)
     const files: Record<string, Uint8Array> = {}
 
-    for (const [index, timeMs] of times.entries()) {
-      timelineStore.playback.currentTimeMs = timeMs
+    for (const [index, stepId] of stepIds.entries()) {
+      timelineStore.selectStep(stepId)
+      await nextTick()
       const dataUrl = await captureCleanFrame(activeLayers.value, stage.value, 'image/png')
-      files[formatKeyframeFilename(exportPrefix.value, index + 1, times.length)] = dataUrlToBytes(dataUrl)
+      files[formatKeyframeFilename(exportPrefix.value, index + 1, stepIds.length)] = dataUrlToBytes(dataUrl)
       exportProgress.value = index + 1
     }
 
@@ -104,7 +104,7 @@ async function exportChangedKeyframes() {
     downloadBlob(archiveBlob, `${sanitizeExportPrefix(exportPrefix.value)}-keyframes.zip`)
     toast.success(
       'Export terminé',
-      `${times.length} keyframe(s) contenant un changement ont été exportées.`
+      `${stepIds.length} étape(s) contenant un changement ont été exportées.`
     )
   } catch (error) {
     toast.error(
@@ -112,7 +112,7 @@ async function exportChangedKeyframes() {
       error instanceof Error ? error.message : 'Impossible de générer les keyframes.'
     )
   } finally {
-    timelineStore.playback.currentTimeMs = previousTime
+    if (previousStepId) timelineStore.selectStep(previousStepId)
     isExporting.value = false
   }
 }
@@ -122,8 +122,8 @@ async function exportChangedKeyframes() {
   <Modal
     v-model:open="open"
     size="md"
-    title="Exporter la Séquence Stop-Motion"
-    subtitle="Exportez les données de séquence ou capturez les rendus d'animation."
+    title="Exporter la séquence"
+    subtitle="Exportez les étapes discrètes ou capturez le rendu actif."
   >
     <div class="space-y-4 text-xs">
       <div class="p-3 rounded-lg border border-border/40 bg-surface/40 flex items-center justify-between">
@@ -146,11 +146,11 @@ async function exportChangedKeyframes() {
               Export en masse des changements
             </Heading>
             <Text variant="caption" color="muted" class="text-[11px] mt-0.5">
-              Seuls les instants où l’état ou le sprite visible change sont inclus dans l’archive ZIP.
+              Seules les étapes où l’état ou le sprite visible change sont incluses dans l’archive ZIP.
             </Text>
           </div>
           <Badge variant="accent" size="sm">
-            {{ changedKeyframeTimes.length }} image(s)
+            {{ changedStepIds.length }} image(s)
           </Badge>
         </div>
 
@@ -166,7 +166,7 @@ async function exportChangedKeyframes() {
 
         <div class="flex items-center justify-between gap-3">
           <Text v-if="isExporting" variant="caption" color="muted">
-            Génération {{ exportProgress }} / {{ changedKeyframeTimes.length }}…
+            Génération {{ exportProgress }} / {{ changedStepIds.length }}…
           </Text>
           <span v-else />
           <Button
@@ -174,7 +174,7 @@ async function exportChangedKeyframes() {
             variant="primary"
             class="gap-1.5"
             :loading="isExporting"
-            :disabled="isExporting || changedKeyframeTimes.length === 0"
+            :disabled="isExporting || changedStepIds.length === 0"
             @click="exportChangedKeyframes"
           >
             <Icon name="folder_zip" size="xs" />
@@ -185,9 +185,9 @@ async function exportChangedKeyframes() {
 
       <div class="p-3 rounded-lg border border-border/40 bg-surface/40 flex items-center justify-between">
         <div>
-          <Heading as="h4" variant="sm" class="font-semibold text-foreground">Instantané PNG de l'Image Actuelle</Heading>
+          <Heading as="h4" variant="sm" class="font-semibold text-foreground">Instantané PNG de l’étape active</Heading>
           <Text variant="caption" color="muted" class="text-[11px] mt-0.5">
-            Rendu haute résolution sans repères au timecode {{ (timelineStore.playback.currentTimeMs / 1000).toFixed(2) }}s.
+            Rendu haute résolution de {{ timelineStore.activeStep?.label ?? 'l’étape active' }}, sans repères d’édition.
           </Text>
         </div>
         <Button
@@ -203,9 +203,9 @@ async function exportChangedKeyframes() {
       </div>
 
       <div class="border-t border-border/40 pt-3 flex items-center justify-between text-muted-foreground text-[11px]">
-        <span>Durée totale : {{ (timelineStore.currentSequence.durationMs / 1000).toFixed(1) }}s</span>
+        <span>{{ timelineStore.orderedSteps.length }} étape(s)</span>
         <Badge variant="neutral" size="sm">
-          {{ timelineStore.currentSequence.fps }} FPS
+          Séquence discrète
         </Badge>
       </div>
     </div>

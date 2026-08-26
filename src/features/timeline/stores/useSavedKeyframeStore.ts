@@ -23,12 +23,13 @@ export const useSavedKeyframeStore = defineStore('savedKeyframes', () => {
 
   async function saveCurrentPose(
     sequence: Sequence,
-    timeMs: number,
+    stepId: string,
     name: string,
     thumbnailDataUrl: string
   ): Promise<SavedKeyframePreset> {
     const now = Date.now()
-    const tracks = captureVisibleTracks(sequence, timeMs)
+    const tracks = captureVisibleTracks(sequence, stepId)
+    const step = sequence.steps.find((candidate) => candidate.id === stepId)
     const referencedGroupIds = new Set(
       tracks.map((track) => track.sourceGroupId).filter((id): id is string => Boolean(id))
     )
@@ -43,8 +44,8 @@ export const useSavedKeyframeStore = defineStore('savedKeyframes', () => {
 
     const preset: SavedKeyframePreset = {
       id: generateId('saved_kf'),
-      name: name.trim() || `Keyframe ${formatTime(timeMs)}`,
-      sourceTimeMs: timeMs,
+      name: name.trim() || `Pose ${step?.label ?? ''}`.trim(),
+      sourceStepLabel: step?.label,
       thumbnailDataUrl,
       tracks,
       groups,
@@ -65,20 +66,21 @@ export const useSavedKeyframeStore = defineStore('savedKeyframes', () => {
   return { presets, isLoading, loadPresets, saveCurrentPose, deletePreset }
 })
 
-export function captureVisibleTracks(sequence: Sequence, timeMs: number): SavedKeyframeTrack[] {
+export function captureVisibleTracks(sequence: Sequence, stepId: string): SavedKeyframeTrack[] {
   const mutedGroupIds = new Set(
     (sequence.groups ?? []).filter((group) => group.muted).map((group) => group.id)
   )
 
   return sequence.tracks.flatMap((track) => {
     if (track.muted || (track.groupId && mutedGroupIds.has(track.groupId))) return []
-    const active = track.keyframes.reduce(
-      (result, keyframe) =>
-        keyframe.timeMs <= timeMs && (!result || keyframe.timeMs > result.timeMs)
-          ? keyframe
-          : result,
-      null as (typeof track.keyframes)[number] | null
-    )
+    const targetOrder = sequence.steps.find((step) => step.id === stepId)?.order ?? 0
+    const orderById = new Map(sequence.steps.map((step) => [step.id, step.order]))
+    const active = track.keyframes.reduce((result, keyframe) => {
+      const order = orderById.get(keyframe.stepId)
+      if (order === undefined || order > targetOrder) return result
+      if (!result) return keyframe
+      return order > (orderById.get(result.stepId) ?? -1) ? keyframe : result
+    }, null as (typeof track.keyframes)[number] | null)
     if (!active || active.sprites.length === 0) return []
 
     return [{
@@ -96,8 +98,4 @@ export function captureVisibleTracks(sequence: Sequence, timeMs: number): SavedK
       }))
     }]
   })
-}
-
-function formatTime(timeMs: number) {
-  return `${(timeMs / 1000).toFixed(2)}s`
 }

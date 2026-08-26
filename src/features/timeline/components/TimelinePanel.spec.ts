@@ -8,10 +8,8 @@ function mountTimelinePanel() {
     global: {
       plugins: [createPinia()],
       stubs: {
-        TransportBar: true,
         TrackHeaderList: true,
-        TimelineRuler: true,
-        TrackLane: true
+        SequenceGrid: true
       }
     }
   })
@@ -26,7 +24,7 @@ describe('TimelinePanel', () => {
     const wrapper = mountTimelinePanel()
     const handle = wrapper.get('[role="separator"]')
 
-    expect(handle.attributes('aria-label')).toBe('Redimensionner la hauteur de la timeline')
+    expect(handle.attributes('aria-label')).toBe('Redimensionner la hauteur du séquenceur')
     expect(handle.attributes('aria-orientation')).toBe('horizontal')
     expect(handle.attributes('aria-valuemin')).toBe('160')
     expect(handle.attributes('aria-valuenow')).toBe('256')
@@ -70,5 +68,12 @@ describe('TimelinePanel', () => {
     await handle.trigger('dblclick')
 
     expect(handle.attributes('aria-valuenow')).toBe('256')
+  })
+
+  it('affiche les actions d’étapes sans contrôle vidéo', () => {
+    const wrapper = mountTimelinePanel()
+    expect(wrapper.get('[aria-label="Actions sur les étapes"]')).toBeDefined()
+    expect(wrapper.text()).not.toContain('FPS')
+    expect(wrapper.text()).not.toContain('Play')
   })
 })

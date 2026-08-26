@@ -5,7 +5,7 @@ import { CATEGORY_LIST } from '@core/constants/categories'
 import { useAssetStore } from '../stores/useAssetStore'
 import {
   findAssetTargetTrack,
-  resolveAssetAssignmentTime
+  resolveAssetAssignmentStep
 } from '../services/asset-timeline-assignment'
 import AssetCard from './AssetCard.vue'
 import AssetUploadModal from './AssetUploadModal.vue'
@@ -32,13 +32,14 @@ watch(
   { immediate: true }
 )
 
-// Identifiants des assets actuellement affichés sur le canvas à cet instant
+// Identifiants des assets affichés à l’étape active.
 const activeAssetIds = computed(() => {
-  const timeMs = timelineStore.playback.currentTimeMs
+  const stepId = timelineStore.activeStep?.id
   const ids = new Set<string>()
+  if (!stepId) return ids
   for (const track of timelineStore.currentSequence.tracks) {
     if (track.muted) continue
-    const activeKf = timelineStore.getActiveKeyframeAtTime(track.id, timeMs)
+    const activeKf = timelineStore.getEffectiveKeyframeAtStep(track.id, stepId)
     if (activeKf) {
       for (const sprite of activeKf.sprites) ids.add(sprite.assetId)
     }
@@ -72,21 +73,21 @@ function onSelectAsset(asset: Asset) {
   }
 
   if (targetTrack) {
-    const targetTime = resolveAssetAssignmentTime(
+    const targetStepId = resolveAssetAssignmentStep(
       targetTrack,
       selectedTrack,
       timelineStore.selectedKeyframeId,
-      timelineStore.playback.currentTimeMs
+      timelineStore.activeStep?.id ?? timelineStore.orderedSteps[0]?.id ?? ''
     )
 
     const sprite = timelineStore.addKeyframe(
       targetTrack.id,
-      targetTime,
+      targetStepId,
       asset.id,
       asset.name
     )
     const keyframe = targetTrack.keyframes.find(
-      (candidate) => Math.abs(candidate.timeMs - targetTime) < 10
+      (candidate) => candidate.stepId === targetStepId
     )
     if (activeGroupId) {
       timelineStore.selectGroupForEditing(activeGroupId)
@@ -102,22 +103,12 @@ interface CategoryTab extends TabItem {
   key: AssetCategory | 'all'
   icon: string
   tone: TabTone
-  color: string
 }
 
-const CATEGORY_TAB_STYLES: Record<AssetCategory, Pick<CategoryTab, 'tone' | 'color'>> = {
-  background: { tone: 'sky', color: 'text-sky-400' },
-  torso: { tone: 'amber', color: 'text-amber-400' },
-  head: { tone: 'rose', color: 'text-rose-400' },
-  mouth: { tone: 'red', color: 'text-red-400' },
-  eyes: { tone: 'cyan', color: 'text-cyan-400' },
-  props_host: { tone: 'purple', color: 'text-purple-400' },
-  arms_left: { tone: 'emerald', color: 'text-emerald-400' },
-  arms_right: { tone: 'lime', color: 'text-lime-400' },
-  props_set: { tone: 'yellow', color: 'text-yellow-400' },
-  desk: { tone: 'neutral', color: 'text-neutral-400' },
-  props_desk: { tone: 'indigo', color: 'text-indigo-400' },
-  foreground: { tone: 'red', color: 'text-red-400' }
+const CATEGORY_TAB_TONES: Record<AssetCategory, TabTone> = {
+  background: 'sky', torso: 'amber', head: 'rose', mouth: 'red', eyes: 'cyan',
+  props_host: 'purple', arms_left: 'emerald', arms_right: 'lime', props_set: 'yellow',
+  desk: 'neutral', props_desk: 'indigo', foreground: 'red'
 }
 
 const CATEGORY_TABS: CategoryTab[] = [
@@ -125,14 +116,13 @@ const CATEGORY_TABS: CategoryTab[] = [
     key: 'all',
     label: 'Tous les sprites',
     icon: 'apps',
-    tone: 'indigo',
-    color: 'text-indigo-400'
+    tone: 'indigo'
   },
   ...CATEGORY_LIST.map((category) => ({
     key: category.id,
     label: category.label,
     icon: category.icon,
-    ...CATEGORY_TAB_STYLES[category.id]
+    tone: CATEGORY_TAB_TONES[category.id]
   }))
 ]
 
@@ -202,7 +192,11 @@ function onDeleteAsset(asset: Asset) {
       <!-- En-tête de la bibliothèque -->
       <div class="h-11 border-b border-border-subtle px-3 flex items-center justify-between gap-2 shrink-0 bg-bg-surface/40">
         <div class="flex items-center gap-1.5 min-w-0">
-          <Icon :name="currentTab.icon" size="xs" :class="currentTab.color" />
+          <Icon
+            :name="currentTab.icon"
+            size="xs"
+            :style="{ color: currentTab.key === 'all' ? '#818cf8' : ASSET_CATEGORIES[currentTab.key as AssetCategory].color }"
+          />
           <span class="font-semibold text-xs text-text-primary truncate">
             {{ currentTab.label }}
           </span>

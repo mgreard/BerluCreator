@@ -2,13 +2,12 @@
 import type { SpritesheetSlice, AssetCategory } from '@core/types/asset.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
 import { IconButton } from '@/components/ui/icon-button'
 import { Icon } from '@/components/ui/icon'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SelectableSurface } from '@/components/ui/selectable-surface'
-import { Text } from '@/components/ui/text'
+import { CategoryBadge } from '@/components/ui/category-badge'
 import SliceThumbnail from './SliceThumbnail.vue'
 
 const {
@@ -19,6 +18,7 @@ const {
   slices: SpritesheetSlice[]
   selectedSliceId: string | null
   imageElement: HTMLImageElement | null
+  category: AssetCategory
 }>()
 
 const emit = defineEmits<{
@@ -27,19 +27,8 @@ const emit = defineEmits<{
   (e: 'removeSlice', sliceId: string): void
 }>()
 
-const categoryOptions = Object.values(ASSET_CATEGORIES).map((c) => ({
-  value: c.id,
-  label: `${c.label} (${c.id})`
-}))
-
 function onNameChange(slice: SpritesheetSlice, newName: string) {
   emit('updateSlice', { id: slice.id, updates: { name: newName } })
-}
-
-function onCategoryChange(slice: SpritesheetSlice, newCat: string | number | boolean | null) {
-  if (typeof newCat === 'string') {
-    emit('updateSlice', { id: slice.id, updates: { category: newCat as AssetCategory } })
-  }
 }
 </script>
 
@@ -55,6 +44,12 @@ function onCategoryChange(slice: SpritesheetSlice, newCat: string | number | boo
       <Badge variant="neutral" size="sm" class="font-mono text-[10px]">
         {{ slices.length }} {{ slices.length > 1 ? 'sprites' : 'sprite' }}
       </Badge>
+      <CategoryBadge
+        :label="ASSET_CATEGORIES[category].label"
+        :icon-name="ASSET_CATEGORIES[category].icon"
+        :color="ASSET_CATEGORIES[category].color"
+        size="mini"
+      />
     </div>
 
     <!-- Contenu défilant : Cartes des sprites découpés -->
@@ -114,22 +109,6 @@ function onCategoryChange(slice: SpritesheetSlice, newCat: string | number | boo
           />
         </div>
 
-        <!-- Détails de configuration si sélectionné -->
-        <div class="p-2.5 space-y-2 bg-bg-surface/30">
-          <!-- Choix de la catégorie -->
-          <div class="space-y-1">
-            <Text as="span" variant="overline" color="muted" weight="semibold" class="text-[10px]">
-              Catégorie :
-            </Text>
-            <Select
-              :model-value="slice.category"
-              :options="categoryOptions"
-              size="sm"
-              @click.stop
-              @update:model-value="onCategoryChange(slice, $event)"
-            />
-          </div>
-        </div>
       </SelectableSurface>
 
       <!-- État vide (aucun rectangle tracé) -->

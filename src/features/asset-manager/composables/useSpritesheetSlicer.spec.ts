@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeSliceRect } from './useSpritesheetSlicer'
+import { normalizeSliceRect, useSpritesheetSlicer } from './useSpritesheetSlicer'
 
 describe('normalizeSliceRect', () => {
   it('normalise un tracé effectué de bas en haut et de droite à gauche', () => {
@@ -27,5 +27,22 @@ describe('normalizeSliceRect', () => {
       width: 0,
       height: 30
     })
+  })
+})
+
+describe('noms et catégorie des découpes', () => {
+  it('renomme seulement les découpes automatiques lors du changement de catégorie', () => {
+    const slicer = useSpritesheetSlicer()
+    slicer.naturalWidth.value = 200
+    slicer.naturalHeight.value = 200
+    const first = slicer.addSlice({ x: 0, y: 0, width: 40, height: 40 }, 'mouth')
+    const second = slicer.addSlice({ x: 50, y: 0, width: 40, height: 40 }, 'mouth')
+    slicer.updateSlice(second.id, { name: 'sourire-special' })
+
+    slicer.setCategoryForAll('eyes')
+
+    expect(slicer.slices.value[0]).toMatchObject({ name: 'yeux-01', category: 'eyes', nameMode: 'auto' })
+    expect(slicer.slices.value[1]).toMatchObject({ name: 'sourire-special', category: 'eyes', nameMode: 'custom' })
+    expect(first.name).toBe('bouche-01')
   })
 })

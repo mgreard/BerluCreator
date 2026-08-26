@@ -50,7 +50,7 @@ export function useHierarchyResolver() {
   const projectStore = useProjectStore()
 
   const activeLayers = computed<RenderableLayer[]>(() => {
-    const timeMs = timelineStore.playback.currentTimeMs
+    const stepId = timelineStore.activeStep?.id
     const stage = projectStore.currentProject.stage
     const groups = timelineStore.currentSequence.groups || []
     const layers: RenderableLayer[] = []
@@ -70,7 +70,8 @@ export function useHierarchyResolver() {
       const group = groups.find((candidate) => candidate.id === track.groupId)
       if (group?.muted) continue
 
-      const activeKeyframe = timelineStore.getActiveKeyframeAtTime(track.id, timeMs)
+      if (!stepId) continue
+      const activeKeyframe = timelineStore.getEffectiveKeyframeAtStep(track.id, stepId)
       if (!activeKeyframe) continue
 
       const sortedSprites = [...activeKeyframe.sprites].sort(

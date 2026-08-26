@@ -61,7 +61,6 @@ async function saveSnapshot() {
   isSnapshotBusy.value = true
   workspaceBackupStore.beginSaving()
   try {
-    timelineStore.pause()
     timelineStore.commitTransformSession(false)
     await Promise.all([projectStore.saveProject(), timelineStore.saveSequence()])
     snapshotSummary.value = await createManualWorkspaceSnapshot(projectStore.currentProject.id)
@@ -91,7 +90,6 @@ async function restoreSnapshot() {
   isSnapshotBusy.value = true
   workspaceBackupStore.beginSaving()
   try {
-    timelineStore.pause()
     timelineStore.commitTransformSession(false)
     const snapshot = await restoreManualWorkspaceSnapshot()
     const workspace = await projectStore.loadInitialProject()

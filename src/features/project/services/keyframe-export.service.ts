@@ -17,7 +17,7 @@ function serializeSprite(sprite: KeyframeSprite) {
   }
 }
 
-function getVisibleStateSignature(sequence: Sequence, timeMs: number): string {
+function getVisibleStateSignature(sequence: Sequence, stepId: string): string {
   const mutedGroups = new Set(
     (sequence.groups ?? []).filter((group) => group.muted).map((group) => group.id)
   )
@@ -26,9 +26,11 @@ function getVisibleStateSignature(sequence: Sequence, timeMs: number): string {
     sequence.tracks
       .filter((track) => !track.muted && (!track.groupId || !mutedGroups.has(track.groupId)))
       .map((track) => {
+        const targetOrder = sequence.steps.find((step) => step.id === stepId)?.order ?? -1
+        const orderById = new Map(sequence.steps.map((step) => [step.id, step.order]))
         const keyframe = [...track.keyframes]
-          .sort((left, right) => left.timeMs - right.timeMs)
-          .filter((candidate) => candidate.timeMs <= timeMs)
+          .sort((left, right) => (orderById.get(left.stepId) ?? -1) - (orderById.get(right.stepId) ?? -1))
+          .filter((candidate) => (orderById.get(candidate.stepId) ?? -1) <= targetOrder)
           .at(-1)
 
         return keyframe
@@ -38,30 +40,31 @@ function getVisibleStateSignature(sequence: Sequence, timeMs: number): string {
   )
 }
 
-export function getChangedKeyframeTimes(sequence: Sequence): number[] {
+export function getChangedKeyframeStepIds(sequence: Sequence): string[] {
   const mutedGroups = new Set(
     (sequence.groups ?? []).filter((group) => group.muted).map((group) => group.id)
   )
-  const candidateTimes = [
-    ...new Set(
+  const candidateStepIds = new Set(
       sequence.tracks
         .filter((track) => !track.muted && (!track.groupId || !mutedGroups.has(track.groupId)))
-        .flatMap((track) => track.keyframes.map((keyframe) => keyframe.timeMs))
-    )
-  ].sort((left, right) => left - right)
+        .flatMap((track) => track.keyframes.map((keyframe) => keyframe.stepId))
+  )
+  const orderedCandidates = [...sequence.steps]
+    .sort((left, right) => left.order - right.order)
+    .filter((step) => candidateStepIds.has(step.id))
 
-  const changedTimes: number[] = []
-  let previousSignature = getVisibleStateSignature(sequence, -1)
+  const changedStepIds: string[] = []
+  let previousSignature = ''
 
-  for (const timeMs of candidateTimes) {
-    const signature = getVisibleStateSignature(sequence, timeMs)
+  for (const step of orderedCandidates) {
+    const signature = getVisibleStateSignature(sequence, step.id)
     if (signature !== previousSignature) {
-      changedTimes.push(timeMs)
+      changedStepIds.push(step.id)
       previousSignature = signature
     }
   }
 
-  return changedTimes
+  return changedStepIds
 }
 
 export function sanitizeExportPrefix(prefix: string): string {

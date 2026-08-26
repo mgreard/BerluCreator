@@ -89,7 +89,7 @@ const isGroupTarget = computed(() => {
   return editScope.value === 'group' && Boolean(activeSelectedGroup.value)
 })
 
-const showSelection = computed(() => !timelineStore.playback.isPlaying)
+const showSelection = computed(() => true)
 
 // Calcul des bornes englobantes (Bounding Box) du groupe ou du sprite individuel
 const selectedBounds = computed<BoxBounds | null>(() => {
@@ -294,15 +294,18 @@ function applyScaleAxes(newScaleX: number, newScaleY: number) {
 }
 
 function adjustScale(delta: number) {
+  timelineStore.beginTransformGesture()
   applyScaleAxes(currentScaleX.value + delta, currentScaleY.value + delta)
+  timelineStore.commitTransformGesture()
 }
 
 function setExactScale(value: number) {
+  timelineStore.beginTransformGesture()
   applyScaleAxes(value, value)
+  timelineStore.commitTransformGesture()
 }
 
 function onCanvasWheel(e: WheelEvent) {
-  if (timelineStore.playback.isPlaying) return
   if (e.altKey || e.shiftKey) {
     e.preventDefault()
     const delta = e.deltaY < 0 ? 0.05 : -0.05
@@ -383,7 +386,6 @@ function hitTestLayer(pos: { x: number; y: number }): RenderableLayer | null {
 }
 
 function onCanvasPointerDown(e: PointerEvent) {
-  if (timelineStore.playback.isPlaying) return
   const pos = getStageCoordinates(e)
   if (!pos) return
 
@@ -391,6 +393,7 @@ function onCanvasPointerDown(e: PointerEvent) {
   if (selectedBounds.value) {
     const hitHandle = hitTestResizeHandle(pos, selectedBounds.value)
     if (hitHandle) {
+      timelineStore.beginTransformGesture()
       isResizing.value = true
       activeHandle.value = hitHandle
       dragStartPointer.value = { ...pos }
@@ -407,6 +410,7 @@ function onCanvasPointerDown(e: PointerEvent) {
     const isInsideSelection =
       pos.x >= b.x && pos.x <= b.x + b.width && pos.y >= b.y && pos.y <= b.y + b.height
     if (isInsideSelection) {
+      timelineStore.beginTransformGesture()
       isDragging.value = true
       dragStartPointer.value = { ...pos }
 
@@ -437,6 +441,7 @@ function onCanvasPointerDown(e: PointerEvent) {
     } else {
       timelineStore.selectSpriteForEditing(hit.trackId, hit.keyframeId, hit.spriteId)
     }
+    timelineStore.beginTransformGesture()
     assetStore.selectAsset(hit.asset.id)
 
     isDragging.value = true
@@ -512,6 +517,7 @@ function onCanvasPointerUp(e: PointerEvent) {
   isDragging.value = false
   isResizing.value = false
   activeHandle.value = null
+  timelineStore.commitTransformGesture()
 
   const target = e.currentTarget as HTMLElement
   if (target?.hasPointerCapture?.(e.pointerId)) {
@@ -630,7 +636,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
 
       <!-- HUD contextuel d'Édition Directe (Bannière Inférieure) -->
       <div
-        v-if="activeSelectedLayer && !timelineStore.playback.isPlaying"
+        v-if="activeSelectedLayer"
         class="absolute bottom-3 left-3 flex items-center gap-2 pointer-events-auto animate-in fade-in duration-200"
         @pointerdown.stop
       >
@@ -705,6 +711,15 @@ function onCanvasDoubleClick(e: MouseEvent) {
           <span v-if="selectedBounds" class="text-[10px] text-text-muted font-mono pl-1 border-l border-border-subtle/60">
             {{ selectedBounds.width }}&times;{{ selectedBounds.height }}px
           </span>
+          <IconButton
+            v-if="!isGroupTarget"
+            icon="delete"
+            size="xs"
+            variant="destructive"
+            :aria-label="`Retirer ${activeSelectedLayer.asset.name} de l’étape active`"
+            title="Retirer ce sprite de l’étape active"
+            @click="timelineStore.removeSpriteFromActiveStep(activeSelectedLayer.trackId, activeSelectedLayer.spriteId)"
+          />
         </div>
       </div>
     </div>

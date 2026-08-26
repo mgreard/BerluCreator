@@ -82,8 +82,15 @@ function openLayerSettings(layer: RenderableLayer) {
 }
 
 function removeLayer(layer: RenderableLayer) {
-  if (!confirm(`Supprimer « ${layer.asset.name} » de cette keyframe ?`)) return
-  timelineStore.removeKeyframeSprite(layer.trackId, layer.keyframeId, layer.spriteId)
+  timelineStore.removeSpriteFromActiveStep(layer.trackId, layer.spriteId)
+}
+
+function categoryLayerStyle(layer: RenderableLayer) {
+  const color = ASSET_CATEGORIES[layer.category].color
+  return {
+    borderColor: `color-mix(in srgb, ${color} 38%, var(--color-border-subtle))`,
+    backgroundColor: `color-mix(in srgb, ${color} 9%, var(--color-bg-surface))`
+  }
 }
 
 watch(
@@ -136,7 +143,8 @@ watch(
       <section
         v-for="group in groups"
         :key="group.id"
-        class="rounded-xl border border-border-subtle/80 bg-bg-surface/70 overflow-hidden shadow-xs"
+        class="rounded-xl border border-border-subtle/80 bg-bg-surface/70 overflow-hidden shadow-xs transition-all"
+        :class="timelineStore.selectedGroupId === group.id && timelineStore.editScope === 'group' ? 'ring-2 ring-primary/60 shadow-glow-md' : ''"
       >
         <SelectableSurface
           :data-selection-key="`group:${group.id}`"
@@ -146,7 +154,7 @@ watch(
           :aria-expanded="!group.collapsed"
           :selected="timelineStore.selectedGroupId === group.id && timelineStore.editScope === 'group'"
           :class="{
-            'ring-1 ring-primary/40 bg-primary/10':
+            'ring-2 ring-inset ring-primary/60 bg-primary/20 border-l-4 border-l-primary shadow-glow-sm':
               timelineStore.selectedGroupId === group.id && timelineStore.editScope === 'group'
           }"
           @click="selectGroup(group.id)"
@@ -160,6 +168,12 @@ watch(
           />
           <span class="w-2.5 h-2.5 rounded-full shrink-0" :class="groupColorDots[group.color || 'indigo']" />
           <span class="font-bold text-xs text-text-primary truncate flex-1">{{ group.name }}</span>
+          <Badge
+            v-if="timelineStore.selectedGroupId === group.id && timelineStore.editScope === 'group'"
+            variant="accent"
+            size="sm"
+            class="text-[8px]"
+          >Actif</Badge>
           <Icon
             v-if="timelineStore.selectedGroupId === group.id && timelineStore.editScope === 'group'"
             name="warning"
@@ -196,6 +210,7 @@ watch(
             class="p-2 rounded-lg border text-xs cursor-pointer flex items-center gap-2"
             role="treeitem"
             :selected="timelineStore.selectedSpriteId === layer.spriteId && timelineStore.editScope === 'layer'"
+            :style="categoryLayerStyle(layer)"
             :class="[
               timelineStore.selectedSpriteId === layer.spriteId && timelineStore.editScope === 'layer'
                 ? 'bg-primary/15 border-primary/50 ring-1 ring-primary/30 font-semibold'
@@ -276,8 +291,8 @@ watch(
       <EmptyState
         v-if="activeLayers.length === 0"
         icon="hourglass_empty"
-        title="Aucun calque actif à cet instant"
-        description="Déplacez la tête de lecture ou ajoutez des sprites."
+        title="Aucun calque actif à cette étape"
+        description="Choisissez une étape ou ajoutez des sprites."
         class="border-0 bg-transparent shadow-none p-8"
       />
     </div>

@@ -31,18 +31,18 @@ export function findAssetTargetTrack(
   return tracks.find((track) => trackMatchesCategory(track, category))
 }
 
-export function resolveAssetAssignmentTime(
+export function resolveAssetAssignmentStep(
   targetTrack: TimelineTrack,
   selectedTrack: TimelineTrack | null | undefined,
   selectedKeyframeId: string | null,
-  currentTimeMs: number
+  activeStepId: string
 ) {
   if (targetTrack.id !== selectedTrack?.id) {
-    return currentTimeMs
+    return activeStepId
   }
 
   return (
-    targetTrack.keyframes.find((keyframe) => keyframe.id === selectedKeyframeId)?.timeMs ??
-    currentTimeMs
+    targetTrack.keyframes.find((keyframe) => keyframe.id === selectedKeyframeId)?.stepId ??
+    activeStepId
   )
 }

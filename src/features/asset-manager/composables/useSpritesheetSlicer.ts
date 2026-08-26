@@ -1,6 +1,7 @@
 import { ref, computed, watch } from 'vue'
 import type { AssetCategory, SpritesheetSlice } from '@core/types/asset.types'
 import { generateId } from '@/lib/utils'
+import { ASSET_CATEGORIES } from '@core/constants/categories'
 
 export function normalizeSliceRect(
   rect: { x: number; y: number; width: number; height: number },
@@ -94,13 +95,13 @@ export function useSpritesheetSlicer() {
     const cat = category || defaultCategory.value
     const id = generateId('slice')
     const count = slices.value.length + 1
-    const baseName = file.value ? file.value.name.replace(/\.[^/.]+$/, '') : 'sprite'
-    const name = `${baseName}_${cat}_${String(count).padStart(2, '0')}`
+    const name = `${ASSET_CATEGORIES[cat].filenamePrefix}-${String(count).padStart(2, '0')}`
 
     const newSlice: SpritesheetSlice = {
       id,
       name,
       category: cat,
+      nameMode: 'auto',
       ...normalized
     }
 
@@ -112,12 +113,33 @@ export function useSpritesheetSlicer() {
   function updateSlice(sliceId: string, updates: Partial<SpritesheetSlice>) {
     const idx = slices.value.findIndex((s) => s.id === sliceId)
     if (idx !== -1) {
-      slices.value[idx] = { ...slices.value[idx], ...updates }
+      slices.value[idx] = {
+        ...slices.value[idx],
+        ...updates,
+        nameMode: updates.name !== undefined ? 'custom' : (updates.nameMode ?? slices.value[idx].nameMode)
+      }
     }
+  }
+
+  function setCategoryForAll(category: AssetCategory) {
+    defaultCategory.value = category
+    slices.value = slices.value.map((slice, index) => ({
+      ...slice,
+      category,
+      name: slice.nameMode === 'auto'
+        ? `${ASSET_CATEGORIES[category].filenamePrefix}-${String(index + 1).padStart(2, '0')}`
+        : slice.name
+    }))
   }
 
   function removeSlice(sliceId: string) {
     slices.value = slices.value.filter((s) => s.id !== sliceId)
+    slices.value = slices.value.map((slice, index) => ({
+      ...slice,
+      name: slice.nameMode === 'auto'
+        ? `${ASSET_CATEGORIES[slice.category].filenamePrefix}-${String(index + 1).padStart(2, '0')}`
+        : slice.name
+    }))
     if (selectedSliceId.value === sliceId) {
       selectedSliceId.value = slices.value.length > 0 ? slices.value[slices.value.length - 1].id : null
     }
@@ -212,6 +234,7 @@ export function useSpritesheetSlicer() {
     loadFile,
     addSlice,
     updateSlice,
+    setCategoryForAll,
     removeSlice,
     selectSlice,
     extractSlicesBlobs,

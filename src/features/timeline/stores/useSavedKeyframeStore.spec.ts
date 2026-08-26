@@ -7,8 +7,10 @@ function sequence(): Sequence {
     id: 'sequence',
     projectId: 'workspace',
     name: 'Sequence',
-    durationMs: 5000,
-    fps: 24,
+    steps: [
+      { id: 'step-1', label: 'Étape 01', order: 0 },
+      { id: 'step-2', label: 'Étape 02', order: 1 }
+    ],
     groups: [
       { id: 'visible-group', name: 'Visible', zIndex: 10 },
       { id: 'muted-group', name: 'Muted', zIndex: 20, muted: true }
@@ -24,10 +26,10 @@ function sequence(): Sequence {
         muted: false,
         locked: false,
         keyframes: [
-          { id: 'early', timeMs: 0, sprites: [{ id: 'old', assetId: 'asset-old', order: 0 }] },
+          { id: 'early', stepId: 'step-1', sprites: [{ id: 'old', assetId: 'asset-old', order: 0 }] },
           {
             id: 'active',
-            timeMs: 1000,
+            stepId: 'step-2',
             sprites: [
               {
                 id: 'active-sprite',
@@ -49,7 +51,7 @@ function sequence(): Sequence {
         muted: false,
         locked: false,
         keyframes: [
-          { id: 'hidden', timeMs: 0, sprites: [{ id: 'hidden-sprite', assetId: 'hidden', order: 0 }] }
+          { id: 'hidden', stepId: 'step-1', sprites: [{ id: 'hidden-sprite', assetId: 'hidden', order: 0 }] }
         ]
       }
     ],
@@ -60,7 +62,7 @@ function sequence(): Sequence {
 
 describe('captureVisibleTracks', () => {
   it('capture uniquement la pose visible active avec ses transformations', () => {
-    const tracks = captureVisibleTracks(sequence(), 1500)
+    const tracks = captureVisibleTracks(sequence(), 'step-2')
 
     expect(tracks).toHaveLength(1)
     expect(tracks[0]).toMatchObject({

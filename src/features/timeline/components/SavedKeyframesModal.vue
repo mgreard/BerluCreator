@@ -6,7 +6,6 @@ import { useHierarchyResolver } from '@/features/studio/composables/useHierarchy
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { captureCleanFrame } from '@/features/studio/composables/useCanvasRenderer'
 import type { SavedKeyframePreset } from '@core/types/timeline.types'
-import { formatTimecode } from '@/lib/utils'
 import { toast } from '@/ui/shared/services/toast.service'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
@@ -30,7 +29,7 @@ const isSaving = ref(false)
 const loadingPresetId = ref<string | null>(null)
 
 const defaultName = computed(
-  () => `Keyframe ${formatTimecode(timelineStore.playback.currentTimeMs)}`
+  () => `Pose ${timelineStore.activeStep?.label ?? 'actuelle'}`
 )
 
 watch(
@@ -47,7 +46,6 @@ async function saveCurrentKeyframe() {
   if (isSaving.value || activeLayers.value.length === 0) return
   isSaving.value = true
   try {
-    timelineStore.pause()
     timelineStore.commitTransformSession(false)
     const thumbnail = await captureCleanFrame(
       activeLayers.value,
@@ -56,13 +54,13 @@ async function saveCurrentKeyframe() {
     )
     const preset = await savedKeyframeStore.saveCurrentPose(
       timelineStore.currentSequence,
-      timelineStore.playback.currentTimeMs,
+      timelineStore.activeStep?.id ?? timelineStore.orderedSteps[0]?.id ?? '',
       name.value,
       thumbnail
     )
     name.value = defaultName.value
     toast.success(
-      'Keyframe enregistrée',
+      'Pose enregistrée',
       `« ${preset.name} » contient ${countSprites(preset)} sprite(s).`
     )
   } catch (error) {
@@ -81,8 +79,8 @@ async function loadPreset(preset: SavedKeyframePreset) {
   try {
     const spriteCount = await timelineStore.applySavedKeyframe(preset)
     toast.success(
-      'Keyframe chargée',
-      `${spriteCount} sprite(s) appliqué(s) à ${formatTimecode(timelineStore.playback.currentTimeMs)}.`
+      'Pose chargée',
+      `${spriteCount} sprite(s) appliqué(s) à ${timelineStore.activeStep?.label ?? 'l’étape active'}.`
     )
     open.value = false
   } catch (error) {
@@ -96,9 +94,9 @@ async function loadPreset(preset: SavedKeyframePreset) {
 }
 
 async function deletePreset(preset: SavedKeyframePreset) {
-  if (!confirm(`Supprimer la keyframe enregistrée « ${preset.name} » ?`)) return
+  if (!confirm(`Supprimer la pose enregistrée « ${preset.name} » ?`)) return
   await savedKeyframeStore.deletePreset(preset.id)
-  toast.success('Keyframe supprimée', `« ${preset.name} » a été retirée de la bibliothèque.`)
+  toast.success('Pose supprimée', `« ${preset.name} » a été retirée de la bibliothèque.`)
 }
 
 function countSprites(preset: SavedKeyframePreset) {
@@ -117,14 +115,14 @@ function formatDate(timestamp: number) {
   <Modal
     v-model:open="open"
     size="xl"
-    title="Keyframes enregistrées"
-    subtitle="Sauvegardez une pose du canvas ou appliquez-la au timecode courant. Cette bibliothèque ne restaure ni les assets ni l’état complet de l’application."
+    title="Poses enregistrées"
+    subtitle="Sauvegardez une pose du canvas ou appliquez-la à l’étape active. Cette bibliothèque ne restaure ni les assets ni l’état complet de l’application."
   >
     <div class="space-y-5">
       <section class="rounded-xl border border-primary/25 bg-primary/5 p-4">
         <div class="flex items-end gap-3">
           <FormGroup
-            label="Nom de la keyframe"
+            label="Nom de la pose"
             :label-for="nameInputId"
             class="mb-0 min-w-0 flex-1"
           >
@@ -148,7 +146,7 @@ function formatDate(timestamp: number) {
           </Button>
         </div>
         <Text as="p" variant="caption" color="muted" class="mt-2 text-[11px]">
-          Timecode actuel : {{ formatTimecode(timelineStore.playback.currentTimeMs) }} ·
+          Étape active : {{ timelineStore.activeStep?.label }} ·
           {{ activeLayers.length }} élément(s) visible(s)
         </Text>
       </section>
@@ -209,8 +207,8 @@ function formatDate(timestamp: number) {
         <EmptyState
           v-else
           icon="collections_bookmark"
-          title="Aucune keyframe enregistrée"
-          description="Placez la tête de lecture sur une composition utile, puis enregistrez sa pose."
+          title="Aucune pose enregistrée"
+          description="Sélectionnez une étape utile, puis enregistrez sa pose."
           class="min-h-52 border border-dashed border-border-subtle bg-bg-base/30"
         />
       </section>
@@ -218,7 +216,7 @@ function formatDate(timestamp: number) {
 
     <template #footer>
       <div class="flex w-full items-center justify-between text-[11px] text-text-muted">
-        <span>Le chargement écrit la pose au timecode courant de la timeline.</span>
+        <span>Le chargement écrit la pose dans l’étape active.</span>
         <Button variant="ghost" size="sm" @click="open = false">Fermer</Button>
       </div>
     </template>
