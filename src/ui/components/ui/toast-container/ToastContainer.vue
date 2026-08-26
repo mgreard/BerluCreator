@@ -33,13 +33,16 @@ function getIconName(type: ToastMessage['type']): string {
     <div
       :class="
         cn(
-          'fixed bottom-6 right-6 z-50 flex flex-col gap-3 max-w-[420px] w-[calc(100vw-3rem)] pointer-events-none',
+          'fixed top-16 right-6 z-50 flex flex-col gap-3 max-w-[380px] w-[calc(100vw-3rem)] pointer-events-none',
           className
         )
       "
       :style="{ zIndex }"
       aria-live="polite"
       aria-atomic="true"
+      @pointerdown.stop
+      @mousedown.stop
+      @click.stop
     >
       <TransitionGroup
         enter-active-class="transition duration-300 ease-out"
@@ -60,6 +63,8 @@ function getIconName(type: ToastMessage['type']): string {
             toastItem.type === 'info' && 'border-info/60'
           ]"
           role="alert"
+          @pointerdown.stop
+          @click.stop
         >
           <div
             :class="[
@@ -86,7 +91,8 @@ function getIconName(type: ToastMessage['type']): string {
             class="text-text-muted hover:text-text-primary transition-colors p-1.5 leading-none cursor-pointer touch-manipulation flex items-center justify-center rounded-lg hover:bg-bg-surface-hover/80"
             aria-label="Fermer la notification"
             title="Fermer la notification"
-            @click="removeToast(toastItem.id)"
+            @pointerdown.stop
+            @click.stop="removeToast(toastItem.id)"
           >
             <Icon name="close" size="xs" />
           </button>

@@ -1,16 +1,26 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { zipSync } from 'fflate'
 import { useProjectStore } from '../stores/useProjectStore'
 import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useHierarchyResolver } from '@/features/studio/composables/useHierarchyResolver'
 import { captureCleanFrame } from '@/features/studio/composables/useCanvasRenderer'
+import {
+  dataUrlToBytes,
+  formatKeyframeFilename,
+  getChangedKeyframeTimes,
+  sanitizeExportPrefix
+} from '../services/keyframe-export.service'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Badge } from '@/components/ui/badge'
 import { Heading } from '@/components/ui/heading'
 import { Text } from '@/components/ui/text'
+import { Input } from '@/components/ui/input'
+import { FormGroup } from '@/components/ui/form-group'
+import { toast } from '@/ui/shared/services/toast.service'
 
 const open = defineModel<boolean>('open', { default: false })
 
@@ -21,6 +31,9 @@ const { activeLayers } = useHierarchyResolver()
 
 const stage = computed(() => projectStore.currentProject.stage)
 const isExporting = ref(false)
+const exportPrefix = ref('keyframe')
+const exportProgress = ref(0)
+const changedKeyframeTimes = computed(() => getChangedKeyframeTimes(timelineStore.currentSequence))
 
 function downloadJson() {
   const exportPayload = {
@@ -57,6 +70,52 @@ async function captureCurrentFrame() {
     isExporting.value = false
   }
 }
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+async function exportChangedKeyframes() {
+  if (isExporting.value || changedKeyframeTimes.value.length === 0) return
+  isExporting.value = true
+  exportProgress.value = 0
+  const previousTime = timelineStore.playback.currentTimeMs
+  const times = [...changedKeyframeTimes.value]
+
+  try {
+    timelineStore.pause()
+    timelineStore.commitTransformSession(false)
+    const files: Record<string, Uint8Array> = {}
+
+    for (const [index, timeMs] of times.entries()) {
+      timelineStore.playback.currentTimeMs = timeMs
+      const dataUrl = await captureCleanFrame(activeLayers.value, stage.value, 'image/png')
+      files[formatKeyframeFilename(exportPrefix.value, index + 1, times.length)] = dataUrlToBytes(dataUrl)
+      exportProgress.value = index + 1
+    }
+
+    const archive = zipSync(files, { level: 0 })
+    const archiveBlob = new Blob([new Uint8Array(archive)], { type: 'application/zip' })
+    downloadBlob(archiveBlob, `${sanitizeExportPrefix(exportPrefix.value)}-keyframes.zip`)
+    toast.success(
+      'Export terminé',
+      `${times.length} keyframe(s) contenant un changement ont été exportées.`
+    )
+  } catch (error) {
+    toast.error(
+      'Échec de l’export',
+      error instanceof Error ? error.message : 'Impossible de générer les keyframes.'
+    )
+  } finally {
+    timelineStore.playback.currentTimeMs = previousTime
+    isExporting.value = false
+  }
+}
 </script>
 
 <template>
@@ -78,6 +137,50 @@ async function captureCurrentFrame() {
           <Icon name="data_object" size="xs" />
           <span>Télécharger JSON</span>
         </Button>
+      </div>
+
+      <div class="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <Heading as="h4" variant="sm" class="font-semibold text-foreground">
+              Export en masse des changements
+            </Heading>
+            <Text variant="caption" color="muted" class="text-[11px] mt-0.5">
+              Seuls les instants où l’état ou le sprite visible change sont inclus dans l’archive ZIP.
+            </Text>
+          </div>
+          <Badge variant="accent" size="sm">
+            {{ changedKeyframeTimes.length }} image(s)
+          </Badge>
+        </div>
+
+        <FormGroup label="Préfixe des fichiers" helper-text="Exemple : episode-01.png, episode-02.png">
+          <Input
+            v-model="exportPrefix"
+            size="sm"
+            placeholder="keyframe"
+            maxlength="60"
+            autocomplete="off"
+          />
+        </FormGroup>
+
+        <div class="flex items-center justify-between gap-3">
+          <Text v-if="isExporting" variant="caption" color="muted">
+            Génération {{ exportProgress }} / {{ changedKeyframeTimes.length }}…
+          </Text>
+          <span v-else />
+          <Button
+            size="sm"
+            variant="primary"
+            class="gap-1.5"
+            :loading="isExporting"
+            :disabled="isExporting || changedKeyframeTimes.length === 0"
+            @click="exportChangedKeyframes"
+          >
+            <Icon name="folder_zip" size="xs" />
+            <span>Exporter les changements</span>
+          </Button>
+        </div>
       </div>
 
       <div class="p-3 rounded-lg border border-border/40 bg-surface/40 flex items-center justify-between">

@@ -18,7 +18,10 @@ function comparableWorkspace(snapshot: Omit<WorkspaceSnapshot, 'id' | 'schemaVer
     projects: sortById(snapshot.projects),
     sequences: sortById(snapshot.sequences),
     assets: sortById(snapshot.assets),
-    assetBlobs: sortById(snapshot.assetBlobs).map(({ data: _data, ...metadata }) => metadata),
+    assetBlobs: sortById(snapshot.assetBlobs).map(({ data, ...metadata }) => {
+      void data
+      return metadata
+    }),
     characters: sortById(snapshot.characters),
     savedKeyframes: sortById(snapshot.savedKeyframes ?? [])
   }

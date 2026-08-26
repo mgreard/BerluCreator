@@ -58,4 +58,17 @@ describe('ToastContainer (Colocated Unit Tests)', () => {
 
     wrapper.unmount()
   })
+
+  it('4. Arrête la propagation des clics pour ne pas fermer une modale active', async () => {
+    const wrapper = mount(ToastContainer, { attachTo: document.body })
+    const parentClick = vi.fn()
+    document.body.addEventListener('click', parentClick, { once: true })
+    toast.info('Information', 'Action terminée.', 0)
+    await wrapper.vm.$nextTick()
+
+    document.body.querySelector<HTMLElement>('[role="alert"]')?.click()
+
+    expect(parentClick).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
 })

@@ -13,6 +13,8 @@ import {
 import type { WorkspaceSnapshotSummary } from '@core/types/project.types'
 import { toast } from '@/ui/shared/services/toast.service'
 import { Button } from '@/components/ui/button'
+import { ButtonGroup } from '@/components/ui/button-group'
+import { IconButton } from '@/components/ui/icon-button'
 import { Icon } from '@/components/ui/icon'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -22,6 +24,7 @@ const emit = defineEmits<{
   (event: 'openSettings'): void
   (event: 'openExport'): void
   (event: 'openSavedKeyframes'): void
+  (event: 'startTour'): void
 }>()
 
 const projectStore = useProjectStore()
@@ -139,29 +142,31 @@ onMounted(async () => {
     </div>
 
     <div class="flex items-center gap-2">
-      <Button
-        variant="ghost"
-        size="sm"
-        class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
-        :disabled="isSnapshotBusy"
-        title="Créer ou remplacer la sauvegarde complète de l’application"
-        @click="saveSnapshot"
-      >
-        <Icon name="save" size="xs" />
-        <span>Sauvegarde app</span>
-      </Button>
+      <ButtonGroup data-tour="backup" aria-label="Sauvegarde complète de l’application">
+        <Button
+          variant="ghost"
+          size="sm"
+          class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
+          :disabled="isSnapshotBusy"
+          title="Créer ou remplacer la sauvegarde complète de l’application"
+          @click="saveSnapshot"
+        >
+          <Icon name="save" size="xs" />
+          <span>Sauvegarder l’application</span>
+        </Button>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
-        :disabled="isSnapshotBusy || !snapshotSummary"
-        :title="snapshotSummary ? `Restaurer l’application du ${formatSnapshotDate(snapshotSummary.createdAt)}` : 'Aucune sauvegarde complète disponible'"
-        @click="restoreSnapshot"
-      >
-        <Icon name="restore" size="xs" />
-        <span>Restaurer app</span>
-      </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
+          :disabled="isSnapshotBusy || !snapshotSummary"
+          :title="snapshotSummary ? `Restaurer l’application du ${formatSnapshotDate(snapshotSummary.createdAt)}` : 'Aucune sauvegarde complète disponible'"
+          @click="restoreSnapshot"
+        >
+          <Icon name="restore" size="xs" />
+          <span>Restaurer l’application</span>
+        </Button>
+      </ButtonGroup>
 
       <Separator orientation="vertical" variant="subtle" class="h-5 mx-1" />
 
@@ -176,18 +181,26 @@ onMounted(async () => {
         <span>Keyframes</span>
       </Button>
 
-      <Button
+      <IconButton
+        icon="help"
         variant="ghost"
         size="sm"
-        class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
+        aria-label="Démarrer la visite guidée"
+        title="Visite guidée"
+        @click="emit('startTour')"
+      />
+
+      <IconButton
+        icon="settings"
+        variant="ghost"
+        size="sm"
+        aria-label="Paramètres du plateau"
         title="Paramètres du plateau"
         @click="emit('openSettings')"
-      >
-        <Icon name="settings" size="xs" />
-        <span>Paramètres</span>
-      </Button>
+      />
 
       <Button
+        data-tour="export"
         variant="primary"
         size="sm"
         class="gap-1.5 text-xs shadow-glass-sm"

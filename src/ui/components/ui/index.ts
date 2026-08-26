@@ -65,6 +65,7 @@ export * from './breadcrumb'
 export * from './command-palette'
 export * from './pagination'
 export * from './tabs'
+export * from './product-tour'
 
 // Layouts & Architecture
 export * from './page-header'

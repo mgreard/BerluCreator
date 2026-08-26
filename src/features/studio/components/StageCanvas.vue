@@ -6,6 +6,7 @@ import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useHierarchyResolver, type RenderableLayer } from '../composables/useHierarchyResolver'
 import { getCachedAssetImage, useCanvasRenderer } from '../composables/useCanvasRenderer'
 import { isLayerPointOpaque } from '../engine/alpha-hit-test'
+import { shouldTargetWholeGroup } from '../engine/selection-target'
 import {
   computeResizeScales,
   computeTransformedBounds,
@@ -405,7 +406,7 @@ function onCanvasPointerDown(e: PointerEvent) {
     const b = selectedBounds.value
     const isInsideSelection =
       pos.x >= b.x && pos.x <= b.x + b.width && pos.y >= b.y && pos.y <= b.y + b.height
-    if (isInsideSelection && (!isGroupTarget.value || e.shiftKey)) {
+    if (isInsideSelection) {
       isDragging.value = true
       dragStartPointer.value = { ...pos }
 
@@ -430,7 +431,7 @@ function onCanvasPointerDown(e: PointerEvent) {
   // 3. Priorité 3 : Sélection d'un autre élément au clic
   const hit = hitTestLayer(pos)
   if (hit) {
-    const selectWholeGroup = e.shiftKey && Boolean(hit.groupId)
+    const selectWholeGroup = shouldTargetWholeGroup(hit.groupId, editScope.value, e.shiftKey)
     if (hit.groupId && selectWholeGroup) {
       timelineStore.selectGroupForEditing(hit.groupId)
     } else {
@@ -539,6 +540,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
 
 <template>
   <div
+    data-tour="stage"
     class="relative flex items-center justify-center w-full h-full overflow-hidden p-4 select-none"
     @pointerdown.self="timelineStore.clearStudioSelection()"
   >
@@ -650,7 +652,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
               variant="danger"
               size="sm"
               class="gap-1 text-[10px]"
-              title="Attention : toute transformation affecte le groupe entier. Maintenez Shift pour le déplacer sur le canvas."
+              title="Toute transformation affecte directement le groupe entier."
             >
               <Icon name="warning" size="xs" />
               Groupe entier
@@ -661,7 +663,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
               size="sm"
               variant="primary"
               class="p-0.5 rounded-lg [&_[data-reka-collection-item]]:min-h-[24px] [&_[data-reka-collection-item]]:px-2 [&_[data-reka-collection-item]]:py-0.5 [&_[data-reka-collection-item]]:text-[10px]"
-              title="Un clic normal cible l’élément ; Shift+clic cible le groupe entier"
+              title="En mode Groupe entier, les clics et redimensionnements conservent le groupe comme cible"
             />
           </div>
 

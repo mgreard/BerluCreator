@@ -99,6 +99,29 @@ export function loadImageFromBlob(source: Blob): Promise<HTMLImageElement> {
   })
 }
 
+export function fitImagePreview(
+  imageWidth: number,
+  imageHeight: number,
+  availableWidth: number,
+  availableHeight: number
+): { width: number; height: number; scale: number } {
+  if (
+    imageWidth <= 0 ||
+    imageHeight <= 0 ||
+    availableWidth <= 0 ||
+    availableHeight <= 0
+  ) {
+    return { width: 0, height: 0, scale: 0 }
+  }
+
+  const scale = Math.min(availableWidth / imageWidth, availableHeight / imageHeight)
+  return {
+    width: Math.max(1, Math.round(imageWidth * scale)),
+    height: Math.max(1, Math.round(imageHeight * scale)),
+    scale
+  }
+}
+
 export async function applyBackgroundRemovalToBlob(
   source: Blob,
   settings: BackgroundRemovalSettings
@@ -115,7 +138,9 @@ export async function applyBackgroundRemovalToBlob(
   context.drawImage(image, 0, 0)
   const sourceData = context.getImageData(0, 0, canvas.width, canvas.height)
   const processed = removeConnectedBackground(sourceData, settings)
-  context.putImageData(new ImageData(processed.data, processed.width, processed.height), 0, 0)
+  const output = context.createImageData(processed.width, processed.height)
+  output.data.set(processed.data)
+  context.putImageData(output, 0, 0)
 
   return await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
@@ -124,4 +149,3 @@ export async function applyBackgroundRemovalToBlob(
     )
   })
 }
-

@@ -11,6 +11,7 @@ import { SelectableSurface } from '@/components/ui/selectable-surface'
 import type { TimelineTrack, TrackGroup, TrackGroupColor } from '@core/types/timeline.types'
 import type { AssetCategory } from '@core/types/asset.types'
 import CreateGroupModal from './CreateGroupModal.vue'
+import DeleteGroupDialog from './DeleteGroupDialog.vue'
 
 const emit = defineEmits<{
   (e: 'scroll', event: Event): void
@@ -24,6 +25,13 @@ defineExpose({
 })
 
 const isCreateGroupOpen = ref(false)
+const isDeleteGroupOpen = ref(false)
+const groupToDelete = ref<TrackGroup | null>(null)
+
+function requestGroupDeletion(group: TrackGroup) {
+  groupToDelete.value = group
+  isDeleteGroupOpen.value = true
+}
 
 const groups = computed(() => timelineStore.currentSequence.groups || [])
 
@@ -78,7 +86,7 @@ function getGroupMenuItems(group: TrackGroup): DropdownMenuItemDef[] {
       id: 'del_group',
       label: 'Supprimer le groupe',
       icon: 'delete',
-      onClick: () => timelineStore.removeGroup(group.id, false)
+      onClick: () => requestGroupDeletion(group)
     })
   }
 
@@ -221,6 +229,16 @@ function canRemoveTrack(track: TimelineTrack): boolean {
             />
 
             <!-- Menu Options Groupe -->
+            <IconButton
+              icon="delete"
+              size="xs"
+              variant="destructive"
+              :aria-label="`Supprimer le groupe ${group.name}`"
+              title="Supprimer le groupe"
+              class="h-5 w-5"
+              @click.stop="requestGroupDeletion(group)"
+            />
+
             <DropdownMenu
               :items="getGroupMenuItems(group)"
               align="end"
@@ -342,5 +360,9 @@ function canRemoveTrack(track: TimelineTrack): boolean {
 
     <!-- Modale de Création de Groupe -->
     <CreateGroupModal v-model:open="isCreateGroupOpen" />
+    <DeleteGroupDialog
+      v-model:open="isDeleteGroupOpen"
+      :group="groupToDelete"
+    />
   </div>
 </template>

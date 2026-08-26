@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onBeforeUnmount, onMounted, watch, type WatchStopHandle } from 'vue'
+import { ref, onBeforeUnmount, onMounted, useTemplateRef, watch, type WatchStopHandle } from 'vue'
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
@@ -17,6 +17,11 @@ import ExportSequenceModal from '@/features/project/components/ExportSequenceMod
 import SavedKeyframesModal from '@/features/timeline/components/SavedKeyframesModal.vue'
 import ResizableSidebar from '@/features/studio/components/ResizableSidebar.vue'
 import ToastContainer from '@/components/ui/toast-container/ToastContainer.vue'
+import {
+  ProductTour,
+  type ProductTourExpose,
+  type ProductTourStep
+} from '@/components/ui/product-tour'
 
 const projectStore = useProjectStore()
 const assetStore = useAssetStore()
@@ -29,6 +34,64 @@ const isExportOpen = ref(false)
 const isSavedKeyframesOpen = ref(false)
 const showHierarchy = ref(true)
 const showAssetLibrary = ref(true)
+const productTourRef = useTemplateRef<ProductTourExpose>('productTourRef')
+
+const productTourSteps: ProductTourStep[] = [
+  {
+    element: '[data-tour="asset-library"]',
+    popover: {
+      title: '1. Choisissez vos sprites',
+      description: 'Filtrez la bibliothèque puis cliquez sur un sprite pour l’ajouter à la piste ou au groupe actif.',
+      side: 'right',
+      align: 'start'
+    }
+  },
+  {
+    element: '[data-tour="stage"]',
+    popover: {
+      title: '2. Composez la scène',
+      description: 'Déplacez et redimensionnez les éléments. Le mode « Groupe entier » transforme tous les enfants ensemble.',
+      side: 'left',
+      align: 'center'
+    }
+  },
+  {
+    element: '[data-tour="hierarchy"]',
+    popover: {
+      title: '3. Organisez les groupes',
+      description: 'Sélectionnez un groupe cible, configurez ses calques ou supprimez-le avec confirmation.',
+      side: 'left',
+      align: 'start'
+    }
+  },
+  {
+    element: '[data-tour="timeline"]',
+    popover: {
+      title: '4. Animez dans le temps',
+      description: 'Placez la tête de lecture et créez uniquement les changements de pose nécessaires.',
+      side: 'top',
+      align: 'center'
+    }
+  },
+  {
+    element: '[data-tour="backup"]',
+    popover: {
+      title: '5. Sauvegardez votre travail',
+      description: 'Créez une sauvegarde complète de l’application ou restaurez la dernière version enregistrée.',
+      side: 'bottom',
+      align: 'end'
+    }
+  },
+  {
+    element: '[data-tour="export"]',
+    popover: {
+      title: '6. Exportez les changements',
+      description: 'Téléchargez une image, les données JSON ou une archive de keyframes nommées séquentiellement.',
+      side: 'bottom',
+      align: 'end'
+    }
+  }
+]
 
 function addInitialKeyframe(
   category: AssetCategory,
@@ -136,6 +199,7 @@ onBeforeUnmount(() => {
       @open-settings="isSettingsOpen = true"
       @open-export="isExportOpen = true"
       @open-saved-keyframes="isSavedKeyframesOpen = true"
+      @start-tour="productTourRef?.start()"
     />
 
     <!-- Zone Centrale du Studio (3 Colonnes) -->
@@ -181,5 +245,13 @@ onBeforeUnmount(() => {
 
     <!-- Système de notifications Toasts -->
     <ToastContainer />
+    <ProductTour
+      ref="productTourRef"
+      :steps="productTourSteps"
+      auto-start
+      storage-key="berlu-creator.product-tour.v1"
+      :start-delay-ms="1400"
+      :config="{ skipMissingElement: true }"
+    />
   </div>
 </template>

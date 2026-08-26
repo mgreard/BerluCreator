@@ -8,8 +8,22 @@ function trackMatchesCategory(track: TimelineTrack, category: AssetCategory) {
 export function findAssetTargetTrack(
   tracks: TimelineTrack[],
   selectedTrack: TimelineTrack | null | undefined,
-  category: AssetCategory
+  category: AssetCategory,
+  activeGroupId?: string | null
 ) {
+  if (activeGroupId) {
+    if (
+      selectedTrack?.groupId === activeGroupId &&
+      trackMatchesCategory(selectedTrack, category)
+    ) {
+      return selectedTrack
+    }
+
+    return tracks.find(
+      (track) => track.groupId === activeGroupId && trackMatchesCategory(track, category)
+    )
+  }
+
   if (selectedTrack && trackMatchesCategory(selectedTrack, category)) {
     return selectedTrack
   }

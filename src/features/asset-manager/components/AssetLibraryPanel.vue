@@ -3,7 +3,6 @@ import { ref, computed, onMounted, watch } from 'vue'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { CATEGORY_LIST } from '@core/constants/categories'
 import { useAssetStore } from '../stores/useAssetStore'
-import { seedDemoAssetsIfEmpty } from '../services/demo-asset-seeder'
 import {
   findAssetTargetTrack,
   resolveAssetAssignmentTime
@@ -12,11 +11,9 @@ import AssetCard from './AssetCard.vue'
 import AssetUploadModal from './AssetUploadModal.vue'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { IconButton } from '@/components/ui/icon-button'
 import { Icon } from '@/components/ui/icon'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Tabs, type TabItem, type TabTone } from '@/components/ui/tabs'
-import { toast } from '@/ui/shared/services/toast.service'
 
 import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
@@ -24,8 +21,6 @@ import { ASSET_CATEGORIES } from '@core/constants/categories'
 const assetStore = useAssetStore()
 const timelineStore = useTimelineStore()
 const isUploadModalOpen = ref(false)
-const isReloading = ref(false)
-const isCropping = ref(false)
 
 watch(
   () => timelineStore.selectedTrack?.targetSlot ?? timelineStore.selectedTrack?.category,
@@ -57,14 +52,23 @@ function onSelectAsset(asset: Asset) {
   const catDef = ASSET_CATEGORIES[asset.category]
   const allowsMultipleTracks = catDef?.trackCardinality === 'multi'
   const selectedTrack = timelineStore.selectedTrack
+  const activeGroupId = timelineStore.editScope === 'group'
+    ? timelineStore.selectedGroupId
+    : null
   let targetTrack = findAssetTargetTrack(
     timelineStore.currentSequence.tracks,
     selectedTrack,
-    asset.category
+    asset.category,
+    activeGroupId
   )
 
-  if (!targetTrack && allowsMultipleTracks) {
-    targetTrack = timelineStore.addTrack(asset.category, asset.name)
+  if (!targetTrack && (allowsMultipleTracks || activeGroupId)) {
+    targetTrack = timelineStore.addTrack(
+      asset.category,
+      asset.name,
+      undefined,
+      activeGroupId ?? undefined
+    )
   }
 
   if (targetTrack) {
@@ -84,7 +88,9 @@ function onSelectAsset(asset: Asset) {
     const keyframe = targetTrack.keyframes.find(
       (candidate) => Math.abs(candidate.timeMs - targetTime) < 10
     )
-    if (sprite && keyframe) {
+    if (activeGroupId) {
+      timelineStore.selectGroupForEditing(activeGroupId)
+    } else if (sprite && keyframe) {
       timelineStore.selectSpriteForEditing(targetTrack.id, keyframe.id, sprite.id)
     } else {
       timelineStore.selectTrackForEditing(targetTrack.id)
@@ -171,43 +177,6 @@ onMounted(async () => {
   await assetStore.loadAssets()
 })
 
-async function onReloadDefaultPack() {
-  if (confirm('Voulez-vous réinitialiser et recharger le pack complet des 68 sprites par défaut ?')) {
-    isReloading.value = true
-    try {
-      await seedDemoAssetsIfEmpty(true)
-      await assetStore.loadAssets()
-    } finally {
-      isReloading.value = false
-    }
-  }
-}
-
-async function onTrimExistingAssets() {
-  const accepted = confirm(
-    `Cette migration va remplacer les fichiers de ${assetStore.assets.length} assets par des PNG recadrés. ` +
-      'Une sauvegarde manuelle du projet est recommandée avant de continuer. Lancer le recadrage ?'
-  )
-  if (!accepted) return
-
-  isCropping.value = true
-  try {
-    const result = await assetStore.trimExistingAssets()
-    toast.success(
-      'Recadrage terminé',
-      `${result.cropped} asset(s) recadré(s), ${result.unchanged} inchangé(s)` +
-        (result.failed > 0 ? `, ${result.failed} échec(s).` : '.')
-    )
-  } catch (error) {
-    toast.error(
-      'Échec du recadrage',
-      error instanceof Error ? error.message : 'Une erreur inconnue est survenue.'
-    )
-  } finally {
-    isCropping.value = false
-  }
-}
-
 function onDeleteAsset(asset: Asset) {
   if (confirm(`Voulez-vous vraiment supprimer l'asset "${asset.name}" ?`)) {
     assetStore.deleteAsset(asset.id)
@@ -216,7 +185,7 @@ function onDeleteAsset(asset: Asset) {
 </script>
 
 <template>
-  <div class="w-full h-full border-r border-border-subtle bg-bg-surface/30 backdrop-blur-md flex flex-row select-none overflow-hidden">
+  <div data-tour="asset-library" class="w-full h-full border-r border-border-subtle bg-bg-surface/30 backdrop-blur-md flex flex-row select-none overflow-hidden">
     <!-- 1. Rail vertical des catégories (à gauche) -->
     <Tabs
       v-model="selectedCategoryTab"
@@ -244,32 +213,11 @@ function onDeleteAsset(asset: Asset) {
             variant="primary"
             size="sm"
             class="h-7 px-2.5 text-xs gap-1 font-medium shadow-glass-sm"
-            :disabled="isCropping"
             @click="isUploadModalOpen = true"
           >
             <Icon name="cloud_upload" size="xs" />
             <span>Importer</span>
           </Button>
-
-          <IconButton
-            icon="content_cut"
-            size="xs"
-            variant="ghost"
-            title="Migration temporaire : recadrer les bords transparents des assets existants"
-            class="text-warning hover:text-warning"
-            :disabled="isCropping || isReloading || assetStore.assets.length === 0"
-            @click="onTrimExistingAssets"
-          />
-
-          <IconButton
-            icon="restart_alt"
-            size="xs"
-            variant="ghost"
-            title="Recharger le pack complet des 68 sprites"
-            class="text-text-muted hover:text-text-primary"
-            :disabled="isReloading || isCropping"
-            @click="onReloadDefaultPack"
-          />
         </div>
       </div>
 

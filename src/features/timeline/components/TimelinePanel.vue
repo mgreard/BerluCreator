@@ -165,6 +165,7 @@ function onHeadersScroll() {
 <template>
   <div
     :id="timelinePanelId"
+    data-tour="timeline"
     class="relative border-t border-border-subtle bg-bg-surface/50 backdrop-blur-md flex flex-col shrink-0 select-none"
     :style="{ height: `${timelineHeight}px` }"
   >

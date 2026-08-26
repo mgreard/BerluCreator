@@ -287,10 +287,12 @@ async function handleBatchImportSlices() {
     <div v-else-if="importMode === 'single' && selectedPreparedFile" class="-m-6 flex h-full min-h-0 overflow-hidden">
       <aside class="w-56 shrink-0 overflow-y-auto border-r border-border-subtle bg-bg-surface/40 p-3 custom-scrollbar">
         <div class="mb-3 text-xs font-semibold text-text-muted">{{ preparedFiles.length }} image(s)</div>
-        <button
+        <Button
           v-for="entry in preparedFiles"
           :key="entry.id"
           type="button"
+          variant="ghost"
+          size="sm"
           class="mb-2 flex w-full items-center gap-2 rounded-lg border p-2 text-left transition-colors"
           :class="entry.id === selectedPreparedFile.id ? 'border-primary bg-primary/10' : 'border-border-subtle hover:bg-surface-hover'"
           @click="selectedPreparedId = entry.id"
@@ -298,7 +300,7 @@ async function handleBatchImportSlices() {
           <img :src="entry.previewUrl" alt="" class="size-10 rounded-md bg-bg-base object-contain" />
           <span class="min-w-0 flex-1 truncate text-xs text-text-primary">{{ entry.file.name }}</span>
           <Icon v-if="entry.settings.seed" name="colorize" size="xs" class="text-primary" />
-        </button>
+        </Button>
       </aside>
       <main class="min-w-0 flex-1">
         <BackgroundRemovalEditor

@@ -11,12 +11,15 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SelectableSurface } from '@/components/ui/selectable-surface'
 import CreateGroupModal from '@/features/timeline/components/CreateGroupModal.vue'
+import DeleteGroupDialog from '@/features/timeline/components/DeleteGroupDialog.vue'
 import LayerSettingsModal from './LayerSettingsModal.vue'
 
 const { activeLayers } = useHierarchyResolver()
 const timelineStore = useTimelineStore()
 
 const isCreateGroupOpen = ref(false)
+const isDeleteGroupOpen = ref(false)
+const groupToDelete = ref<TrackGroup | null>(null)
 const isSettingsOpen = ref(false)
 const settingsGroup = ref<TrackGroup | null>(null)
 const settingsLayer = ref<RenderableLayer | null>(null)
@@ -66,6 +69,11 @@ function openGroupSettings(group: TrackGroup) {
   isSettingsOpen.value = true
 }
 
+function requestGroupDeletion(group: TrackGroup) {
+  groupToDelete.value = group
+  isDeleteGroupOpen.value = true
+}
+
 function openLayerSettings(layer: RenderableLayer) {
   selectLayer(layer)
   settingsGroup.value = null
@@ -100,7 +108,7 @@ watch(
 </script>
 
 <template>
-  <div class="w-full h-full border-l border-border-subtle bg-bg-surface/50 backdrop-blur-md flex flex-col select-none">
+  <div data-tour="hierarchy" class="w-full h-full border-l border-border-subtle bg-bg-surface/50 backdrop-blur-md flex flex-col select-none">
     <div class="h-10 border-b border-border-subtle px-3 flex items-center justify-between shrink-0">
       <div class="flex items-center gap-1.5 font-semibold text-xs text-text-primary">
         <Icon name="account_tree" size="xs" class="text-primary" />
@@ -169,6 +177,14 @@ watch(
             :aria-label="`Configurer ${group.name}`"
             title="Configurer le groupe"
             @click.stop="openGroupSettings(group)"
+          />
+          <IconButton
+            icon="delete"
+            size="xs"
+            variant="destructive"
+            :aria-label="`Supprimer le groupe ${group.name}`"
+            title="Supprimer le groupe"
+            @click.stop="requestGroupDeletion(group)"
           />
         </SelectableSurface>
 
@@ -267,6 +283,10 @@ watch(
     </div>
 
     <CreateGroupModal v-model:open="isCreateGroupOpen" />
+    <DeleteGroupDialog
+      v-model:open="isDeleteGroupOpen"
+      :group="groupToDelete"
+    />
     <LayerSettingsModal
       v-model:open="isSettingsOpen"
       :group="settingsGroup"

@@ -8,13 +8,15 @@ import {
 function createTrack(
   id: string,
   category: TimelineTrack['category'],
-  keyframes: TimelineTrack['keyframes'] = []
+  keyframes: TimelineTrack['keyframes'] = [],
+  groupId?: string
 ): TimelineTrack {
   return {
     id,
     name: id,
     category,
     targetSlot: category,
+    groupId,
     zIndex: 0,
     muted: false,
     locked: false,
@@ -37,6 +39,28 @@ describe('asset timeline assignment', () => {
     const mouthTrack = createTrack('mouth', 'mouth')
 
     expect(findAssetTargetTrack([headTrack, mouthTrack], mouthTrack, 'head')).toBe(headTrack)
+  })
+
+  it('prioritizes a matching track inside the active group', () => {
+    const defaultTrack = createTrack('head-default', 'head', [], 'group-default')
+    const targetTrack = createTrack('head-target', 'head', [], 'group-target')
+
+    expect(
+      findAssetTargetTrack(
+        [defaultTrack, targetTrack],
+        defaultTrack,
+        'head',
+        'group-target'
+      )
+    ).toBe(targetTrack)
+  })
+
+  it('does not fall back outside the active group', () => {
+    const defaultTrack = createTrack('head-default', 'head', [], 'group-default')
+
+    expect(
+      findAssetTargetTrack([defaultTrack], defaultTrack, 'head', 'group-target')
+    ).toBeUndefined()
   })
 
   it('uses the exact time of the selected keyframe on the selected track', () => {
