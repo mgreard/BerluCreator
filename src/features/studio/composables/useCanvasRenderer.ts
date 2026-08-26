@@ -2,6 +2,7 @@ import { ref, watchEffect, onWatcherCleanup, type Ref } from 'vue'
 import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 import type { RenderableLayer } from './useHierarchyResolver'
 import type { StageSettings } from '@core/types/project.types'
+import type { BoxBounds } from '../engine/transform-matrix'
 
 const globalImageCache = new Map<string, HTMLImageElement>()
 
@@ -35,10 +36,7 @@ export async function fetchAndLoadImage(
 export function drawLayersOnContext(
   ctx: CanvasRenderingContext2D,
   layers: RenderableLayer[],
-  imageCache: Map<string, HTMLImageElement> = globalImageCache,
-  options?: {
-    showAnchors?: boolean
-  }
+  imageCache: Map<string, HTMLImageElement> = globalImageCache
 ) {
   for (const layer of layers) {
     const img = imageCache.get(layer.asset.blobId)
@@ -66,33 +64,13 @@ export function drawLayersOnContext(
         ctx.drawImage(img, layer.x, layer.y, layer.width, layer.height)
       }
 
-      // Dessiner les ancres en surimpression si activé et demandé
-      if (options?.showAnchors && layer.asset.anchors) {
-        for (const anchor of layer.asset.anchors) {
-          const ax = layer.x + anchor.x
-          const ay = layer.y + anchor.y
-          ctx.beginPath()
-          ctx.arc(ax, ay, 6, 0, Math.PI * 2)
-          ctx.fillStyle = anchor.type === 'socket' ? '#38bdf8' : '#f43f5e'
-          ctx.fill()
-          ctx.strokeStyle = '#ffffff'
-          ctx.lineWidth = 2
-          ctx.stroke()
-
-          // Label de l'ancre
-          ctx.fillStyle = '#ffffff'
-          ctx.font = '11px sans-serif'
-          ctx.fillText(`${anchor.name} (${anchor.type})`, ax + 8, ay + 4)
-        }
-      }
-
       ctx.restore()
     }
   }
 }
 
 /**
- * Capture un instantané PNG/JPEG propre (sans helpers : pas de pointillés, pas de grille, pas de safe-area, pas d'ancres).
+ * Capture un instantané PNG/JPEG propre (sans helpers : pas de pointillés, pas de grille, pas de safe-area).
  */
 export async function captureCleanFrame(
   layers: RenderableLayer[],
@@ -114,8 +92,8 @@ export async function captureCleanFrame(
   // 2. Précharger tous les assets de la scène
   await Promise.all(layers.map((l) => fetchAndLoadImage(l.asset.blobId, globalImageCache)))
 
-  // 3. Dessiner strictement les calques (sans repères d'édition ni helpers)
-  drawLayersOnContext(ctx, layers, globalImageCache, { showAnchors: false })
+  // 3. Dessiner strictement les calques
+  drawLayersOnContext(ctx, layers, globalImageCache)
 
   return offscreenCanvas.toDataURL(format)
 }
@@ -124,7 +102,10 @@ export function useCanvasRenderer(
   canvasRef: Ref<HTMLCanvasElement | null>,
   activeLayers: Ref<RenderableLayer[]>,
   stage: Ref<StageSettings>,
-  selectedTrackId?: Ref<string | null>
+  selectedTrackId?: Ref<string | null>,
+  selectedBounds?: Ref<BoxBounds | null>,
+  targetLabel?: Ref<string | null>,
+  isGroupScope?: Ref<boolean>
 ) {
   const isRendering = ref(false)
 
@@ -135,7 +116,7 @@ export function useCanvasRenderer(
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const { width, height, backgroundColor, safeArea, showGrid, showAnchors } = stage.value
+    const { width, height, backgroundColor, safeArea, showGrid } = stage.value
 
     // Adapter la taille du canvas
     if (canvas.width !== width || canvas.height !== height) {
@@ -178,28 +159,64 @@ export function useCanvasRenderer(
       }
     }
 
-    drawLayersOnContext(ctx, layers, globalImageCache, { showAnchors })
+    drawLayersOnContext(ctx, layers, globalImageCache)
 
-    // 4. Cadre de sélection du calque actif (helpers d'édition en direct)
-    if (selectedTrackId?.value) {
-      const selectedLayer = layers.find((l) => l.trackId === selectedTrackId.value)
-      if (selectedLayer) {
-        ctx.save()
-        ctx.strokeStyle = selectedLayer.isMovable ? '#818cf8' : 'rgba(255, 255, 255, 0.25)'
-        ctx.lineWidth = 1.5
-        ctx.setLineDash(selectedLayer.isMovable ? [6, 4] : [3, 3])
-        ctx.strokeRect(selectedLayer.x, selectedLayer.y, selectedLayer.width, selectedLayer.height)
+    // 4. Cadre de sélection interactif avec 4 poignées d'angles (Gizmo Transform)
+    const bounds = selectedBounds?.value
+    if (bounds && bounds.width > 0 && bounds.height > 0) {
+      ctx.save()
+      const isGroup = isGroupScope?.value ?? false
+      const primaryColor = isGroup ? '#6366f1' : '#38bdf8' // Indigo pour groupe, Cyan pour sprite individuel
+      const handleSize = 10
 
-        if (selectedLayer.isMovable) {
-          ctx.fillStyle = '#818cf8'
-          const handleSize = 6
-          ctx.fillRect(selectedLayer.x - handleSize / 2, selectedLayer.y - handleSize / 2, handleSize, handleSize)
-          ctx.fillRect(selectedLayer.x + selectedLayer.width - handleSize / 2, selectedLayer.y - handleSize / 2, handleSize, handleSize)
-          ctx.fillRect(selectedLayer.x - handleSize / 2, selectedLayer.y + selectedLayer.height - handleSize / 2, handleSize, handleSize)
-          ctx.fillRect(selectedLayer.x + selectedLayer.width - handleSize / 2, selectedLayer.y + selectedLayer.height - handleSize / 2, handleSize, handleSize)
-        }
-        ctx.restore()
+      // Cadre de sélection
+      ctx.strokeStyle = primaryColor
+      ctx.lineWidth = 2
+      ctx.setLineDash([6, 4])
+      ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height)
+      ctx.setLineDash([])
+
+      // 4 Poignées de coin (Corner Handles : TL, TR, BL, BR)
+      const corners = [
+        { x: bounds.x, y: bounds.y }, // Top-Left
+        { x: bounds.x + bounds.width, y: bounds.y }, // Top-Right
+        { x: bounds.x, y: bounds.y + bounds.height }, // Bottom-Left
+        { x: bounds.x + bounds.width, y: bounds.y + bounds.height } // Bottom-Right
+      ]
+
+      for (const corner of corners) {
+        // Ombre de poignée
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
+        ctx.fillRect(corner.x - handleSize / 2 + 1, corner.y - handleSize / 2 + 1, handleSize, handleSize)
+
+        // Corps blanc
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(corner.x - handleSize / 2, corner.y - handleSize / 2, handleSize, handleSize)
+
+        // Contour accentué
+        ctx.strokeStyle = primaryColor
+        ctx.lineWidth = 2
+        ctx.strokeRect(corner.x - handleSize / 2, corner.y - handleSize / 2, handleSize, handleSize)
       }
+
+      // Étiquette informative au-dessus de la sélection
+      if (targetLabel?.value) {
+        ctx.font = 'bold 11px sans-serif'
+        const labelText = targetLabel.value
+        const textMetrics = ctx.measureText(labelText)
+        const badgeW = textMetrics.width + 14
+        const badgeH = 20
+        const badgeX = bounds.x
+        const badgeY = Math.max(4, bounds.y - badgeH - 4)
+
+        ctx.fillStyle = primaryColor
+        ctx.fillRect(badgeX, badgeY, badgeW, badgeH)
+
+        ctx.fillStyle = '#ffffff'
+        ctx.fillText(labelText, badgeX + 7, badgeY + 14)
+      }
+
+      ctx.restore()
     }
 
     // 5. Safe Area TV (Action safe 93%, Title safe 90%)
@@ -216,13 +233,16 @@ export function useCanvasRenderer(
 
   watchEffect(() => {
     // Dépendances réactives
-    const _layers = activeLayers.value
-    const _stage = stage.value
-    const _selected = selectedTrackId?.value
+    void activeLayers.value
+    void stage.value
+    void selectedTrackId?.value
+    void selectedBounds?.value
+    void targetLabel?.value
+    void isGroupScope?.value
     render()
 
     onWatcherCleanup(() => {
-      // Nettoyage éventuel
+      // Nettoyage
     })
   })
 

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { Keyframe } from '@core/types/timeline.types'
 import { useTimelineStore } from '../stores/useTimelineStore'
+import { SelectableSurface } from '@/components/ui/selectable-surface'
 
 const { keyframe, trackId } = defineProps<{
   keyframe: Keyframe
@@ -16,10 +17,10 @@ const leftPositionPx = computed(() => {
   return (keyframe.timeMs / 1000) * timelineStore.playback.zoom
 })
 
-function handleClick(e: MouseEvent) {
+function handleClick(e: MouseEvent | KeyboardEvent) {
   e.stopPropagation()
   timelineStore.selectedKeyframeId = keyframe.id
-  timelineStore.selectedTrackId = trackId
+  timelineStore.selectTrackForEditing(trackId)
   timelineStore.seek(keyframe.timeMs)
 }
 
@@ -30,8 +31,13 @@ function handleContextMenu(e: MouseEvent) {
 </script>
 
 <template>
-  <div
-    class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 cursor-pointer group select-none"
+  <SelectableSurface
+    as="button"
+    role="button"
+    density="compact"
+    :selected="isSelected"
+    :aria-label="`Keyframe à ${keyframe.timeMs} millisecondes`"
+    class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 cursor-pointer group select-none w-8 h-8 min-h-0 flex items-center justify-center"
     :style="{ left: `${leftPositionPx}px` }"
     @click="handleClick"
     @contextmenu="handleContextMenu"
@@ -53,5 +59,5 @@ function handleContextMenu(e: MouseEvent) {
     >
       {{ keyframe.label }} ({{ keyframe.timeMs }}ms)
     </span>
-  </div>
+  </SelectableSurface>
 </template>

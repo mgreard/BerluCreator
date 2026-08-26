@@ -9,6 +9,8 @@ import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Badge } from '@/components/ui/badge'
+import { Heading } from '@/components/ui/heading'
+import { Text } from '@/components/ui/text'
 
 const open = defineModel<boolean>('open', { default: false })
 
@@ -67,10 +69,10 @@ async function captureCurrentFrame() {
     <div class="space-y-4 text-xs">
       <div class="p-3 rounded-lg border border-border/40 bg-surface/40 flex items-center justify-between">
         <div>
-          <h4 class="font-semibold text-foreground">Structure Complète du Projet (JSON)</h4>
-          <p class="text-[11px] text-muted-foreground mt-0.5">
+          <Heading as="h4" variant="sm" class="font-semibold text-foreground">Structure Complète du Projet (JSON)</Heading>
+          <Text variant="caption" color="muted" class="text-[11px] mt-0.5">
             Inclut les pistes, ancres, keyframes et métadonnées d'assets.
-          </p>
+          </Text>
         </div>
         <Button size="sm" variant="secondary" class="gap-1.5" @click="downloadJson">
           <Icon name="data_object" size="xs" />
@@ -80,10 +82,10 @@ async function captureCurrentFrame() {
 
       <div class="p-3 rounded-lg border border-border/40 bg-surface/40 flex items-center justify-between">
         <div>
-          <h4 class="font-semibold text-foreground">Instantané PNG de l'Image Actuelle</h4>
-          <p class="text-[11px] text-muted-foreground mt-0.5">
+          <Heading as="h4" variant="sm" class="font-semibold text-foreground">Instantané PNG de l'Image Actuelle</Heading>
+          <Text variant="caption" color="muted" class="text-[11px] mt-0.5">
             Rendu haute résolution sans repères au timecode {{ (timelineStore.playback.currentTimeMs / 1000).toFixed(2) }}s.
-          </p>
+          </Text>
         </div>
         <Button
           size="sm"

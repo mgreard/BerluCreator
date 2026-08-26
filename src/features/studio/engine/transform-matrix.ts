@@ -1,8 +1,13 @@
-import type { AnchorPoint } from '@core/types/asset.types'
-
 export interface Point2D {
   x: number
   y: number
+}
+
+export interface BoxBounds {
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 export interface ResolvedLayerPosition {
@@ -15,20 +20,25 @@ export interface ResolvedLayerPosition {
 }
 
 /**
- * Calcule la position d'un élément enfant par rapport à son parent en faisant coïncider
- * le point de montage (Mount) de l'enfant avec le point d'accueil (Socket) du parent.
+ * Calcule les bornes visuelles réelles d'un élément tenant compte de son échelle (centrée).
  */
-export function resolveChildPosition(
-  parentPos: Point2D,
-  parentSocket: AnchorPoint | undefined,
-  childMount: AnchorPoint | undefined
-): Point2D {
-  if (!parentSocket || !childMount) {
-    return { ...parentPos }
-  }
+export function computeTransformedBounds(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  scaleX: number = 1,
+  scaleY: number = 1
+): BoxBounds {
+  const scaledWidth = width * scaleX
+  const scaledHeight = height * scaleY
+  const visualX = x + (width - scaledWidth) / 2
+  const visualY = y + (height - scaledHeight) / 2
 
   return {
-    x: parentPos.x + parentSocket.x - childMount.x,
-    y: parentPos.y + parentSocket.y - childMount.y
+    x: Math.round(visualX),
+    y: Math.round(visualY),
+    width: Math.round(scaledWidth),
+    height: Math.round(scaledHeight)
   }
 }

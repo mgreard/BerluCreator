@@ -7,7 +7,7 @@ Composant interactif polyvalent, hautement accessible (WAI-ARIA), supportant les
 ## Fonctionnalités
 
 - **Variantes visuelles :** `primary`, `secondary`, `accent`, `ghost`, `destructive`.
-- **Formes & Tailles :** Forme pilule (`pill`) ou arrondie (`rounded`), tailles `sm`, `md`, `lg`.
+- **Formes & Tailles :** Forme pilule (`pill`) ou arrondie (`rounded`), tailles `xs`, `sm`, `md`, `lg`. La taille `xs` conserve une cible tactile virtuelle de 44 px.
 - **Support asynchrone :** Spinner intégré avec transition douce et option de texte contextuel `loadingText`.
 - **Polymorphisme & Routage :** Rendu automatique en `<a>` si `href` est renseigné, ou avec le `<RouterLink>` enregistré par l’application si `to` est renseigné. Sans Vue Router, une cible `to` textuelle produit un lien `<a href>` fonctionnel.
 
@@ -18,7 +18,7 @@ Composant interactif polyvalent, hautement accessible (WAI-ARIA), supportant les
 | Prop          | Type                                                              | Défaut      | Description                                  |
 | :------------ | :---------------------------------------------------------------- | :---------- | :------------------------------------------- |
 | `variant`     | `'primary' \| 'secondary' \| 'accent' \| 'ghost' \| 'destructive'`| `'primary'` | Variante visuelle du bouton                  |
-| `size`        | `'sm' \| 'md' \| 'lg'`                                 | `'md'`      | Taille et espacement                         |
+| `size`        | `'xs' \| 'sm' \| 'md' \| 'lg'`                         | `'md'`      | Taille et espacement                         |
 | `shape`       | `'pill' \| 'rounded'`                                  | `'pill'`    | Forme des coins                              |
 | `disabled`    | `boolean`                                              | `false`     | Désactive les clics et configure ARIA        |
 | `loading`     | `boolean`                                              | `false`     | Affiche l'animation de chargement            |

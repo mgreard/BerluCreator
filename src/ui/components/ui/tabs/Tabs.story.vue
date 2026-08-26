@@ -4,6 +4,7 @@ import Tabs from './Tabs.vue'
 import type { TabItem } from './types'
 
 const activeTab = ref('general')
+const activeRailTab = ref('all')
 
 const tabItems: TabItem[] = [
   {
@@ -26,6 +27,19 @@ const tabItems: TabItem[] = [
     content: 'Historique des factures et moyens de paiement.'
   },
   { key: 'integrations', label: 'Intégrations', icon: '🔌', disabled: true }
+]
+
+const railItems: TabItem[] = [
+  { key: 'all', label: 'Tous les sprites', icon: 'apps', badge: 68, tone: 'indigo' },
+  { key: 'backdrop', label: 'Décors', icon: 'tv_gen', badge: 1, tone: 'sky' },
+  { key: 'torso', label: 'Torses', icon: 'body_system', badge: 7, tone: 'amber' },
+  { key: 'head', label: 'Têtes', icon: 'face', badge: 7, tone: 'rose' },
+  { key: 'mouth', label: 'Bouches', icon: 'sentiment_satisfied', badge: 1, tone: 'red' },
+  { key: 'eyes', label: 'Yeux', icon: 'visibility', badge: 6, tone: 'cyan' },
+  { key: 'arms_left', label: 'Bras gauche', icon: 'front_hand', badge: 6, tone: 'emerald' },
+  { key: 'arms_right', label: 'Bras droit', icon: 'waving_hand', badge: 7, tone: 'lime' },
+  { key: 'props', label: 'Accessoires', icon: 'mic', badge: 36, tone: 'purple' },
+  { key: 'overlay', label: 'Habillage', icon: 'newspaper', badge: 2, tone: 'yellow' }
 ]
 </script>
 
@@ -55,6 +69,18 @@ const tabItems: TabItem[] = [
           >
           <Tabs v-model="activeTab" :tabs="tabItems" variant="underline" />
         </div>
+      </div>
+    </Variant>
+
+    <Variant title="Vertical Color Rail">
+      <div class="h-[540px] w-24 overflow-hidden rounded-3xl border border-border-default bg-bg-base p-2">
+        <Tabs
+          v-model="activeRailTab"
+          :tabs="railItems"
+          variant="rail"
+          orientation="vertical"
+          aria-label="Catégories de sprites"
+        />
       </div>
     </Variant>
   </Story>

@@ -18,10 +18,6 @@ function toggleGrid() {
 function toggleSafeArea() {
   projectStore.updateStage({ safeArea: !stage.value.safeArea })
 }
-
-function toggleAnchors() {
-  projectStore.updateStage({ showAnchors: !stage.value.showAnchors })
-}
 </script>
 
 <template>
@@ -55,15 +51,6 @@ function toggleAnchors() {
           title="Afficher/Masquer la Safe-Area TV"
           class="text-text-muted hover:text-text-primary"
           @click="toggleSafeArea"
-        />
-        <IconButton
-          :icon="stage.showAnchors ? 'scatter_plot' : 'grain'"
-          size="xs"
-          variant="ghost"
-          :active="stage.showAnchors"
-          title="Afficher/Masquer les points d'ancrage"
-          class="text-text-muted hover:text-text-primary"
-          @click="toggleAnchors"
         />
 
         <Separator orientation="vertical" variant="subtle" class="h-4 mx-1" />

@@ -22,7 +22,7 @@ function handleLaneClick(e: MouseEvent) {
   const clickedTimeMs = (clickX / timelineStore.playback.zoom) * 1000
 
   timelineStore.seek(clickedTimeMs)
-  timelineStore.selectedTrackId = track.id
+  timelineStore.selectTrackForEditing(track.id)
 }
 
 function handleLaneDblClick(e: MouseEvent) {

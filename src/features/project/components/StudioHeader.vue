@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { useProjectStore } from '../stores/useProjectStore'
 import { Button } from '@/components/ui/button'
-import { IconButton } from '@/components/ui/icon-button'
 import { Icon } from '@/components/ui/icon'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Heading } from '@/components/ui/heading'
 
 const emit = defineEmits<{
   (e: 'openSettings'): void
@@ -24,9 +24,9 @@ const projectStore = useProjectStore()
           <Icon name="movie" size="sm" />
         </div>
         <div>
-          <h1 class="text-sm font-black font-display tracking-tight bg-gradient-to-r from-text-primary via-text-primary/90 to-text-muted bg-clip-text text-transparent leading-none">
+          <Heading as="h1" variant="sm" class="text-sm font-black font-display tracking-tight bg-gradient-to-r from-text-primary via-text-primary/90 to-text-muted bg-clip-text text-transparent leading-none">
             BerluCreator
-          </h1>
+          </Heading>
           <span class="text-[10px] text-text-muted font-mono block mt-0.5">
             Studio 2D Stop-Motion
           </span>

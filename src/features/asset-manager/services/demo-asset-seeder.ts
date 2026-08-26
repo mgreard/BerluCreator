@@ -52,7 +52,6 @@ export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
         blobId,
         width: dimensions.width,
         height: dimensions.height,
-        anchors: [],
         isMovable: spriteConfig.isMovable,
         createdAt: Date.now(),
         updatedAt: Date.now()

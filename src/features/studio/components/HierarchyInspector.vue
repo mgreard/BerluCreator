@@ -5,6 +5,10 @@ import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { Badge } from '@/components/ui/badge'
 import { Icon } from '@/components/ui/icon'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { EmptyState } from '@/components/ui/empty-state'
+import { SelectableSurface } from '@/components/ui/selectable-surface'
 import type { TrackGroupColor } from '@core/types/timeline.types'
 import CreateGroupModal from '@/features/timeline/components/CreateGroupModal.vue'
 
@@ -42,27 +46,11 @@ const groupColorDots: Record<TrackGroupColor, string> = {
   cyan: 'bg-cyan-500'
 }
 
-function changeTrackZIndex(trackId: string, delta: number) {
-  const track = timelineStore.currentSequence.tracks.find((t) => t.id === trackId)
-  if (track) {
-    const newZ = Math.max(0, Math.min(100, track.zIndex + delta))
-    timelineStore.updateTrackZIndex(trackId, newZ)
-  }
-}
-
 function setTrackZIndex(trackId: string, event: Event) {
   const input = event.target as HTMLInputElement
   const value = parseInt(input.value, 10)
   if (!isNaN(value)) {
     timelineStore.updateTrackZIndex(trackId, Math.max(0, Math.min(100, value)))
-  }
-}
-
-function changeGroupZIndex(groupId: string, delta: number) {
-  const group = timelineStore.currentSequence.groups?.find((g) => g.id === groupId)
-  if (group) {
-    const newZ = Math.max(0, Math.min(100, group.zIndex + delta))
-    timelineStore.updateGroupZIndex(groupId, newZ)
   }
 }
 
@@ -72,6 +60,32 @@ function setGroupZIndex(groupId: string, event: Event) {
   if (!isNaN(value)) {
     timelineStore.updateGroupZIndex(groupId, Math.max(0, Math.min(100, value)))
   }
+}
+
+function setGroupScale(groupId: string, event: Event) {
+  const input = event.target as HTMLInputElement
+  const value = parseFloat(input.value)
+  if (!isNaN(value)) {
+    const clamped = Number(Math.max(0.1, Math.min(4.0, value)).toFixed(2))
+    timelineStore.updateGroupTransform(groupId, { scaleX: clamped, scaleY: clamped })
+  }
+}
+
+function setLayerScale(layer: RenderableLayer, event: Event) {
+  const input = event.target as HTMLInputElement
+  const value = parseFloat(input.value)
+  if (!isNaN(value) && layer.keyframeId) {
+    const clamped = Number(Math.max(0.1, Math.min(4.0, value)).toFixed(2))
+    timelineStore.updateKeyframeTransform(layer.trackId, layer.keyframeId, { scaleX: clamped, scaleY: clamped })
+  }
+}
+
+function selectGroup(groupId: string) {
+  timelineStore.selectGroupForEditing(groupId)
+}
+
+function selectLayer(layer: RenderableLayer) {
+  timelineStore.selectTrackForEditing(layer.trackId)
 }
 </script>
 
@@ -85,15 +99,16 @@ function setGroupZIndex(groupId: string, event: Event) {
       </div>
 
       <div class="flex items-center gap-2">
-        <button
-          type="button"
+        <Button
+          size="xs"
+          variant="ghost"
           class="flex items-center gap-1 text-[10px] font-bold text-primary hover:text-primary-hover bg-primary/10 hover:bg-primary/20 px-1.5 py-0.5 rounded border border-primary/30 transition-colors cursor-pointer"
           title="Créer un nouveau groupe"
           @click="isCreateGroupOpen = true"
         >
           <Icon name="create_new_folder" size="xs" />
           <span>+ Groupe</span>
-        </button>
+        </Button>
 
         <Badge variant="neutral" size="sm" class="text-[10px] font-mono">
           {{ activeLayers.length }}
@@ -108,60 +123,73 @@ function setGroupZIndex(groupId: string, event: Event) {
         :key="group.id"
         class="rounded-xl border border-border-subtle/80 bg-bg-surface/70 overflow-hidden shadow-xs"
       >
-        <!-- En-tête du groupe avec Z-Index Global -->
-        <div
+        <!-- En-tête du groupe avec Z-Index Global et Scale -->
+        <SelectableSurface
           class="px-2.5 py-2 bg-bg-surface-hover/50 border-b border-border-subtle/60 flex items-center justify-between gap-1.5 cursor-pointer"
-          :class="{ 'ring-1 ring-primary/40 bg-primary/10': timelineStore.selectedGroupId === group.id }"
-          @click="timelineStore.selectedGroupId = group.id"
+          density="compact"
+          role="treeitem"
+          :selected="timelineStore.selectedGroupId === group.id && timelineStore.editScope === 'group'"
+          :class="{
+            'ring-1 ring-primary/40 bg-primary/10':
+              timelineStore.selectedGroupId === group.id && timelineStore.editScope === 'group'
+          }"
+          @click="selectGroup(group.id)"
         >
           <div class="flex items-center gap-1.5 truncate flex-1 min-w-0">
             <span class="w-2.5 h-2.5 rounded-full shrink-0" :class="groupColorDots[group.color || 'indigo']" />
             <span class="font-bold text-xs text-text-primary truncate">{{ group.name }}</span>
           </div>
 
-          <!-- Contrôle Z-Index Global du Groupe -->
-          <div class="flex items-center gap-1 bg-bg-base/90 px-1.5 py-0.5 rounded border border-border-subtle/80">
-            <span class="text-text-muted font-bold text-[9px]">Z-Global:</span>
-            <input
-              type="number"
-              :value="group.zIndex"
-              class="w-6 text-center bg-transparent border-none text-primary font-bold text-xs focus:outline-none p-0"
-              min="0"
-              max="100"
-              @click.stop
-              @change="setGroupZIndex(group.id, $event)"
-            />
-            <div class="flex flex-col -space-y-1">
-              <button
-                class="text-[8px] text-text-muted hover:text-text-primary leading-none"
-                title="Augmenter Z-Global"
-                @click.stop="changeGroupZIndex(group.id, 5)"
-              >
-                ▲
-              </button>
-              <button
-                class="text-[8px] text-text-muted hover:text-text-primary leading-none"
-                title="Diminuer Z-Global"
-                @click.stop="changeGroupZIndex(group.id, -5)"
-              >
-                ▼
-              </button>
+          <div class="flex items-center gap-1 shrink-0">
+            <!-- Contrôle Scale du Groupe -->
+            <div class="flex items-center gap-1 bg-bg-base/90 px-1.5 py-0.5 rounded-md border border-border-subtle/80">
+              <span class="text-text-muted font-bold text-[9px]">S:</span>
+              <Input
+                type="number"
+                size="sm"
+                step="0.05"
+                min="0.1"
+                max="4"
+                :model-value="(group.transform?.scaleX ?? 1).toFixed(2)"
+                class="w-11 min-h-[24px] rounded-md shadow-none text-accent font-mono font-bold [&_input]:px-1 [&_input]:py-0 [&_input]:text-center [&_input]:text-[11px]"
+                title="Échelle du groupe"
+                @click.stop
+                @change="setGroupScale(group.id, $event)"
+              />
+            </div>
+
+            <!-- Contrôle Z-Index Global du Groupe -->
+            <div class="flex items-center gap-1 bg-bg-base/90 px-1.5 py-0.5 rounded-md border border-border-subtle/80">
+              <span class="text-text-muted font-bold text-[9px]">Z-G:</span>
+              <Input
+                type="number"
+                size="sm"
+                :model-value="group.zIndex"
+                class="w-10 min-h-[24px] rounded-md shadow-none text-primary font-mono font-bold [&_input]:px-1 [&_input]:py-0 [&_input]:text-center [&_input]:text-xs"
+                min="0"
+                max="100"
+                title="Z-Index Global du groupe"
+                @click.stop
+                @change="setGroupZIndex(group.id, $event)"
+              />
             </div>
           </div>
-        </div>
+        </SelectableSurface>
 
         <!-- Calques actifs dans ce groupe -->
         <div class="p-1.5 space-y-1.5">
-          <div
+          <SelectableSurface
             v-for="layer in getActiveLayersInGroup(group.id)"
             :key="layer.trackId"
             class="p-2 rounded-lg border transition-all flex flex-col gap-1.5 text-xs cursor-pointer"
+            role="treeitem"
+            :selected="timelineStore.selectedTrackId === layer.trackId && timelineStore.editScope === 'layer'"
             :class="[
-              timelineStore.selectedTrackId === layer.trackId
+              timelineStore.selectedTrackId === layer.trackId && timelineStore.editScope === 'layer'
                 ? 'bg-primary/15 border-primary/50 ring-1 ring-primary/30 font-semibold'
                 : 'bg-bg-surface/60 border-border-subtle/50 hover:bg-bg-surface-hover/80 hover:border-border-default'
             ]"
-            @click="timelineStore.selectedTrackId = layer.trackId"
+            @click="selectLayer(layer)"
           >
             <div class="flex items-center justify-between gap-1">
               <span class="font-medium text-text-primary truncate flex items-center gap-1.5 text-[11px]">
@@ -177,7 +205,7 @@ function setGroupZIndex(groupId: string, event: Event) {
               </Badge>
             </div>
 
-            <!-- Position, Rotation et Z-Index Local -->
+            <!-- Position, Rotation, Scale et Z-Index Local -->
             <div class="flex items-center justify-between text-text-muted text-[10px] font-mono pt-1 border-t border-border-subtle/40">
               <div class="flex items-center gap-1.5">
                 <span>X:{{ Math.round(layer.x) }}</span>
@@ -187,37 +215,42 @@ function setGroupZIndex(groupId: string, event: Event) {
                 </span>
               </div>
 
-              <!-- Contrôle Z-Index Local -->
-              <div class="flex items-center gap-1 bg-bg-base/80 px-1 py-0.2 rounded border border-border-subtle/70">
-                <span class="text-text-muted font-bold text-[9px]">Z-Loc:</span>
-                <input
-                  type="number"
-                  :value="layer.trackZIndex"
-                  class="w-5 text-center bg-transparent border-none text-text-primary font-bold text-[11px] focus:outline-none p-0"
-                  min="0"
-                  max="100"
-                  @click.stop
-                  @change="setTrackZIndex(layer.trackId, $event)"
-                />
-                <div class="flex flex-col -space-y-1">
-                  <button
-                    class="text-[7px] text-text-muted hover:text-text-primary leading-none"
-                    title="Augmenter Z-Local"
-                    @click.stop="changeTrackZIndex(layer.trackId, 1)"
-                  >
-                    ▲
-                  </button>
-                  <button
-                    class="text-[7px] text-text-muted hover:text-text-primary leading-none"
-                    title="Diminuer Z-Local"
-                    @click.stop="changeTrackZIndex(layer.trackId, -1)"
-                  >
-                    ▼
-                  </button>
+              <div class="flex items-center gap-1">
+                <!-- Scale Local du Calque -->
+                <div v-if="layer.keyframeId" class="flex items-center gap-0.5 bg-bg-base/80 px-1 py-0.5 rounded border border-border-subtle/70 shrink-0">
+                  <span class="text-text-muted font-bold text-[9px]">S:</span>
+                  <Input
+                    type="number"
+                    size="sm"
+                    step="0.05"
+                    min="0.1"
+                    max="4"
+                    :model-value="layer.localScaleX.toFixed(2)"
+                    class="w-10 min-h-[24px] rounded shadow-none text-text-primary font-mono font-bold [&_input]:px-0.5 [&_input]:py-0 [&_input]:text-center [&_input]:text-[10px]"
+                    title="Échelle du calque"
+                    @click.stop
+                    @change="setLayerScale(layer, $event)"
+                  />
+                </div>
+
+                <!-- Contrôle Z-Index Local -->
+                <div class="flex items-center gap-0.5 bg-bg-base/80 px-1 py-0.5 rounded border border-border-subtle/70 shrink-0">
+                  <span class="text-text-muted font-bold text-[9px]">Z:</span>
+                  <Input
+                    type="number"
+                    size="sm"
+                    :model-value="layer.trackZIndex"
+                    class="w-9 min-h-[24px] rounded shadow-none text-text-primary font-mono font-bold [&_input]:px-0.5 [&_input]:py-0 [&_input]:text-center [&_input]:text-[10px]"
+                    min="0"
+                    max="100"
+                    title="Z-Index Local"
+                    @click.stop
+                    @change="setTrackZIndex(layer.trackId, $event)"
+                  />
                 </div>
               </div>
             </div>
-          </div>
+          </SelectableSurface>
 
           <!-- Si aucun calque actif dans ce groupe -->
           <div
@@ -235,27 +268,32 @@ function setGroupZIndex(groupId: string, event: Event) {
         class="rounded-xl border border-border-subtle/80 bg-bg-surface/70 p-2 space-y-1.5"
       >
         <span class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Calques Libres</span>
-        <div
+        <SelectableSurface
           v-for="layer in ungroupedActiveLayers"
           :key="layer.trackId"
           class="p-2 rounded-lg border border-border-subtle/50 bg-bg-surface/60 text-xs flex items-center justify-between cursor-pointer"
-          :class="{ 'bg-primary/15 border-primary': timelineStore.selectedTrackId === layer.trackId }"
-          @click="timelineStore.selectedTrackId = layer.trackId"
+          density="compact"
+          role="treeitem"
+          :selected="timelineStore.selectedTrackId === layer.trackId && timelineStore.editScope === 'layer'"
+          :class="{
+            'bg-primary/15 border-primary':
+              timelineStore.selectedTrackId === layer.trackId && timelineStore.editScope === 'layer'
+          }"
+          @click="selectLayer(layer)"
         >
           <span class="truncate text-[11px]">{{ layer.asset.name }}</span>
           <span class="text-[10px] font-mono text-text-muted">Z:{{ layer.zIndex }}</span>
-        </div>
+        </SelectableSurface>
       </div>
 
       <!-- État vide global -->
-      <div
+      <EmptyState
         v-if="activeLayers.length === 0"
-        class="flex flex-col items-center justify-center p-8 text-center text-text-muted gap-2"
-      >
-        <Icon name="hourglass_empty" size="lg" class="opacity-40" />
-        <p class="text-xs">Aucun calque actif à cet instant.</p>
-        <p class="text-[11px] opacity-70">Déplacez la tête de lecture ou ajoutez des sprites.</p>
-      </div>
+        icon="hourglass_empty"
+        title="Aucun calque actif à cet instant"
+        description="Déplacez la tête de lecture ou ajoutez des sprites."
+        class="border-0 bg-transparent shadow-none p-8"
+      />
     </div>
 
     <!-- Modale de Création de Groupe -->

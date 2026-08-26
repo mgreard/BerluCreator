@@ -6,6 +6,7 @@ import { useAssetStore } from '../stores/useAssetStore'
 import { Icon } from '@/components/ui/icon'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
+import { Text } from '@/components/ui/text'
 
 const assetStore = useAssetStore()
 const isDragging = ref(false)
@@ -86,6 +87,7 @@ function openFileDialog() {
       @drop.prevent="onDrop"
       @click="openFileDialog"
     >
+      <!-- eslint-disable-next-line vue/no-restricted-html-elements -- Sélecteur de fichier natif caché, sans équivalent dans la librairie. -->
       <input
         ref="fileInputRef"
         type="file"
@@ -98,9 +100,9 @@ function openFileDialog() {
       <div class="text-xs text-foreground font-medium">
         Glissez vos images PNG transparentes ici
       </div>
-      <p class="text-[11px] text-muted-foreground">
+      <Text variant="caption" color="muted" class="text-[11px]">
         ou cliquez pour parcourir vos fichiers locaux
-      </p>
+      </Text>
       <Button size="sm" variant="secondary" class="mt-1 pointer-events-none">
         Sélectionner des fichiers
       </Button>

@@ -3,7 +3,7 @@ import type { VariantProps } from 'class-variance-authority'
 import type { buttonVariants } from './variants'
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'accent'
-export type ButtonSize = 'sm' | 'md' | 'lg'
+export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg'
 export type ButtonShape = 'pill' | 'rounded'
 export type ButtonType = 'button' | 'submit' | 'reset'
 export type ButtonVariants = VariantProps<typeof buttonVariants>

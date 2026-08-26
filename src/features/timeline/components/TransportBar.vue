@@ -102,14 +102,14 @@ function stepFrame(frames: number) {
     <!-- Zoom & Assistant IA -->
     <div class="flex items-center gap-4">
       <div class="flex items-center gap-1.5 w-36">
-        <button
-          type="button"
+        <IconButton
+          icon="zoom_out"
+          size="xs"
+          variant="ghost"
           class="text-text-muted hover:text-text-primary transition-colors cursor-pointer flex items-center justify-center p-0.5 rounded touch-manipulation"
           title="Dézoomer (-25px/s)"
           @click="timelineStore.playback.zoom = Math.max(50, timelineStore.playback.zoom - 25)"
-        >
-          <Icon name="zoom_out" size="xs" />
-        </button>
+        />
         <Slider
           v-model="timelineStore.playback.zoom"
           :min="50"
@@ -120,14 +120,14 @@ function stepFrame(frames: number) {
           :formatter="(val) => `${val}px/s`"
           class="flex-1"
         />
-        <button
-          type="button"
+        <IconButton
+          icon="zoom_in"
+          size="xs"
+          variant="ghost"
           class="text-text-muted hover:text-text-primary transition-colors cursor-pointer flex items-center justify-center p-0.5 rounded touch-manipulation"
           title="Zoomer (+25px/s)"
           @click="timelineStore.playback.zoom = Math.min(300, timelineStore.playback.zoom + 25)"
-        >
-          <Icon name="zoom_in" size="xs" />
-        </button>
+        />
       </div>
 
       <Button

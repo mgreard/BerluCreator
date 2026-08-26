@@ -12,6 +12,18 @@ import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { sequenceRepository } from '@infrastructure/db/repositories/sequence.repository'
 import { generateId } from '@/lib/utils'
 
+export type TransformHistoryTarget =
+  | { kind: 'group'; groupId: string }
+  | { kind: 'keyframe'; trackId: string; keyframeId: string }
+
+interface TransformHistoryEntry {
+  target: TransformHistoryTarget
+  before: Partial<Transform2D> | undefined
+  after: Partial<Transform2D> | undefined
+}
+
+const MAX_TRANSFORM_HISTORY = 50
+
 export const useTimelineStore = defineStore('timeline', () => {
   const currentSequence = ref<Sequence>({
     id: 'seq_default',
@@ -38,6 +50,9 @@ export const useTimelineStore = defineStore('timeline', () => {
   const selectedTrackId = ref<string | null>(null)
   const selectedGroupId = ref<string | null>(null)
   const selectedKeyframeId = ref<string | null>(null)
+  const editScope = ref<'group' | 'layer'>('group')
+  const undoTransformStack = ref<TransformHistoryEntry[]>([])
+  const redoTransformStack = ref<TransformHistoryEntry[]>([])
 
   let animationFrameId: number | null = null
   let lastTimestamp: number | null = null
@@ -52,10 +67,120 @@ export const useTimelineStore = defineStore('timeline', () => {
     return currentSequence.value.groups?.find((g) => g.id === selectedGroupId.value) ?? null
   })
 
+  const canUndoTransform = computed(() => undoTransformStack.value.length > 0)
+  const canRedoTransform = computed(() => redoTransformStack.value.length > 0)
+
+  function recordTransformAction(
+    target: TransformHistoryTarget,
+    before: Partial<Transform2D> | undefined,
+    after: Partial<Transform2D> | undefined
+  ) {
+    const beforeSnapshot = cloneTransform(before)
+    const afterSnapshot = cloneTransform(after)
+    if (transformsAreEqual(beforeSnapshot, afterSnapshot)) return
+
+    undoTransformStack.value.push({
+      target: { ...target },
+      before: beforeSnapshot,
+      after: afterSnapshot
+    })
+    if (undoTransformStack.value.length > MAX_TRANSFORM_HISTORY) {
+      undoTransformStack.value.shift()
+    }
+    redoTransformStack.value = []
+  }
+
+  function undoLastTransform() {
+    const entry = undoTransformStack.value.pop()
+    if (!entry) return
+
+    if (applyTransformSnapshot(entry.target, entry.before)) {
+      redoTransformStack.value.push(entry)
+    }
+  }
+
+  function redoLastTransform() {
+    const entry = redoTransformStack.value.pop()
+    if (!entry) return
+
+    if (applyTransformSnapshot(entry.target, entry.after)) {
+      undoTransformStack.value.push(entry)
+    }
+  }
+
+  function clearTransformHistory() {
+    undoTransformStack.value = []
+    redoTransformStack.value = []
+  }
+
+  function applyTransformSnapshot(
+    target: TransformHistoryTarget,
+    snapshot: Partial<Transform2D> | undefined
+  ): boolean {
+    if (target.kind === 'group') {
+      const group = currentSequence.value.groups?.find((candidate) => candidate.id === target.groupId)
+      if (!group) return false
+      group.transform = cloneTransform(snapshot)
+    } else {
+      const track = currentSequence.value.tracks.find(
+        (candidate) => candidate.id === target.trackId
+      )
+      const keyframe = track?.keyframes.find(
+        (candidate) => candidate.id === target.keyframeId
+      )
+      if (!keyframe) return false
+      keyframe.transform = cloneTransform(snapshot)
+    }
+
+    saveSequence()
+    return true
+  }
+
+  function selectTrackForEditing(trackId: string) {
+    const track = currentSequence.value.tracks.find((candidate) => candidate.id === trackId)
+    if (!track) return
+
+    selectedTrackId.value = track.id
+    selectedGroupId.value = track.groupId ?? null
+    editScope.value = 'layer'
+
+    if (
+      selectedKeyframeId.value &&
+      !track.keyframes.some((keyframe) => keyframe.id === selectedKeyframeId.value)
+    ) {
+      selectedKeyframeId.value = null
+    }
+  }
+
+  function selectGroupForEditing(groupId: string) {
+    const group = currentSequence.value.groups?.find((candidate) => candidate.id === groupId)
+    if (!group) return
+
+    const selectedTrackBelongsToGroup = currentSequence.value.tracks.some(
+      (track) => track.id === selectedTrackId.value && track.groupId === groupId
+    )
+    if (!selectedTrackBelongsToGroup) {
+      selectedTrackId.value =
+        currentSequence.value.tracks.find((track) => track.groupId === groupId)?.id ?? null
+    }
+
+    selectedGroupId.value = group.id
+    selectedKeyframeId.value = null
+    editScope.value = 'group'
+  }
+
+  function clearStudioSelection() {
+    selectedTrackId.value = null
+    selectedGroupId.value = null
+    selectedKeyframeId.value = null
+    editScope.value = 'group'
+  }
+
   /**
    * Initialise ou charge la séquence depuis Dexie
    */
   async function loadSequence(sequenceId: string, projectId: string) {
+    clearTransformHistory()
     const seq = await sequenceRepository.getById(sequenceId)
     if (seq) {
       // S'assurer que les groupes existent pour la rétrocompatibilité
@@ -172,7 +297,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     }
 
     currentSequence.value.groups.push(newGroup)
-    selectedGroupId.value = newGroup.id
+    selectGroupForEditing(newGroup.id)
     saveSequence()
     return newGroup
   }
@@ -194,7 +319,12 @@ export const useTimelineStore = defineStore('timeline', () => {
 
     currentSequence.value.groups = currentSequence.value.groups.filter((g) => g.id !== groupId)
     if (selectedGroupId.value === groupId) {
-      selectedGroupId.value = null
+      const currentTrackId = selectedTrackId.value
+      if (currentTrackId && currentSequence.value.tracks.some((track) => track.id === currentTrackId)) {
+        selectTrackForEditing(currentTrackId)
+      } else {
+        clearStudioSelection()
+      }
     }
     saveSequence()
   }
@@ -300,7 +430,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     }
 
     currentSequence.value.tracks.push(newTrack)
-    selectedTrackId.value = newTrack.id
+    selectTrackForEditing(newTrack.id)
     saveSequence()
     return newTrack
   }
@@ -318,7 +448,12 @@ export const useTimelineStore = defineStore('timeline', () => {
 
     currentSequence.value.tracks = currentSequence.value.tracks.filter((t) => t.id !== trackId)
     if (selectedTrackId.value === trackId) {
-      selectedTrackId.value = currentSequence.value.tracks[0]?.id ?? null
+      const nextTrackId = currentSequence.value.tracks[0]?.id
+      if (nextTrackId) {
+        selectTrackForEditing(nextTrackId)
+      } else {
+        clearStudioSelection()
+      }
     }
     saveSequence()
   }
@@ -449,10 +584,20 @@ export const useTimelineStore = defineStore('timeline', () => {
     playback,
     selectedTrackId,
     selectedGroupId,
+    editScope,
     selectedGroup,
     selectedKeyframeId,
     selectedTrack,
     currentTimeSeconds,
+    canUndoTransform,
+    canRedoTransform,
+    recordTransformAction,
+    undoLastTransform,
+    redoLastTransform,
+    clearTransformHistory,
+    selectTrackForEditing,
+    selectGroupForEditing,
+    clearStudioSelection,
     loadSequence,
     play,
     pause,
@@ -483,6 +628,20 @@ export const useTimelineStore = defineStore('timeline', () => {
     saveSequence
   }
 })
+
+function cloneTransform(
+  transform: Partial<Transform2D> | undefined
+): Partial<Transform2D> | undefined {
+  return transform ? { ...transform } : undefined
+}
+
+function transformsAreEqual(
+  left: Partial<Transform2D> | undefined,
+  right: Partial<Transform2D> | undefined
+): boolean {
+  const keys: (keyof Transform2D)[] = ['x', 'y', 'scaleX', 'scaleY', 'rotation', 'opacity']
+  return keys.every((key) => left?.[key] === right?.[key])
+}
 
 function createDefaultGroups(): TrackGroup[] {
   return DEFAULT_TRACK_GROUPS.map((grp) => ({

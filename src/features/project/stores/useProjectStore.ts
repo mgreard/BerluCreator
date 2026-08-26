@@ -15,8 +15,7 @@ export const useProjectStore = defineStore('project', () => {
       height: DEFAULT_STAGE_RESOLUTION.height,
       backgroundColor: '#0c0d14',
       safeArea: true,
-      showGrid: true,
-      showAnchors: false
+      showGrid: true
     },
     activeSequenceId: 'seq_default',
     createdAt: Date.now(),
@@ -67,8 +66,7 @@ export const useProjectStore = defineStore('project', () => {
         height: DEFAULT_STAGE_RESOLUTION.height,
         backgroundColor: '#0c0d14',
         safeArea: true,
-        showGrid: true,
-        showAnchors: false
+        showGrid: true
       },
       activeSequenceId: generateId('seq'),
       createdAt: Date.now(),

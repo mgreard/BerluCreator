@@ -4,7 +4,7 @@ import Button from './Button.vue'
 import type { ButtonProps, ButtonVariant, ButtonSize, ButtonShape } from './types'
 
 const variants: ButtonVariant[] = ['primary', 'secondary', 'accent', 'ghost', 'destructive']
-const sizes: ButtonSize[] = ['sm', 'md', 'lg']
+const sizes: ButtonSize[] = ['xs', 'sm', 'md', 'lg']
 const shapes: ButtonShape[] = ['pill', 'rounded']
 
 const state = ref<ButtonProps>({

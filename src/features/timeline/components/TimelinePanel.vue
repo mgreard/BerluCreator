@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, useTemplateRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, useId, useTemplateRef } from 'vue'
 import { useTimelineStore } from '../stores/useTimelineStore'
 import TransportBar from './TransportBar.vue'
 import TrackHeaderList from './TrackHeaderList.vue'
@@ -11,6 +11,107 @@ const emit = defineEmits<{
 }>()
 
 const timelineStore = useTimelineStore()
+
+const DEFAULT_TIMELINE_HEIGHT = 256
+const MIN_TIMELINE_HEIGHT = 160
+const MIN_STUDIO_HEIGHT = 180
+const KEYBOARD_RESIZE_STEP = 16
+
+const timelinePanelId = useId()
+const resizeHandleRef = useTemplateRef<HTMLDivElement>('resizeHandleRef')
+const timelineHeight = ref(DEFAULT_TIMELINE_HEIGHT)
+const maxTimelineHeight = ref(DEFAULT_TIMELINE_HEIGHT)
+const isResizing = ref(false)
+
+let resizeStartY = 0
+let resizeStartHeight = DEFAULT_TIMELINE_HEIGHT
+let resizePointerId: number | null = null
+let previousBodyCursor = ''
+let previousBodyUserSelect = ''
+
+function clampTimelineHeight(height: number) {
+  return Math.round(Math.min(maxTimelineHeight.value, Math.max(MIN_TIMELINE_HEIGHT, height)))
+}
+
+function setTimelineHeight(height: number) {
+  timelineHeight.value = clampTimelineHeight(height)
+}
+
+function updateMaxTimelineHeight() {
+  const viewportBound = window.innerHeight - MIN_STUDIO_HEIGHT
+  const proportionalBound = window.innerHeight * 0.7
+  maxTimelineHeight.value = Math.max(
+    MIN_TIMELINE_HEIGHT,
+    Math.floor(Math.min(viewportBound, proportionalBound))
+  )
+  setTimelineHeight(timelineHeight.value)
+}
+
+function onResizePointerDown(event: PointerEvent) {
+  if (event.button !== 0) return
+
+  event.preventDefault()
+  resizeStartY = event.clientY
+  resizeStartHeight = timelineHeight.value
+  resizePointerId = event.pointerId
+  isResizing.value = true
+  resizeHandleRef.value?.setPointerCapture?.(event.pointerId)
+
+  previousBodyCursor = document.body.style.cursor
+  previousBodyUserSelect = document.body.style.userSelect
+  document.body.style.cursor = 'row-resize'
+  document.body.style.userSelect = 'none'
+}
+
+function onResizePointerMove(event: PointerEvent) {
+  if (!isResizing.value || event.pointerId !== resizePointerId) return
+  setTimelineHeight(resizeStartHeight + resizeStartY - event.clientY)
+}
+
+function stopResizing(event?: PointerEvent) {
+  if (!isResizing.value) return
+
+  const handle = resizeHandleRef.value
+  const pointerId = event?.pointerId ?? resizePointerId
+  if (pointerId !== null && handle?.hasPointerCapture?.(pointerId)) {
+    handle.releasePointerCapture(pointerId)
+  }
+
+  isResizing.value = false
+  resizePointerId = null
+  document.body.style.cursor = previousBodyCursor
+  document.body.style.userSelect = previousBodyUserSelect
+}
+
+function onResizeKeydown(event: KeyboardEvent) {
+  const keyActions: Partial<Record<string, () => void>> = {
+    ArrowUp: () => setTimelineHeight(timelineHeight.value + KEYBOARD_RESIZE_STEP),
+    ArrowDown: () => setTimelineHeight(timelineHeight.value - KEYBOARD_RESIZE_STEP),
+    PageUp: () => setTimelineHeight(timelineHeight.value + KEYBOARD_RESIZE_STEP * 4),
+    PageDown: () => setTimelineHeight(timelineHeight.value - KEYBOARD_RESIZE_STEP * 4),
+    Home: () => setTimelineHeight(MIN_TIMELINE_HEIGHT),
+    End: () => setTimelineHeight(maxTimelineHeight.value)
+  }
+  const action = keyActions[event.key]
+  if (!action) return
+
+  event.preventDefault()
+  action()
+}
+
+function resetTimelineHeight() {
+  setTimelineHeight(DEFAULT_TIMELINE_HEIGHT)
+}
+
+onMounted(() => {
+  updateMaxTimelineHeight()
+  window.addEventListener('resize', updateMaxTimelineHeight, { passive: true })
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateMaxTimelineHeight)
+  stopResizing()
+})
 
 const totalWidthPx = computed(() => {
   return (timelineStore.currentSequence.durationMs / 1000) * timelineStore.playback.zoom
@@ -63,7 +164,40 @@ function onHeadersScroll() {
 </script>
 
 <template>
-  <div class="h-64 border-t border-border-subtle bg-bg-surface/50 backdrop-blur-md flex flex-col shrink-0 select-none">
+  <div
+    :id="timelinePanelId"
+    class="relative border-t border-border-subtle bg-bg-surface/50 backdrop-blur-md flex flex-col shrink-0 select-none"
+    :style="{ height: `${timelineHeight}px` }"
+  >
+    <div
+      ref="resizeHandleRef"
+      role="separator"
+      tabindex="0"
+      aria-label="Redimensionner la hauteur de la timeline"
+      aria-orientation="horizontal"
+      :aria-controls="timelinePanelId"
+      :aria-valuemin="MIN_TIMELINE_HEIGHT"
+      :aria-valuemax="maxTimelineHeight"
+      :aria-valuenow="timelineHeight"
+      :aria-valuetext="`${timelineHeight} pixels`"
+      title="Glisser pour redimensionner · Double-cliquer pour réinitialiser"
+      class="group absolute -top-1 left-0 right-0 z-40 h-2 cursor-row-resize touch-none outline-none"
+      :class="isResizing ? 'bg-primary/10' : ''"
+      @pointerdown="onResizePointerDown"
+      @pointermove="onResizePointerMove"
+      @pointerup="stopResizing"
+      @pointercancel="stopResizing"
+      @lostpointercapture="stopResizing"
+      @keydown="onResizeKeydown"
+      @dblclick="resetTimelineHeight"
+    >
+      <span
+        aria-hidden="true"
+        class="absolute left-1/2 top-1/2 h-1 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-border-default/80 shadow-sm transition-all duration-150 group-hover:w-20 group-hover:bg-primary/70 group-focus-visible:w-20 group-focus-visible:bg-primary group-focus-visible:ring-2 group-focus-visible:ring-primary/30"
+        :class="isResizing ? 'w-20! bg-primary! shadow-glow-sm' : ''"
+      />
+    </div>
+
     <!-- Barre de transport en haut du panneau timeline -->
     <TransportBar @open-ai-director="emit('openAiDirector')" />
 

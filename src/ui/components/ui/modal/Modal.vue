@@ -25,7 +25,7 @@ const isOpenModel = defineModel<boolean>('isOpen')
 const defaultModel = defineModel<boolean>()
 
 const isVisible = computed({
-  get: () => openModel.value ?? isOpenModel.value ?? defaultModel.value ?? false,
+  get: () => Boolean(openModel.value || isOpenModel.value || defaultModel.value),
   set: (val: boolean) => {
     if (openModel.value !== undefined) openModel.value = val
     if (isOpenModel.value !== undefined) isOpenModel.value = val

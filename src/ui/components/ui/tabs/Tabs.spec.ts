@@ -68,4 +68,33 @@ describe('Tabs (Colocated Unit Tests)', () => {
     await tabs[2].trigger('click')
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
   })
+
+  it('5. Rend un rail vertical coloré accessible avec un badge intégré', () => {
+    const railTabs: TabItem[] = [
+      { key: 'all', label: 'Tous les sprites', icon: 'apps', badge: 68, tone: 'indigo' },
+      { key: 'backdrop', label: 'Décors', icon: 'tv_gen', badge: 1, tone: 'sky' }
+    ]
+
+    const wrapper = mount(Tabs, {
+      props: {
+        tabs: railTabs,
+        modelValue: 'all',
+        variant: 'rail',
+        orientation: 'vertical',
+        ariaLabel: 'Catégories de sprites'
+      }
+    })
+
+    const tablist = wrapper.find('[role="tablist"]')
+    const tabs = wrapper.findAll('[role="tab"]')
+
+    expect(tablist.attributes('aria-label')).toBe('Catégories de sprites')
+    expect(tablist.attributes('data-orientation')).toBe('vertical')
+    expect(tablist.classes()).toContain('flex-col')
+    expect(tabs[0].classes()).toContain('bg-indigo-500/15')
+    expect(tabs[1].classes()).toContain('text-sky-400/70')
+    expect(tabs[0].find('.sr-only').text()).toBe('Tous les sprites')
+    expect(tabs[0].text()).toContain('68')
+    expect(tabs[0].find('.top-0\\.5').exists()).toBe(true)
+  })
 })

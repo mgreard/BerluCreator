@@ -18,21 +18,8 @@ export interface AssetCategoryDefinition {
   icon: string
   description: string
   defaultZIndex: number
-  allowedSockets: string[]
   cardinality: CategoryCardinality
   placementMode: CategoryPlacementMode
-}
-
-export type AnchorPointType = 'mount' | 'socket'
-
-export interface AnchorPoint {
-  id: string
-  name: string
-  type: AnchorPointType
-  /** Position X en pixels relatifs à la dimension naturelle de l'image (0..width) */
-  x: number
-  /** Position Y en pixels relatifs à la dimension naturelle de l'image (0..height) */
-  y: number
 }
 
 export interface SpriteConfigRule {
@@ -67,7 +54,6 @@ export interface Asset {
   blobId: string
   width: number
   height: number
-  anchors: AnchorPoint[]
   /** Indique si le sprite peut être déplacé librement à la souris sur le canvas */
   isMovable: boolean
   createdAt: number
@@ -80,4 +66,14 @@ export interface AssetBlobRecord {
   data: Blob
   size: number
   createdAt: number
+}
+
+export interface SpritesheetSlice {
+  id: string
+  name: string
+  category: AssetCategory
+  x: number
+  y: number
+  width: number
+  height: number
 }

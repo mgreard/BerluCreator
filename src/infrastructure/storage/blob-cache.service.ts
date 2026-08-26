@@ -75,7 +75,7 @@ export class BlobUrlCacheService {
    * Révocation totale de toutes les URLs actives (nettoyage global).
    */
   clear(): void {
-    for (const [blobId, entry] of this.cache.entries()) {
+    for (const entry of this.cache.values()) {
       if (entry.timerId) clearTimeout(entry.timerId)
       URL.revokeObjectURL(entry.url)
     }

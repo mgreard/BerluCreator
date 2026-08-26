@@ -1,25 +1,14 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { Modal } from '@/components/ui/modal'
 import { FormGroup } from '@/components/ui/form-group'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { useTimelineStore } from '../stores/useTimelineStore'
 import type { TrackGroupColor } from '@core/types/timeline.types'
 
-const openModel = defineModel<boolean>('open')
-const defaultModel = defineModel<boolean>()
-
-const isOpen = computed({
-  get: () => openModel.value ?? defaultModel.value ?? false,
-  set: (val: boolean) => {
-    if (openModel.value !== undefined) openModel.value = val
-    if (defaultModel.value !== undefined) defaultModel.value = val
-    if (openModel.value === undefined && defaultModel.value === undefined) {
-      openModel.value = val
-    }
-  }
-})
+const open = defineModel<boolean>('open', { default: false })
 
 const timelineStore = useTimelineStore()
 
@@ -37,8 +26,8 @@ const colorOptions: { id: TrackGroupColor; label: string; class: string }[] = [
   { id: 'cyan', label: 'Cyan', class: 'bg-cyan-500 hover:ring-cyan-400' }
 ]
 
-watch(isOpen, (open) => {
-  if (open) {
+watch(open, (isOpen) => {
+  if (isOpen) {
     groupName.value = ''
     const currentGroups = timelineStore.currentSequence.groups || []
     const nextZ = currentGroups.length > 0 ? Math.max(...currentGroups.map((g) => g.zIndex)) + 10 : 20
@@ -50,13 +39,13 @@ watch(isOpen, (open) => {
 function handleCreate() {
   if (!groupName.value.trim()) return
   timelineStore.addGroup(groupName.value.trim(), Number(groupZIndex.value), selectedColor.value)
-  isOpen.value = false
+  open.value = false
 }
 </script>
 
 <template>
   <Modal
-    v-model:open="isOpen"
+    v-model:open="open"
     title="Nouveau Groupe de Pistes"
     subtitle="Regroupez des pistes de sprites pour les ordonner et les déplacer ensemble."
     size="sm"
@@ -85,16 +74,19 @@ function handleCreate() {
 
       <FormGroup label="Couleur de repère">
         <div class="flex items-center gap-2 pt-1">
-          <button
+          <IconButton
             v-for="color in colorOptions"
             :key="color.id"
-            type="button"
+            size="xs"
+            variant="ghost"
             class="w-6 h-6 rounded-full transition-all cursor-pointer focus:outline-none"
             :class="[
               color.class,
               selectedColor === color.id ? 'ring-2 ring-white scale-110 shadow-md' : 'opacity-70 hover:opacity-100'
             ]"
             :title="color.label"
+            :aria-label="color.label"
+            :aria-pressed="selectedColor === color.id"
             @click="selectedColor = color.id"
           />
         </div>
@@ -105,7 +97,7 @@ function handleCreate() {
           variant="ghost"
           size="sm"
           type="button"
-          @click="isOpen = false"
+          @click="open = false"
         >
           Annuler
         </Button>

@@ -38,6 +38,32 @@ export default tseslint.config(
     }
   },
   {
+    files: ['src/App.vue', 'src/features/**/*.vue'],
+    rules: {
+      'vue/no-restricted-html-elements': [
+        'error',
+        {
+          element: 'button',
+          message: 'Utilisez Button ou IconButton depuis la librairie UI.'
+        },
+        {
+          element: 'input',
+          message: 'Utilisez Input depuis la librairie UI, sauf input fichier natif documenté.'
+        },
+        { element: 'textarea', message: 'Utilisez Textarea depuis la librairie UI.' },
+        { element: 'select', message: 'Utilisez Select depuis la librairie UI.' },
+        { element: 'h1', message: 'Utilisez Heading depuis la librairie UI.' },
+        { element: 'h2', message: 'Utilisez Heading depuis la librairie UI.' },
+        { element: 'h3', message: 'Utilisez Heading depuis la librairie UI.' },
+        { element: 'h4', message: 'Utilisez Heading depuis la librairie UI.' },
+        { element: 'h5', message: 'Utilisez Heading depuis la librairie UI.' },
+        { element: 'h6', message: 'Utilisez Heading depuis la librairie UI.' },
+        { element: 'p', message: 'Utilisez Text ou EmptyState depuis la librairie UI.' },
+        { element: 'label', message: 'Utilisez FormGroup depuis la librairie UI.' }
+      ]
+    }
+  },
+  {
     files: ['*.config.ts', '*.config.js', 'e2e/**/*.ts', 'server/**/*.ts'],
     languageOptions: {
       globals: {

@@ -1,27 +1,39 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { CATEGORY_LIST } from '@core/constants/categories'
 import { useAssetStore } from '../stores/useAssetStore'
 import { seedDemoAssetsIfEmpty } from '../services/demo-asset-seeder'
+import {
+  findAssetTargetTrack,
+  resolveAssetAssignmentTime
+} from '../services/asset-timeline-assignment'
 import AssetCard from './AssetCard.vue'
 import AssetUploadModal from './AssetUploadModal.vue'
-import AnchorEditorModal from './AnchorEditorModal.vue'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Icon } from '@/components/ui/icon'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Tabs, type TabItem, type TabTone } from '@/components/ui/tabs'
 
 import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 
 const assetStore = useAssetStore()
 const timelineStore = useTimelineStore()
-const selectedAssetForAnchors = ref<Asset | null>(null)
-const isAnchorModalOpen = ref(false)
 const isUploadModalOpen = ref(false)
 const isReloading = ref(false)
+
+watch(
+  () => timelineStore.selectedTrack?.targetSlot ?? timelineStore.selectedTrack?.category,
+  (category) => {
+    if (category) {
+      assetStore.selectedCategory = category
+    }
+  },
+  { immediate: true }
+)
 
 // Identifiants des assets actuellement affichés sur le canvas à cet instant
 const activeAssetIds = computed(() => {
@@ -42,143 +54,107 @@ function onSelectAsset(asset: Asset) {
 
   const catDef = ASSET_CATEGORIES[asset.category]
   const isMulti = catDef?.cardinality === 'multi'
-  const currentTime = timelineStore.playback.currentTimeMs
-
-  let targetTrack = timelineStore.currentSequence.tracks.find(
-    (t) => t.targetSlot === asset.category || t.id === asset.category
+  const selectedTrack = timelineStore.selectedTrack
+  let targetTrack = findAssetTargetTrack(
+    timelineStore.currentSequence.tracks,
+    selectedTrack,
+    asset.category
   )
 
-  if (isMulti) {
-    const selected = timelineStore.selectedTrack
-    if (selected && selected.category === asset.category) {
-      targetTrack = selected
-    } else {
-      const existingTrack = timelineStore.currentSequence.tracks.find((t) => t.category === asset.category)
-      if (existingTrack) {
-        targetTrack = existingTrack
-      } else {
-        targetTrack = timelineStore.addTrack(asset.category, asset.name)
-      }
-    }
+  if (!targetTrack && isMulti) {
+    targetTrack = timelineStore.addTrack(asset.category, asset.name)
   }
 
   if (targetTrack) {
-    timelineStore.addKeyframe(targetTrack.id, currentTime, asset.id, asset.name)
-    timelineStore.selectedTrackId = targetTrack.id
+    const targetTime = resolveAssetAssignmentTime(
+      targetTrack,
+      selectedTrack,
+      timelineStore.selectedKeyframeId,
+      timelineStore.playback.currentTimeMs
+    )
+
+    timelineStore.addKeyframe(targetTrack.id, targetTime, asset.id, asset.name)
+    timelineStore.selectTrackForEditing(targetTrack.id)
   }
 }
 
-interface CategoryTab {
-  id: AssetCategory | 'all'
-  label: string
+interface CategoryTab extends TabItem {
+  key: AssetCategory | 'all'
   icon: string
+  tone: TabTone
   color: string
-  bgActive: string
-  textActive: string
-  borderActive: string
-  glowColor: string
 }
 
 const CATEGORY_TABS: CategoryTab[] = [
   {
-    id: 'all',
+    key: 'all',
     label: 'Tous les sprites',
     icon: 'apps',
-    color: 'text-indigo-400',
-    bgActive: 'bg-indigo-500/20',
-    textActive: 'text-indigo-400',
-    borderActive: 'border-indigo-500/50',
-    glowColor: 'shadow-[0_0_12px_rgba(99,102,241,0.4)]'
+    tone: 'indigo',
+    color: 'text-indigo-400'
   },
   {
-    id: 'backdrop',
+    key: 'backdrop',
     label: 'Décors de Plateau',
     icon: 'tv_gen',
-    color: 'text-sky-400',
-    bgActive: 'bg-sky-500/20',
-    textActive: 'text-sky-400',
-    borderActive: 'border-sky-500/50',
-    glowColor: 'shadow-[0_0_12px_rgba(56,189,248,0.4)]'
+    tone: 'sky',
+    color: 'text-sky-400'
   },
   {
-    id: 'torso',
+    key: 'torso',
     label: 'Torses & Bustes',
     icon: 'body_system',
-    color: 'text-amber-400',
-    bgActive: 'bg-amber-500/20',
-    textActive: 'text-amber-400',
-    borderActive: 'border-amber-500/50',
-    glowColor: 'shadow-[0_0_12px_rgba(245,158,11,0.4)]'
+    tone: 'amber',
+    color: 'text-amber-400'
   },
   {
-    id: 'head',
+    key: 'head',
     label: 'Têtes & Visages',
     icon: 'face',
-    color: 'text-rose-400',
-    bgActive: 'bg-rose-500/20',
-    textActive: 'text-rose-400',
-    borderActive: 'border-rose-500/50',
-    glowColor: 'shadow-[0_0_12px_rgba(244,63,94,0.4)]'
+    tone: 'rose',
+    color: 'text-rose-400'
   },
   {
-    id: 'mouth',
+    key: 'mouth',
     label: 'Bouches & Phonèmes',
     icon: 'sentiment_satisfied',
-    color: 'text-red-400',
-    bgActive: 'bg-red-500/20',
-    textActive: 'text-red-400',
-    borderActive: 'border-red-500/50',
-    glowColor: 'shadow-[0_0_12px_rgba(239,68,68,0.4)]'
+    tone: 'red',
+    color: 'text-red-400'
   },
   {
-    id: 'eyes',
+    key: 'eyes',
     label: 'Yeux & Regard',
     icon: 'visibility',
-    color: 'text-cyan-400',
-    bgActive: 'bg-cyan-500/20',
-    textActive: 'text-cyan-400',
-    borderActive: 'border-cyan-500/50',
-    glowColor: 'shadow-[0_0_12px_rgba(6,182,212,0.4)]'
+    tone: 'cyan',
+    color: 'text-cyan-400'
   },
   {
-    id: 'arms_left',
+    key: 'arms_left',
     label: 'Bras Gauche',
     icon: 'front_hand',
-    color: 'text-emerald-400',
-    bgActive: 'bg-emerald-500/20',
-    textActive: 'text-emerald-400',
-    borderActive: 'border-emerald-500/50',
-    glowColor: 'shadow-[0_0_12px_rgba(16,185,129,0.4)]'
+    tone: 'emerald',
+    color: 'text-emerald-400'
   },
   {
-    id: 'arms_right',
+    key: 'arms_right',
     label: 'Bras Droit',
     icon: 'waving_hand',
-    color: 'text-lime-400',
-    bgActive: 'bg-lime-500/20',
-    textActive: 'text-lime-400',
-    borderActive: 'border-lime-500/50',
-    glowColor: 'shadow-[0_0_12px_rgba(132,204,22,0.4)]'
+    tone: 'lime',
+    color: 'text-lime-400'
   },
   {
-    id: 'props',
+    key: 'props',
     label: 'Accessoires & Objets',
     icon: 'mic',
-    color: 'text-purple-400',
-    bgActive: 'bg-purple-500/20',
-    textActive: 'text-purple-400',
-    borderActive: 'border-purple-500/50',
-    glowColor: 'shadow-[0_0_12px_rgba(168,85,247,0.4)]'
+    tone: 'purple',
+    color: 'text-purple-400'
   },
   {
-    id: 'overlay',
+    key: 'overlay',
     label: 'Habillage & Lumières',
     icon: 'newspaper',
-    color: 'text-yellow-400',
-    bgActive: 'bg-yellow-500/20',
-    textActive: 'text-yellow-400',
-    borderActive: 'border-yellow-500/50',
-    glowColor: 'shadow-[0_0_12px_rgba(234,179,8,0.4)]'
+    tone: 'yellow',
+    color: 'text-yellow-400'
   }
 ]
 
@@ -193,8 +169,22 @@ const categoryCounts = computed(() => {
   return counts
 })
 
+const categoryTabs = computed<CategoryTab[]>(() =>
+  CATEGORY_TABS.map((tab) => ({
+    ...tab,
+    badge: categoryCounts.value[String(tab.key)] || undefined
+  }))
+)
+
+const selectedCategoryTab = computed<string | number>({
+  get: () => assetStore.selectedCategory,
+  set: (value) => {
+    assetStore.selectedCategory = String(value) as AssetCategory | 'all'
+  }
+})
+
 const currentTab = computed(() => {
-  return CATEGORY_TABS.find((t) => t.id === assetStore.selectedCategory) || CATEGORY_TABS[0]
+  return CATEGORY_TABS.find((tab) => tab.key === assetStore.selectedCategory) || CATEGORY_TABS[0]
 })
 
 onMounted(async () => {
@@ -213,15 +203,6 @@ async function onReloadDefaultPack() {
   }
 }
 
-function selectCategory(catId: string) {
-  assetStore.selectedCategory = catId as AssetCategory | 'all'
-}
-
-function onEditAnchors(asset: Asset) {
-  selectedAssetForAnchors.value = asset
-  isAnchorModalOpen.value = true
-}
-
 function onDeleteAsset(asset: Asset) {
   if (confirm(`Voulez-vous vraiment supprimer l'asset "${asset.name}" ?`)) {
     assetStore.deleteAsset(asset.id)
@@ -230,38 +211,17 @@ function onDeleteAsset(asset: Asset) {
 </script>
 
 <template>
-  <div class="w-[370px] h-full border-r border-border-subtle bg-bg-surface/50 backdrop-blur-md flex flex-row select-none overflow-hidden">
+  <div class="w-[370px] h-full border-r border-border-subtle bg-bg-surface/30 backdrop-blur-md flex flex-row select-none overflow-hidden">
     <!-- 1. Rail vertical des catégories (à gauche) -->
-    <div class="w-13 border-r border-border-subtle bg-bg-surface/80 flex flex-col items-center py-2 gap-1.5 shrink-0 overflow-y-auto custom-scrollbar">
-      <button
-        v-for="tab in CATEGORY_TABS"
-        :key="tab.id"
-        type="button"
-        class="relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 group"
-        :class="[
-          assetStore.selectedCategory === tab.id
-            ? [tab.bgActive, tab.textActive, tab.borderActive, tab.glowColor, 'border shadow-sm scale-105']
-            : 'text-text-muted hover:text-text-primary hover:bg-bg-surface-hover/50 border border-transparent'
-        ]"
-        :title="`${tab.label} (${categoryCounts[tab.id] ?? 0})`"
-        @click="selectCategory(tab.id)"
-      >
-        <Icon :name="tab.icon" size="sm" :class="assetStore.selectedCategory === tab.id ? tab.textActive : undefined" />
-
-        <!-- Décompte Badge discret -->
-        <span
-          v-if="categoryCounts[tab.id] !== undefined && categoryCounts[tab.id] > 0"
-          class="absolute -top-1 -right-1 text-[9px] font-bold font-mono px-1 py-0.2 rounded-full border border-border-subtle leading-none shadow-xs"
-          :class="[
-            assetStore.selectedCategory === tab.id
-              ? 'bg-primary text-text-inverse'
-              : 'bg-bg-elevated text-text-muted'
-          ]"
-        >
-          {{ categoryCounts[tab.id] }}
-        </span>
-      </button>
-    </div>
+    <Tabs
+      v-model="selectedCategoryTab"
+      :tabs="categoryTabs"
+      variant="rail"
+      orientation="vertical"
+      size="sm"
+      aria-label="Catégories de sprites"
+      class="custom-scrollbar shrink-0"
+    />
 
     <!-- 2. Zone principale des assets (à droite) -->
     <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
@@ -316,38 +276,33 @@ function onDeleteAsset(asset: Asset) {
             :asset="asset"
             :selected="activeAssetIds.has(asset.id) || assetStore.selectedAssetId === asset.id"
             @select="onSelectAsset"
-            @edit-anchors="onEditAnchors"
             @delete="onDeleteAsset"
           />
         </div>
 
         <!-- État vide -->
-        <div
+        <EmptyState
           v-if="assetStore.filteredAssets.length === 0"
-          class="h-48 text-center text-text-muted text-xs flex flex-col items-center justify-center gap-2"
+          icon="search_off"
+          title="Aucun sprite dans cette catégorie"
+          class="h-48 border-0 bg-transparent shadow-none p-4"
         >
-          <Icon name="search_off" size="lg" class="opacity-40" />
-          <p>Aucun sprite dans cette catégorie.</p>
-          <Button
-            variant="secondary"
-            size="sm"
-            class="mt-1"
-            @click="isUploadModalOpen = true"
-          >
-            Importer un sprite
-          </Button>
-        </div>
+          <template #action>
+            <Button
+              variant="secondary"
+              size="sm"
+              class="mt-1"
+              @click="isUploadModalOpen = true"
+            >
+              Importer un sprite
+            </Button>
+          </template>
+        </EmptyState>
       </div>
     </div>
 
     <!-- Modale d'Import Dédiée -->
     <AssetUploadModal v-model:open="isUploadModalOpen" />
-
-    <!-- Modale d'Édition des Ancres -->
-    <AnchorEditorModal
-      v-model:open="isAnchorModalOpen"
-      :asset="selectedAssetForAnchors"
-    />
   </div>
 </template>
 

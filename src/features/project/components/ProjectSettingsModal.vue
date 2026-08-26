@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { FormGroup } from '@/components/ui/form-group'
 
 const open = defineModel<boolean>('open', { default: false })
 
@@ -85,30 +86,26 @@ async function save() {
     subtitle="Configurez le titre de l'émission, les dimensions du plateau et les options d'affichage."
   >
     <div class="space-y-4 text-xs">
-      <div class="space-y-1">
-        <label class="font-medium text-foreground">Nom de la Scène / Projet :</label>
-        <Input v-model="projectName" size="sm" />
-      </div>
+      <FormGroup label="Nom de la Scène / Projet" label-for="project-name" class="mb-0">
+        <Input id="project-name" v-model="projectName" size="sm" />
+      </FormGroup>
 
-      <div class="space-y-1">
-        <label class="font-medium text-foreground">Format de Rendu Vidéo :</label>
+      <FormGroup label="Format de Rendu Vidéo" class="mb-0">
         <Select
           :options="resolutionPresets"
           :model-value="`${stageWidth}x${stageHeight}`"
           size="sm"
           @update:model-value="onResolutionPresetChange"
         />
-      </div>
+      </FormGroup>
 
       <div class="grid grid-cols-2 gap-3">
-        <div class="space-y-1">
-          <label class="text-[11px] text-muted-foreground">Largeur (px) :</label>
-          <Input v-model.number="stageWidth" type="number" size="sm" />
-        </div>
-        <div class="space-y-1">
-          <label class="text-[11px] text-muted-foreground">Hauteur (px) :</label>
-          <Input v-model.number="stageHeight" type="number" size="sm" />
-        </div>
+        <FormGroup label="Largeur (px)" label-for="stage-width" class="mb-0">
+          <Input id="stage-width" v-model.number="stageWidth" type="number" size="sm" />
+        </FormGroup>
+        <FormGroup label="Hauteur (px)" label-for="stage-height" class="mb-0">
+          <Input id="stage-height" v-model.number="stageHeight" type="number" size="sm" />
+        </FormGroup>
       </div>
 
       <div class="border-t border-border/40 pt-3 space-y-3">

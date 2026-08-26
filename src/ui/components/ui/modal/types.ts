@@ -2,9 +2,6 @@ export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'fullscreen'
 export type ModalSurface = 'solid' | 'glass'
 
 export interface ModalProps {
-  /** État d'ouverture (support v-model:open, v-model:isOpen ou v-model) */
-  open?: boolean
-  isOpen?: boolean
   /** Titre de la modale */
   title?: string
   /** Sous-titre explicatif */

@@ -3,9 +3,11 @@ import { ref, computed, useTemplateRef } from 'vue'
 import { useTimelineStore } from '../stores/useTimelineStore'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { IconButton } from '@/components/ui/icon-button'
+import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Badge } from '@/components/ui/badge'
 import { DropdownMenu, type DropdownMenuItemDef } from '@/components/ui/dropdown-menu'
+import { SelectableSurface } from '@/components/ui/selectable-surface'
 import type { TimelineTrack, TrackGroup, TrackGroupColor } from '@core/types/timeline.types'
 import CreateGroupModal from './CreateGroupModal.vue'
 
@@ -56,23 +58,6 @@ function getGroupMenuItems(group: TrackGroup): DropdownMenuItemDef[] {
       label: 'Ajouter Habillage (Overlay)',
       icon: 'newspaper',
       onClick: () => timelineStore.addTrack('overlay', undefined, undefined, group.id)
-    },
-    {
-      id: 'sep_z',
-      label: '---',
-      icon: 'layers'
-    },
-    {
-      id: 'z_up',
-      label: 'Augmenter Z-Global (+5)',
-      icon: 'arrow_upward',
-      onClick: () => timelineStore.updateGroupZIndex(group.id, group.zIndex + 5)
-    },
-    {
-      id: 'z_down',
-      label: 'Diminuer Z-Global (-5)',
-      icon: 'arrow_downward',
-      onClick: () => timelineStore.updateGroupZIndex(group.id, Math.max(0, group.zIndex - 5))
     }
   ]
 
@@ -89,42 +74,6 @@ function getGroupMenuItems(group: TrackGroup): DropdownMenuItemDef[] {
       onClick: () => timelineStore.removeGroup(group.id, false)
     })
   }
-
-  return items
-}
-
-function getTrackMoveMenuItems(track: TimelineTrack): DropdownMenuItemDef[] {
-  const items: DropdownMenuItemDef[] = []
-
-  // Liste des groupes de destination
-  for (const grp of groups.value) {
-    if (grp.id !== track.groupId) {
-      items.push({
-        id: `move_to_${grp.id}`,
-        label: `Déplacer vers ${grp.name}`,
-        icon: 'folder_move',
-        onClick: () => timelineStore.setTrackGroup(track.id, grp.id)
-      })
-    }
-  }
-
-  items.push({
-    id: 'sep_z',
-    label: '---',
-    icon: 'layers'
-  })
-  items.push({
-    id: 'track_z_up',
-    label: 'Monter Z-Local (+1)',
-    icon: 'arrow_upward',
-    onClick: () => timelineStore.updateTrackZIndex(track.id, track.zIndex + 1)
-  })
-  items.push({
-    id: 'track_z_down',
-    label: 'Descendre Z-Local (-1)',
-    icon: 'arrow_downward',
-    onClick: () => timelineStore.updateTrackZIndex(track.id, Math.max(0, track.zIndex - 1))
-  })
 
   return items
 }
@@ -174,15 +123,16 @@ function canRemoveTrack(track: TimelineTrack): boolean {
       <span>Groupes & Pistes</span>
       <div class="flex items-center gap-1.5">
         <!-- Bouton Création Rapide de Groupe -->
-        <button
-          type="button"
+        <Button
+          size="xs"
+          variant="ghost"
           class="flex items-center gap-1 text-[10px] font-bold text-primary hover:text-primary-hover bg-primary/10 hover:bg-primary/20 px-1.5 py-0.5 rounded border border-primary/30 transition-colors cursor-pointer"
           title="Créer un nouveau groupe de pistes (ex: Personnage 2, Bureau...)"
           @click="isCreateGroupOpen = true"
         >
           <Icon name="create_new_folder" size="xs" />
           <span>+ Groupe</span>
-        </button>
+        </Button>
 
         <DropdownMenu
           :items="addTrackGlobalMenuItems"
@@ -210,25 +160,28 @@ function canRemoveTrack(track: TimelineTrack): boolean {
       <!-- Groupes ordonnés -->
       <template v-for="group in groups" :key="group.id">
         <!-- Ligne En-tête de Groupe (h-8) -->
-        <div
+        <SelectableSurface
           class="h-8 border-b border-border-subtle/70 px-2 flex items-center justify-between gap-1.5 text-xs font-semibold transition-colors cursor-pointer select-none"
+          density="compact"
+          role="treeitem"
+          :selected="timelineStore.selectedGroupId === group.id && timelineStore.editScope === 'group'"
           :class="[
-            timelineStore.selectedGroupId === group.id
+            timelineStore.selectedGroupId === group.id && timelineStore.editScope === 'group'
               ? 'bg-bg-surface-hover/90 text-text-primary ring-1 ring-primary/40'
               : 'bg-bg-surface/90 hover:bg-bg-surface-hover/60 text-text-secondary'
           ]"
-          @click="timelineStore.selectedGroupId = group.id"
+          @click="timelineStore.selectGroupForEditing(group.id)"
         >
           <div class="flex items-center gap-1.5 truncate flex-1 min-w-0">
-            <button
-              type="button"
+            <IconButton
+              icon="expand_more"
+              size="xs"
+              variant="ghost"
               class="text-text-muted hover:text-text-primary transition-transform cursor-pointer p-0.5"
               :class="{ '-rotate-90': group.collapsed }"
               title="Replier / Déplier le groupe"
               @click.stop="timelineStore.toggleGroupCollapse(group.id)"
-            >
-              <Icon name="expand_more" size="xs" />
-            </button>
+            />
 
             <span
               class="w-2 h-2 rounded-full shrink-0"
@@ -287,20 +240,23 @@ function canRemoveTrack(track: TimelineTrack): boolean {
               />
             </DropdownMenu>
           </div>
-        </div>
+        </SelectableSurface>
 
         <!-- Pistes Enfants du Groupe (visibles si non collapsed) -->
         <template v-if="!group.collapsed">
-          <div
+          <SelectableSurface
             v-for="track in getTracksByGroup(group.id)"
             :key="track.id"
             class="group h-8 border-b border-border-subtle/40 pl-5 pr-2 flex items-center justify-between gap-1 text-xs transition-colors cursor-pointer border-l-2"
+            density="compact"
+            role="treeitem"
+            :selected="timelineStore.selectedTrackId === track.id && timelineStore.editScope === 'layer'"
             :class="[
-              timelineStore.selectedTrackId === track.id
+              timelineStore.selectedTrackId === track.id && timelineStore.editScope === 'layer'
                 ? 'bg-primary/15 font-semibold text-text-primary ' + groupColorClasses[group.color || 'indigo'].border
                 : 'hover:bg-bg-surface-hover/60 text-text-secondary border-l-transparent'
             ]"
-            @click="timelineStore.selectedTrackId = track.id"
+            @click="timelineStore.selectTrackForEditing(track.id)"
           >
             <div class="flex items-center gap-1.5 truncate flex-1 min-w-0">
               <Icon
@@ -336,22 +292,6 @@ function canRemoveTrack(track: TimelineTrack): boolean {
                 @click.stop="timelineStore.toggleTrackMute(track.id)"
               />
 
-              <!-- Menu Déplacement de Groupe & Z-Index -->
-              <DropdownMenu
-                :items="getTrackMoveMenuItems(track)"
-                align="end"
-                surface="glass"
-                width="md"
-              >
-                <IconButton
-                  icon="swap_horiz"
-                  size="xs"
-                  variant="ghost"
-                  title="Changer de groupe ou ajuster Z"
-                  class="text-text-muted hover:text-text-primary opacity-0 group-hover:opacity-100 transition-opacity h-5 w-5"
-                />
-              </DropdownMenu>
-
               <!-- Supprimer Piste -->
               <IconButton
                 v-if="canRemoveTrack(track)"
@@ -363,7 +303,7 @@ function canRemoveTrack(track: TimelineTrack): boolean {
                 @click.stop="timelineStore.removeTrack(track.id)"
               />
             </div>
-          </div>
+          </SelectableSurface>
         </template>
       </template>
 
@@ -372,16 +312,19 @@ function canRemoveTrack(track: TimelineTrack): boolean {
         <div class="h-6 px-2.5 bg-bg-base/60 text-[9px] font-bold text-text-muted flex items-center uppercase tracking-wider">
           Pistes libres
         </div>
-        <div
+        <SelectableSurface
           v-for="track in ungroupedTracks"
           :key="track.id"
           class="group h-8 border-b border-border-subtle/40 px-2.5 flex items-center justify-between gap-1 text-xs transition-colors cursor-pointer"
+          density="compact"
+          role="treeitem"
+          :selected="timelineStore.selectedTrackId === track.id && timelineStore.editScope === 'layer'"
           :class="[
-            timelineStore.selectedTrackId === track.id
+            timelineStore.selectedTrackId === track.id && timelineStore.editScope === 'layer'
               ? 'bg-primary/15 border-l-2 border-l-primary font-semibold text-text-primary'
               : 'hover:bg-bg-surface-hover/60 text-text-secondary'
           ]"
-          @click="timelineStore.selectedTrackId = track.id"
+          @click="timelineStore.selectTrackForEditing(track.id)"
         >
           <div class="flex items-center gap-1.5 truncate flex-1 min-w-0">
             <Icon
@@ -396,11 +339,8 @@ function canRemoveTrack(track: TimelineTrack): boolean {
             <span class="text-[9px] font-mono text-text-muted bg-bg-base/80 px-1 py-0.5 rounded border border-border-subtle/60">
               Z:{{ track.zIndex }}
             </span>
-            <DropdownMenu :items="getTrackMoveMenuItems(track)" align="end" surface="glass" width="md">
-              <IconButton icon="folder_move" size="xs" variant="ghost" title="Assigner à un groupe" class="text-text-muted hover:text-text-primary h-5 w-5" />
-            </DropdownMenu>
           </div>
-        </div>
+        </SelectableSurface>
       </template>
     </div>
 

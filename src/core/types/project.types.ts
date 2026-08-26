@@ -4,7 +4,6 @@ export interface StageSettings {
   backgroundColor: string
   safeArea: boolean
   showGrid: boolean
-  showAnchors: boolean
 }
 
 export interface Project {

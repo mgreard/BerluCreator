@@ -39,6 +39,7 @@ export * from './kbd'
 export * from './separator'
 export * from './card'
 export * from './accordion'
+export * from './selectable-surface'
 export * from './mention-text'
 export * from './data-table'
 
@@ -75,4 +76,3 @@ export * from './shell'
 export * from './auth-layout'
 export * from './dashboard-layout'
 export * from './layout-provider'
-

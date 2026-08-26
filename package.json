@@ -16,6 +16,7 @@
     "story:build": "histoire build"
   },
   "dependencies": {
+    "@tanstack/vue-table": "9.1.2",
     "@vueuse/core": "^12.7.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

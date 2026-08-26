@@ -5,6 +5,8 @@ import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { Icon } from '@/components/ui/icon'
+import { Heading } from '@/components/ui/heading'
+import { SelectableSurface } from '@/components/ui/selectable-surface'
 
 const { asset, selected = false } = defineProps<{
   asset: Asset
@@ -13,7 +15,6 @@ const { asset, selected = false } = defineProps<{
 
 const emit = defineEmits<{
   (e: 'select', asset: Asset): void
-  (e: 'editAnchors', asset: Asset): void
   (e: 'delete', asset: Asset): void
 }>()
 
@@ -39,8 +40,10 @@ watchEffect(async () => {
 </script>
 
 <template>
-  <div
+  <SelectableSurface
     class="group relative rounded-xl border p-2 flex flex-col gap-1.5 transition-all duration-200 cursor-pointer select-none"
+    role="option"
+    :selected="selected"
     :class="[
       selected
         ? 'border-primary bg-primary/15 shadow-glow-sm ring-2 ring-primary/60 scale-[1.02]'
@@ -73,24 +76,14 @@ watchEffect(async () => {
         <Icon name="open_with" size="xs" class="text-primary" />
         <span>Mobile</span>
       </Badge>
-
-      <!-- Badge nombre d'ancres -->
-      <Badge
-        v-if="asset.anchors && asset.anchors.length > 0"
-        variant="neutral"
-        size="sm"
-        class="absolute top-1.5 right-1.5 text-[9px] font-mono shadow-glass-xs backdrop-blur-md"
-      >
-        {{ asset.anchors.length }} ancres
-      </Badge>
     </div>
 
     <!-- Informations et Actions -->
     <div class="flex items-center justify-between gap-1 min-w-0 pt-0.5">
       <div class="truncate flex-1">
-        <h4 class="text-xs font-semibold text-text-primary truncate group-hover:text-primary transition-colors" :title="asset.name">
+        <Heading as="h4" variant="sm" class="text-xs font-semibold text-text-primary truncate group-hover:text-primary transition-colors" :title="asset.name">
           {{ asset.name }}
-        </h4>
+        </Heading>
         <div class="flex items-center gap-1.5 mt-0.5">
           <Badge variant="neutral" size="sm" class="text-[9px] px-1 py-0 uppercase font-mono bg-bg-surface-hover border-border-subtle text-text-muted">
             {{ asset.category }}
@@ -103,14 +96,6 @@ watchEffect(async () => {
 
       <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <IconButton
-          icon="adjust"
-          size="xs"
-          variant="ghost"
-          title="Éditer les points d'ancrage"
-          class="text-text-muted hover:text-text-primary"
-          @click.stop="emit('editAnchors', asset)"
-        />
-        <IconButton
           icon="delete"
           size="xs"
           variant="ghost"
@@ -120,5 +105,5 @@ watchEffect(async () => {
         />
       </div>
     </div>
-  </div>
+  </SelectableSurface>
 </template>

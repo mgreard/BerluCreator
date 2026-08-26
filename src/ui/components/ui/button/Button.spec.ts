@@ -58,6 +58,16 @@ describe('Button (Colocated Unit Tests)', () => {
     expect(wrapperAccent.classes()).toContain('text-violet-950')
   })
 
+  it('2b. Propose une taille compacte avec une cible tactile étendue', () => {
+    const wrapper = mount(Button, {
+      props: { size: 'xs' },
+      slots: { default: 'Compact' }
+    })
+
+    expect(wrapper.classes()).toContain('min-h-[24px]')
+    expect(wrapper.classes()).toContain('after:min-h-[44px]')
+  })
+
   it('3. Émet un événement click lorsqu’il est cliqué', async () => {
     const wrapper = mount(Button, {
       slots: {

@@ -22,6 +22,10 @@ export interface RenderableLayer {
   height: number
   scaleX: number
   scaleY: number
+  localX: number
+  localY: number
+  localScaleX: number
+  localScaleY: number
   rotation: number
   zIndex: number
   opacity: number
@@ -67,10 +71,10 @@ export function useHierarchyResolver() {
       let y = 0
       let width = stage.width
       let height = stage.height
-      let scaleX = transform.scaleX ?? 1
-      let scaleY = transform.scaleY ?? 1
-      let rotation = transform.rotation ?? 0
-      let opacity = transform.opacity ?? 1
+      const scaleX = transform.scaleX ?? 1
+      const scaleY = transform.scaleY ?? 1
+      const rotation = transform.rotation ?? 0
+      const opacity = transform.opacity ?? 1
 
       if (placementMode === 'character-anchored') {
         if (track.category === 'backdrop') {
@@ -149,10 +153,14 @@ export function useHierarchyResolver() {
         height,
         scaleX: finalScaleX,
         scaleY: finalScaleY,
+        localX: transform.x ?? 0,
+        localY: transform.y ?? 0,
+        localScaleX: scaleX,
+        localScaleY: scaleY,
         rotation: finalRotation,
         zIndex: trackZIndex,
         opacity: finalOpacity,
-        isMovable: asset.isMovable ?? (placementMode === 'free-transform')
+        isMovable: true
       })
     }
 

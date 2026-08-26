@@ -1,4 +1,4 @@
-import type { Component } from 'vue'
+import type { Component, HTMLAttributes } from 'vue'
 
 export type IconButtonVariant = 'ghost' | 'secondary' | 'accent' | 'primary' | 'destructive' | 'fav'
 export type IconButtonSize = 'xs' | 'sm' | 'md' | 'lg'
@@ -26,7 +26,7 @@ export interface IconButtonProps {
   /** Rendu headless délégué à l'élément enfant */
   asChild?: boolean
   /** Classes CSS supplémentaires */
-  class?: string
+  class?: HTMLAttributes['class']
 }
 
 export interface IconButtonEmits {
