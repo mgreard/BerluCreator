@@ -152,6 +152,13 @@ watch(
           />
           <span class="w-2.5 h-2.5 rounded-full shrink-0" :class="groupColorDots[group.color || 'indigo']" />
           <span class="font-bold text-xs text-text-primary truncate flex-1">{{ group.name }}</span>
+          <Icon
+            v-if="timelineStore.selectedGroupId === group.id && timelineStore.editScope === 'group'"
+            name="warning"
+            size="xs"
+            class="text-red-400 shrink-0"
+            title="Attention : le groupe entier est sélectionné"
+          />
           <Badge variant="neutral" size="sm" class="text-[9px] font-mono">
             {{ getActiveLayersInGroup(group.id).length }}
           </Badge>

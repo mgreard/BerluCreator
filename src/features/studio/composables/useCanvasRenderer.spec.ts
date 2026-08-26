@@ -9,9 +9,7 @@ import {
 const stage: StageSettings = {
   width: 1792,
   height: 1024,
-  backgroundColor: '#0c0d14',
-  safeArea: false,
-  showGrid: false
+  backgroundColor: '#0c0d14'
 }
 
 afterEach(() => {

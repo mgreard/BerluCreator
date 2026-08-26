@@ -5,7 +5,6 @@ import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { FormGroup } from '@/components/ui/form-group'
 
 const open = defineModel<boolean>('open', { default: false })
@@ -17,8 +16,6 @@ const projectDesc = ref(projectStore.currentProject.description || '')
 const stageWidth = ref(projectStore.currentProject.stage.width)
 const stageHeight = ref(projectStore.currentProject.stage.height)
 const bgColor = ref(projectStore.currentProject.stage.backgroundColor)
-const safeArea = ref(projectStore.currentProject.stage.safeArea)
-const showGrid = ref(projectStore.currentProject.stage.showGrid)
 
 function syncFromStore() {
   const proj = projectStore.currentProject
@@ -27,8 +24,6 @@ function syncFromStore() {
   stageWidth.value = proj.stage.width
   stageHeight.value = proj.stage.height
   bgColor.value = proj.stage.backgroundColor
-  safeArea.value = proj.stage.safeArea
-  showGrid.value = proj.stage.showGrid
 }
 
 watch(
@@ -70,9 +65,7 @@ async function save() {
   await projectStore.updateStage({
     width: stageWidth.value,
     height: stageHeight.value,
-    backgroundColor: bgColor.value,
-    safeArea: safeArea.value,
-    showGrid: showGrid.value
+    backgroundColor: bgColor.value
   })
   open.value = false
 }
@@ -83,14 +76,14 @@ async function save() {
     v-model:open="open"
     size="md"
     title="Paramètres du Projet & Plateau"
-    subtitle="Configurez le titre de l'émission, les dimensions du plateau et les options d'affichage."
+    subtitle="Configurez le titre de l'émission et les dimensions du plateau."
   >
     <div class="space-y-4 text-xs">
-      <FormGroup label="Nom de la Scène / Projet" label-for="project-name" class="mb-0">
+      <FormGroup label="Nom de la Scène / Projet" label-for="project-name">
         <Input id="project-name" v-model="projectName" size="sm" />
       </FormGroup>
 
-      <FormGroup label="Format de Rendu Vidéo" class="mb-0">
+      <FormGroup label="Format de Rendu Vidéo">
         <Select
           :options="resolutionPresets"
           :model-value="`${stageWidth}x${stageHeight}`"
@@ -106,17 +99,6 @@ async function save() {
         <FormGroup label="Hauteur (px)" label-for="stage-height" class="mb-0">
           <Input id="stage-height" v-model.number="stageHeight" type="number" size="sm" />
         </FormGroup>
-      </div>
-
-      <div class="border-t border-border/40 pt-3 space-y-3">
-        <div class="flex items-center justify-between">
-          <span>Safe-Area TV active par défaut :</span>
-          <Switch v-model="safeArea" size="sm" />
-        </div>
-        <div class="flex items-center justify-between">
-          <span>Affichage de la grille repère :</span>
-          <Switch v-model="showGrid" size="sm" />
-        </div>
       </div>
     </div>
 

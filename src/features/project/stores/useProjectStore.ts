@@ -13,9 +13,7 @@ export const useProjectStore = defineStore('project', () => {
     stage: {
       width: DEFAULT_STAGE_RESOLUTION.width,
       height: DEFAULT_STAGE_RESOLUTION.height,
-      backgroundColor: '#0c0d14',
-      safeArea: true,
-      showGrid: true
+      backgroundColor: '#0c0d14'
     },
     activeSequenceId: 'seq_default',
     createdAt: Date.now(),
@@ -32,6 +30,13 @@ export const useProjectStore = defineStore('project', () => {
       await projectRepository.create(currentProject.value)
     }
     return currentProject.value
+  }
+
+  async function loadProject(projectId: string): Promise<Project> {
+    const project = await projectRepository.getById(projectId)
+    if (!project) throw new Error('Le projet sauvegardé est introuvable.')
+    currentProject.value = project
+    return project
   }
 
   async function updateStage(settings: Partial<StageSettings>) {
@@ -64,9 +69,7 @@ export const useProjectStore = defineStore('project', () => {
       stage: {
         width: DEFAULT_STAGE_RESOLUTION.width,
         height: DEFAULT_STAGE_RESOLUTION.height,
-        backgroundColor: '#0c0d14',
-        safeArea: true,
-        showGrid: true
+        backgroundColor: '#0c0d14'
       },
       activeSequenceId: generateId('seq'),
       createdAt: Date.now(),
@@ -81,6 +84,7 @@ export const useProjectStore = defineStore('project', () => {
     currentProject,
     isSaving,
     loadInitialProject,
+    loadProject,
     updateStage,
     updateProjectMeta,
     saveProject,

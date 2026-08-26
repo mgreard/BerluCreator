@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { FormGroup } from '@/components/ui/form-group'
+import { Text } from '@/components/ui/text'
 
 const { group = null, layer = null } = defineProps<{
   group?: TrackGroup | null
@@ -145,8 +146,8 @@ async function save() {
       >
         <div class="mb-3 flex items-center justify-between gap-3">
           <div>
-            <p class="text-xs font-semibold text-text-primary">Échelle par axe</p>
-            <p class="text-[10px] text-text-muted">Le verrou synchronise les proportions.</p>
+            <Text variant="caption" class="text-xs font-semibold text-text-primary">Échelle par axe</Text>
+            <Text variant="caption" color="muted" class="text-[10px]">Le verrou synchronise les proportions.</Text>
           </div>
           <IconButton
             :icon="ratioLocked ? 'link' : 'link_off'"
@@ -187,8 +188,8 @@ async function save() {
         class="col-span-2 rounded-xl border border-border-subtle/80 bg-bg-surface/25 p-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]"
       >
         <div class="mb-3">
-          <p class="text-xs font-semibold text-text-primary">Taille logique de l’asset</p>
-          <p class="text-[10px] text-text-muted">Appliquée à toutes les occurrences de ce sprite.</p>
+          <Text variant="caption" class="text-xs font-semibold text-text-primary">Taille logique de l’asset</Text>
+          <Text variant="caption" color="muted" class="text-[10px]">Appliquée à toutes les occurrences de ce sprite.</Text>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <FormGroup label="Largeur (px)" :label-for="`${fieldId}-logical-width`" class="mb-0">

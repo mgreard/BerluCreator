@@ -85,7 +85,7 @@ export function shouldFillExportBackground(
 }
 
 /**
- * Capture un instantané PNG/JPEG propre (sans helpers : pas de pointillés, pas de grille, pas de safe-area).
+ * Capture un instantané PNG/JPEG propre, sans aides d’édition.
  */
 export async function captureCleanFrame(
   layers: RenderableLayer[],
@@ -124,7 +124,8 @@ export function useCanvasRenderer(
   selectedTrackId?: Ref<string | null>,
   selectedBounds?: Ref<BoxBounds | null>,
   targetLabel?: Ref<string | null>,
-  isGroupScope?: Ref<boolean>
+  isGroupScope?: Ref<boolean>,
+  showSelection?: Ref<boolean>
 ) {
   const isRendering = ref(false)
 
@@ -135,7 +136,7 @@ export function useCanvasRenderer(
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const { width, height, backgroundColor, safeArea, showGrid } = stage.value
+    const { width, height, backgroundColor } = stage.value
 
     // Adapter la taille du canvas
     if (canvas.width !== width || canvas.height !== height) {
@@ -147,26 +148,7 @@ export function useCanvasRenderer(
     ctx.fillStyle = backgroundColor || '#0c0d14'
     ctx.fillRect(0, 0, width, height)
 
-    // 2. Grille optionnelle
-    if (showGrid) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)'
-      ctx.lineWidth = 1
-      const step = 80
-      for (let x = 0; x < width; x += step) {
-        ctx.beginPath()
-        ctx.moveTo(x, 0)
-        ctx.lineTo(x, height)
-        ctx.stroke()
-      }
-      for (let y = 0; y < height; y += step) {
-        ctx.beginPath()
-        ctx.moveTo(0, y)
-        ctx.lineTo(width, y)
-        ctx.stroke()
-      }
-    }
-
-    // 3. Dessiner chaque calque résolu
+    // 2. Dessiner chaque calque résolu
     const layers = activeLayers.value
 
     for (const layer of layers) {
@@ -180,8 +162,8 @@ export function useCanvasRenderer(
 
     drawLayersOnContext(ctx, layers, globalImageCache)
 
-    // 4. Cadre de sélection interactif avec poignées d'angles et latérales.
-    const bounds = selectedBounds?.value
+    // 3. Cadre de sélection interactif avec poignées d'angles et latérales.
+    const bounds = showSelection?.value === false ? null : selectedBounds?.value
     if (bounds && bounds.width > 0 && bounds.height > 0) {
       ctx.save()
       const isGroup = isGroupScope?.value ?? false
@@ -243,17 +225,6 @@ export function useCanvasRenderer(
 
       ctx.restore()
     }
-
-    // 5. Safe Area TV (Action safe 93%, Title safe 90%)
-    if (safeArea) {
-      ctx.strokeStyle = 'rgba(255, 200, 0, 0.3)'
-      ctx.lineWidth = 2
-      ctx.setLineDash([8, 8])
-      const marginX = width * 0.05
-      const marginY = height * 0.05
-      ctx.strokeRect(marginX, marginY, width - marginX * 2, height - marginY * 2)
-      ctx.setLineDash([])
-    }
   }
 
   watchEffect(() => {
@@ -264,6 +235,7 @@ export function useCanvasRenderer(
     void selectedBounds?.value
     void targetLabel?.value
     void isGroupScope?.value
+    void showSelection?.value
     render()
 
     onWatcherCleanup(() => {

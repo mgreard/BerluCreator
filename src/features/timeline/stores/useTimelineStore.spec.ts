@@ -64,7 +64,7 @@ describe('sélection du périmètre d’édition du studio', () => {
     expect(store.selectedTrackId).toBeNull()
     expect(store.selectedGroupId).toBeNull()
     expect(store.selectedKeyframeId).toBeNull()
-    expect(store.editScope).toBe('group')
+    expect(store.editScope).toBe('layer')
   })
 })
 

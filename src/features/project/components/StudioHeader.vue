@@ -1,5 +1,15 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import { useProjectStore } from '../stores/useProjectStore'
+import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
+import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
+import {
+  createManualWorkspaceSnapshot,
+  getManualSnapshotSummary,
+  restoreManualWorkspaceSnapshot
+} from '../services/workspace-snapshot.service'
+import type { WorkspaceSnapshotSummary } from '@core/types/project.types'
+import { toast } from '@/ui/shared/services/toast.service'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +23,73 @@ const emit = defineEmits<{
 }>()
 
 const projectStore = useProjectStore()
+const timelineStore = useTimelineStore()
+const assetStore = useAssetStore()
+const snapshotSummary = ref<WorkspaceSnapshotSummary | null>(null)
+const isSnapshotBusy = ref(false)
+
+function formatSnapshotDate(timestamp: number) {
+  return new Intl.DateTimeFormat('fr-FR', {
+    dateStyle: 'short',
+    timeStyle: 'short'
+  }).format(timestamp)
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} Ko`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
+}
+
+async function saveSnapshot() {
+  if (isSnapshotBusy.value) return
+  isSnapshotBusy.value = true
+  try {
+    timelineStore.pause()
+    timelineStore.commitTransformSession(false)
+    await Promise.all([projectStore.saveProject(), timelineStore.saveSequence()])
+    snapshotSummary.value = await createManualWorkspaceSnapshot(projectStore.currentProject.id)
+    toast.success(
+      'Sauvegarde manuelle créée',
+      `${snapshotSummary.value.assetCount} assets inclus (${formatBytes(snapshotSummary.value.totalBlobSize)}).`
+    )
+  } catch (error) {
+    toast.error('Échec de la sauvegarde', error instanceof Error ? error.message : 'Erreur inconnue.')
+  } finally {
+    isSnapshotBusy.value = false
+  }
+}
+
+async function restoreSnapshot() {
+  if (isSnapshotBusy.value || !snapshotSummary.value) return
+  const date = formatSnapshotDate(snapshotSummary.value.createdAt)
+  if (!confirm(`Restaurer la sauvegarde du ${date} ? Les changements plus récents seront remplacés.`)) {
+    return
+  }
+
+  isSnapshotBusy.value = true
+  try {
+    timelineStore.pause()
+    timelineStore.commitTransformSession(false)
+    const snapshot = await restoreManualWorkspaceSnapshot()
+    const project = await projectStore.loadProject(snapshot.activeProjectId)
+    await assetStore.loadAssets()
+    await timelineStore.loadSequence(project.activeSequenceId, project.id)
+    timelineStore.clearStudioSelection(false)
+    toast.success('Sauvegarde restaurée', `État du ${formatSnapshotDate(snapshot.createdAt)} restauré.`)
+  } catch (error) {
+    toast.error('Échec de la restauration', error instanceof Error ? error.message : 'Erreur inconnue.')
+  } finally {
+    isSnapshotBusy.value = false
+  }
+}
+
+onMounted(async () => {
+  try {
+    snapshotSummary.value = await getManualSnapshotSummary()
+  } catch {
+    snapshotSummary.value = null
+  }
+})
 </script>
 
 <template>
@@ -50,6 +127,32 @@ const projectStore = useProjectStore()
 
     <!-- Actions du Studio -->
     <div class="flex items-center gap-2">
+      <Button
+        variant="ghost"
+        size="sm"
+        class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
+        :disabled="isSnapshotBusy"
+        title="Créer ou remplacer la sauvegarde manuelle complète"
+        @click="saveSnapshot"
+      >
+        <Icon name="save" size="xs" />
+        <span>Sauvegarder</span>
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
+        :disabled="isSnapshotBusy || !snapshotSummary"
+        :title="snapshotSummary ? `Restaurer la sauvegarde du ${formatSnapshotDate(snapshotSummary.createdAt)}` : 'Aucune sauvegarde manuelle disponible'"
+        @click="restoreSnapshot"
+      >
+        <Icon name="restore" size="xs" />
+        <span>Restaurer</span>
+      </Button>
+
+      <Separator orientation="vertical" variant="subtle" class="h-5 mx-1" />
+
       <Button
         variant="ghost"
         size="sm"

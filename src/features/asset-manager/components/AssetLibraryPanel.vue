@@ -140,11 +140,19 @@ const categoryCounts = computed(() => {
 })
 
 const categoryTabs = computed<CategoryTab[]>(() =>
-  CATEGORY_TABS.map((tab) => ({
-    ...tab,
-    badge: categoryCounts.value[String(tab.key)] || undefined
-  }))
+  CATEGORY_TABS
+    .filter((tab) => tab.key === 'all' || categoryCounts.value[String(tab.key)] > 0)
+    .map((tab) => ({
+      ...tab,
+      badge: categoryCounts.value[String(tab.key)] || undefined
+    }))
 )
+
+watch([categoryTabs, () => assetStore.selectedCategory], ([tabs, selectedCategory]) => {
+  if (!tabs.some((tab) => tab.key === selectedCategory)) {
+    assetStore.selectedCategory = 'all'
+  }
+})
 
 const selectedCategoryTab = computed<string | number>({
   get: () => assetStore.selectedCategory,
@@ -154,7 +162,7 @@ const selectedCategoryTab = computed<string | number>({
 })
 
 const currentTab = computed(() => {
-  return CATEGORY_TABS.find((tab) => tab.key === assetStore.selectedCategory) || CATEGORY_TABS[0]
+  return categoryTabs.value.find((tab) => tab.key === assetStore.selectedCategory) || CATEGORY_TABS[0]
 })
 
 onMounted(async () => {

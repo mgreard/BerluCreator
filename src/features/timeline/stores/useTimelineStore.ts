@@ -65,7 +65,7 @@ export const useTimelineStore = defineStore('timeline', () => {
   const selectedGroupId = ref<string | null>(null)
   const selectedKeyframeId = ref<string | null>(null)
   const selectedSpriteId = ref<string | null>(null)
-  const editScope = ref<'group' | 'layer'>('group')
+  const editScope = ref<'group' | 'layer'>('layer')
   const undoTransformStack = ref<TransformHistoryEntry[]>([])
   const redoTransformStack = ref<TransformHistoryEntry[]>([])
   const activeTransformSession = ref<TransformEditSession | null>(null)
@@ -315,7 +315,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     selectedGroupId.value = null
     selectedKeyframeId.value = null
     selectedSpriteId.value = null
-    editScope.value = 'group'
+    editScope.value = 'layer'
   }
 
   /**

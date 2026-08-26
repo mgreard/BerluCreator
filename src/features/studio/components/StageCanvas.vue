@@ -46,8 +46,8 @@ const editScope = computed({
 })
 
 const editScopeOptions: SegmentOption[] = [
-  { value: 'group', label: 'Groupe entier', icon: 'workspaces' },
-  { value: 'layer', label: 'Ouvrir groupe', icon: 'crop_free' }
+  { value: 'layer', label: 'Élément', icon: 'crop_free' },
+  { value: 'group', label: 'Groupe entier', icon: 'warning' }
 ]
 
 const selectedTrackId = computed(() => timelineStore.selectedTrackId)
@@ -86,6 +86,8 @@ const activeSelectedGroup = computed(() => {
 const isGroupTarget = computed(() => {
   return editScope.value === 'group' && Boolean(activeSelectedGroup.value)
 })
+
+const showSelection = computed(() => !timelineStore.playback.isPlaying)
 
 // Calcul des bornes englobantes (Bounding Box) du groupe ou du sprite individuel
 const selectedBounds = computed<BoxBounds | null>(() => {
@@ -145,7 +147,8 @@ useCanvasRenderer(
   selectedTrackId,
   selectedBounds,
   targetLabel,
-  isGroupTarget
+  isGroupTarget,
+  showSelection
 )
 
 // --- GESTION DU DRAG & DROP ET DU RESIZE INTERACTIF ---
@@ -198,14 +201,6 @@ function redoCanvasTransform() {
   }
 }
 
-function toggleGrid() {
-  projectStore.updateStage({ showGrid: !stage.value.showGrid })
-}
-
-function toggleSafeArea() {
-  projectStore.updateStage({ safeArea: !stage.value.safeArea })
-}
-
 function onHistoryKeydown(event: KeyboardEvent) {
   const target = event.target as HTMLElement | null
   if (
@@ -216,9 +211,13 @@ function onHistoryKeydown(event: KeyboardEvent) {
   ) {
     return
   }
-  if (event.key === 'Escape' && timelineStore.hasActiveTransformSession) {
+  if (event.key === 'Escape') {
     event.preventDefault()
-    timelineStore.cancelTransformSession()
+    if (timelineStore.hasActiveTransformSession) {
+      timelineStore.cancelTransformSession()
+    } else {
+      timelineStore.clearStudioSelection(false)
+    }
     return
   }
   if (!(event.ctrlKey || event.metaKey) || event.altKey) return
@@ -274,6 +273,7 @@ function setExactScale(value: number) {
 }
 
 function onCanvasWheel(e: WheelEvent) {
+  if (timelineStore.playback.isPlaying) return
   if (e.altKey || e.shiftKey) {
     e.preventDefault()
     const delta = e.deltaY < 0 ? 0.05 : -0.05
@@ -338,6 +338,7 @@ function hitTestLayer(pos: { x: number; y: number }): RenderableLayer | null {
 }
 
 function onCanvasPointerDown(e: PointerEvent) {
+  if (timelineStore.playback.isPlaying) return
   const pos = getStageCoordinates(e)
   if (!pos) return
 
@@ -358,7 +359,9 @@ function onCanvasPointerDown(e: PointerEvent) {
 
     // 2. Priorité 2 : Clic à l'intérieur de la boîte de sélection active (Déplacement direct)
     const b = selectedBounds.value
-    if (pos.x >= b.x && pos.x <= b.x + b.width && pos.y >= b.y && pos.y <= b.y + b.height) {
+    const isInsideSelection =
+      pos.x >= b.x && pos.x <= b.x + b.width && pos.y >= b.y && pos.y <= b.y + b.height
+    if (isInsideSelection && (!isGroupTarget.value || e.shiftKey)) {
       isDragging.value = true
       dragStartPointer.value = { ...pos }
 
@@ -383,7 +386,8 @@ function onCanvasPointerDown(e: PointerEvent) {
   // 3. Priorité 3 : Sélection d'un autre élément au clic
   const hit = hitTestLayer(pos)
   if (hit) {
-    if (hit.groupId && editScope.value === 'group') {
+    const selectWholeGroup = e.shiftKey && Boolean(hit.groupId)
+    if (hit.groupId && selectWholeGroup) {
       timelineStore.selectGroupForEditing(hit.groupId)
     } else {
       timelineStore.selectSpriteForEditing(hit.trackId, hit.keyframeId, hit.spriteId)
@@ -393,7 +397,7 @@ function onCanvasPointerDown(e: PointerEvent) {
     isDragging.value = true
     dragStartPointer.value = { ...pos }
 
-    if (editScope.value === 'group' && hit.groupId) {
+    if (selectWholeGroup && hit.groupId) {
       const grp = timelineStore.currentSequence.groups?.find((g) => g.id === hit.groupId)
       dragStartGroupPos.value = { x: grp?.transform?.x ?? 0, y: grp?.transform?.y ?? 0 }
     } else {
@@ -470,17 +474,17 @@ function onCanvasPointerUp(e: PointerEvent) {
   }
 }
 
-// Double-clic : bascule rapide entre le mode groupe et le mode isolation du sous-sprite
+// Le groupe reste une cible explicite : Shift+double-clic le sélectionne, sinon l’item gagne.
 function onCanvasDoubleClick(e: MouseEvent) {
   const pos = getStageCoordinates(e as unknown as PointerEvent)
   if (!pos) return
 
   const hit = hitTestLayer(pos)
   if (hit && hit.groupId) {
-    if (editScope.value === 'group') {
-      timelineStore.selectSpriteForEditing(hit.trackId, hit.keyframeId, hit.spriteId)
-    } else {
+    if (e.shiftKey) {
       timelineStore.selectGroupForEditing(hit.groupId)
+    } else {
+      timelineStore.selectSpriteForEditing(hit.trackId, hit.keyframeId, hit.spriteId)
     }
     assetStore.selectAsset(hit.asset.id)
   } else if (!hit && !timelineStore.hasActiveTransformSession) {
@@ -490,7 +494,10 @@ function onCanvasDoubleClick(e: MouseEvent) {
 </script>
 
 <template>
-  <div class="relative flex items-center justify-center w-full h-full overflow-hidden p-4 select-none">
+  <div
+    class="relative flex items-center justify-center w-full h-full overflow-hidden p-4 select-none"
+    @pointerdown.self="timelineStore.clearStudioSelection()"
+  >
     <div
       class="relative shadow-glass-2xl rounded-xl overflow-hidden border transition-all duration-200 bg-black/90 border-border-subtle/80 ring-1 ring-white/5"
       :class="resizeCursorClass"
@@ -523,24 +530,6 @@ function onCanvasDoubleClick(e: MouseEvent) {
           {{ stage.width }} × {{ stage.height }}
         </Badge>
         <Separator orientation="vertical" variant="subtle" class="h-4 mx-0.5" />
-        <IconButton
-          :icon="stage.showGrid ? 'grid_on' : 'grid_off'"
-          size="xs"
-          variant="ghost"
-          :active="stage.showGrid"
-          aria-label="Afficher ou masquer la grille"
-          title="Afficher/Masquer la grille"
-          @click="toggleGrid"
-        />
-        <IconButton
-          :icon="stage.safeArea ? 'crop_free' : 'crop'"
-          size="xs"
-          variant="ghost"
-          :active="stage.safeArea"
-          aria-label="Afficher ou masquer la safe-area"
-          title="Afficher/Masquer la Safe-Area TV"
-          @click="toggleSafeArea"
-        />
         <IconButton
           icon="photo_library"
           size="xs"
@@ -595,7 +584,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
 
       <!-- HUD contextuel d'Édition Directe (Bannière Inférieure) -->
       <div
-        v-if="activeSelectedLayer"
+        v-if="activeSelectedLayer && !timelineStore.playback.isPlaying"
         class="absolute bottom-3 left-3 flex items-center gap-2 pointer-events-auto animate-in fade-in duration-200"
         @pointerdown.stop
       >
@@ -612,13 +601,23 @@ function onCanvasDoubleClick(e: MouseEvent) {
 
           <!-- Groupe & Bascule Ouvrir/Fermer le Groupe -->
           <div v-if="activeSelectedGroup" class="flex items-center gap-1.5 pl-2 border-l border-border-subtle/60">
+            <Badge
+              v-if="isGroupTarget"
+              variant="danger"
+              size="sm"
+              class="gap-1 text-[10px]"
+              title="Attention : toute transformation affecte le groupe entier. Maintenez Shift pour le déplacer sur le canvas."
+            >
+              <Icon name="warning" size="xs" />
+              Groupe entier
+            </Badge>
             <SegmentedControl
               v-model="editScope"
               :options="editScopeOptions"
               size="sm"
               variant="primary"
               class="p-0.5 rounded-lg [&_[data-reka-collection-item]]:min-h-[24px] [&_[data-reka-collection-item]]:px-2 [&_[data-reka-collection-item]]:py-0.5 [&_[data-reka-collection-item]]:text-[10px]"
-              title="Choisir si la transformation cible le groupe entier ou le sprite"
+              title="Un clic normal cible l’élément ; Shift+clic cible le groupe entier"
             />
           </div>
 
