@@ -111,23 +111,6 @@ watch(
       scale.value = 100
       rotation.value = 0
       zIndex.value = ASSET_CATEGORIES[spr.category]?.defaultZIndex ?? 20
-
-      // Ancrages recommandés par défaut selon la pièce
-      if (spr.category === 'head') {
-        offsetY.value = -90
-      } else if (spr.category === 'eyes') {
-        offsetY.value = -55
-      } else if (spr.category === 'mouth') {
-        offsetY.value = -20
-      } else if (spr.category === 'arms_left') {
-        offsetX.value = -90
-        offsetY.value = 35
-      } else if (spr.category === 'arms_right') {
-        offsetX.value = 90
-        offsetY.value = 35
-      } else if (spr.category === 'props_host') {
-        offsetY.value = -120
-      }
     }
   },
   { immediate: true }
@@ -202,6 +185,30 @@ function resetPosition() {
   rotation.value = 0
 }
 
+async function clearCalibration() {
+  if (!currentSprite.value) return
+  isSaving.value = true
+  try {
+    await assetStore.updateAsset(currentSprite.value.id, { calibration: undefined })
+    resetPosition()
+    const activeLayer = editorStore.currentDocument.layers.find((l) => l.assetId === currentSprite.value!.id)
+    if (activeLayer) {
+      editorStore.updateLayerTransform(activeLayer.id, {
+        x: 0,
+        y: 0,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0
+      })
+      const defaultZ = ASSET_CATEGORIES[currentSprite.value.category]?.defaultZIndex ?? 20
+      editorStore.updateLayerZIndex(activeLayer.id, defaultZ)
+    }
+    emit('saved', { ...currentSprite.value, calibration: undefined })
+  } finally {
+    isSaving.value = false
+  }
+}
+
 async function saveCurrentCalibration() {
   if (!currentSprite.value) return
   isSaving.value = true
@@ -253,22 +260,23 @@ async function saveCurrentCalibration() {
           :key="slot.id"
           as="button"
           role="tab"
+          density="compact"
           :selected="activeSlot === slot.id"
-          class="px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-semibold cursor-pointer shrink-0 transition-all"
+          class="px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs font-semibold cursor-pointer shrink-0 transition-all border"
           :class="[
             activeSlot === slot.id
-              ? 'bg-primary text-white shadow-glow-sm ring-1 ring-primary'
-              : 'text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover/60'
+              ? 'bg-primary/20 text-text-primary border-primary/50 shadow-glow-sm ring-1 ring-primary/40'
+              : 'text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover/60 border-transparent'
           ]"
           @click="activeSlot = slot.id"
         >
-          <Icon :name="slot.icon" size="xs" />
+          <Icon :name="slot.icon" size="xs" :style="{ color: ASSET_CATEGORIES[slot.id]?.color }" />
           <span>{{ slot.label }}</span>
           <Badge
             variant="neutral"
             size="sm"
-            class="text-[9px] font-mono px-1 py-0"
-            :class="activeSlot === slot.id ? 'bg-black/30 text-white' : ''"
+            class="text-[9px] font-mono px-1.5 py-0"
+            :class="activeSlot === slot.id ? 'bg-primary/25 text-text-primary font-bold' : 'text-text-muted'"
           >
             {{ assetStore.assets.filter((a) => a.category === slot.id).length }}
           </Badge>
@@ -292,16 +300,16 @@ async function saveCurrentCalibration() {
             <IconButton icon="restart_alt" size="xs" variant="ghost" title="Réinitialiser zoom (100%)" @click="viewportZoom = 100" />
           </div>
 
-          <!-- Scene de Montage Centrée -->
+          <!-- Scene de Montage Centrée (Cadre de référence unifié 840x908) -->
           <div
-            class="relative w-[480px] h-[520px] flex items-center justify-center transition-transform duration-75"
+            class="relative w-[420px] h-[454px] max-w-full flex items-center justify-center transition-transform duration-75"
             :style="{ transform: `scale(${viewportZoom / 100})` }"
           >
             <!-- 1. Torse de Référence de Berlu (Immuable au centre) -->
             <img
               :src="defaultTorsoImg"
               alt="Torse Berlu de référence"
-              class="absolute max-h-[260px] top-[180px] object-contain pointer-events-none drop-shadow-2xl z-10 brightness-95"
+              class="absolute inset-0 w-full h-full object-contain pointer-events-none drop-shadow-2xl z-10 brightness-95"
             />
 
             <!-- Tête de référence en filigrane pour aider au placement des yeux/bouche/chapeaux -->
@@ -309,15 +317,16 @@ async function saveCurrentCalibration() {
               v-if="activeSlot !== 'head'"
               :src="defaultHeadImg"
               alt="Tête de repère"
-              class="absolute max-h-[170px] top-[40px] object-contain pointer-events-none opacity-40 z-15"
+              class="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-40 z-15"
             />
 
             <!-- 2. Sprite en cours de calibration (Déplaçable à la souris) -->
             <div
               v-if="currentSprite"
-              class="absolute cursor-move transition-transform duration-75 flex items-center justify-center group touch-none"
+              class="absolute inset-0 w-full h-full cursor-move transition-transform duration-75 flex items-center justify-center group touch-none"
               :style="{
                 transform: `translate(${offsetX}px, ${offsetY}px) rotate(${rotation}deg) scale(${scaleX}, ${scaleY})`,
+                transformOrigin: 'center center',
                 zIndex: zIndex
               }"
               @mousedown="startDrag"
@@ -326,14 +335,14 @@ async function saveCurrentCalibration() {
                 v-if="targetSpriteUrl"
                 :src="targetSpriteUrl"
                 :alt="currentSprite.name"
-                class="max-w-[260px] max-h-[260px] object-contain pointer-events-none filter drop-shadow-2xl ring-1 ring-primary/60 rounded"
+                class="w-full h-full object-contain pointer-events-none filter drop-shadow-2xl"
               />
               <div v-else class="size-28 rounded-xl bg-primary/20 border-2 border-dashed border-primary flex items-center justify-center text-primary animate-pulse">
                 <Icon name="accessibility_new" size="xl" />
               </div>
 
               <!-- Bounding box de positionnement avec poignées d'angles -->
-              <div class="absolute -inset-2 border-2 border-primary border-dashed rounded pointer-events-none shadow-glow-sm">
+              <div class="absolute inset-0 border-2 border-primary/60 border-dashed rounded pointer-events-none shadow-glow-sm">
                 <div class="absolute -top-1.5 -left-1.5 size-3 rounded-full bg-primary border-2 border-white shadow-xs" />
                 <div class="absolute -top-1.5 -right-1.5 size-3 rounded-full bg-primary border-2 border-white shadow-xs" />
                 <div class="absolute -bottom-1.5 -left-1.5 size-3 rounded-full bg-primary border-2 border-white shadow-xs" />
@@ -347,7 +356,7 @@ async function saveCurrentCalibration() {
           <div class="absolute bottom-3 left-3 right-3 flex items-center justify-between text-xs bg-bg-surface/85 backdrop-blur-md px-3.5 py-2 rounded-xl border border-border-subtle shadow-xs">
             <span class="flex items-center gap-1.5 text-text-secondary">
               <Icon name="open_with" size="xs" class="text-primary" />
-              <span>Glissez l'élément sur le torse pour définir son point d'emboîtement</span>
+              <span>Glissez l'élément sur le mannequin pour ajuster son alignement</span>
             </span>
             <span class="font-mono text-primary font-bold text-xs">X: {{ offsetX }}px | Y: {{ offsetY }}px</span>
           </div>
@@ -458,21 +467,34 @@ async function saveCurrentCalibration() {
             </FormGroup>
           </div>
 
-          <!-- Bouton de Sauvegarde Rapide pour ce sprite -->
-          <div class="flex items-center gap-2 pt-1">
-            <Button variant="ghost" size="sm" class="flex-1" @click="resetPosition">
-              <Icon name="restart_alt" size="xs" />
-              <span>Centrer (0,0)</span>
-            </Button>
+          <!-- Boutons de Sauvegarde et Réinitialisation pour ce sprite -->
+          <div class="flex flex-col gap-2 pt-1">
+            <div class="flex items-center gap-2">
+              <Button variant="ghost" size="sm" class="flex-1" @click="resetPosition">
+                <Icon name="restart_alt" size="xs" />
+                <span>Centrer (0,0)</span>
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                class="flex-1 font-bold shadow-glass-sm"
+                :loading="isSaving"
+                @click="saveCurrentCalibration"
+              >
+                <Icon name="check" size="xs" />
+                <span>Enregistrer</span>
+              </Button>
+            </div>
             <Button
-              variant="primary"
-              size="sm"
-              class="flex-1 font-bold shadow-glass-sm"
+              v-if="currentSprite?.calibration"
+              variant="outline"
+              size="xs"
+              class="w-full text-text-muted hover:text-red-400 hover:border-red-400/50"
               :loading="isSaving"
-              @click="saveCurrentCalibration"
+              @click="clearCalibration"
             >
-              <Icon name="check" size="xs" />
-              <span>Enregistrer</span>
+              <Icon name="delete_sweep" size="xs" />
+              <span>Effacer le calibrage personnalisé</span>
             </Button>
           </div>
         </div>
