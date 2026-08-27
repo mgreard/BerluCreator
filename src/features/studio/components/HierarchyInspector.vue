@@ -42,7 +42,12 @@ function selectCharacter() {
 }
 
 function selectLayer(layer: RenderableLayer) {
-  editorStore.selectLayerForEditing(layer.layerId)
+  const isChar = ASSET_CATEGORIES[layer.category]?.placementMode === 'character-anchored'
+  if (isChar && layer.groupId) {
+    editorStore.selectGroupForEditing(layer.groupId)
+  } else {
+    editorStore.selectLayerForEditing(layer.layerId)
+  }
 }
 
 function openLayerSettings(layer: RenderableLayer) {

@@ -62,16 +62,30 @@ const activeSelectedLayer = computed(() => {
 })
 
 const activeSelectedGroup = computed(() => {
-  if (!editorStore.selectedGroupId) return null
-  return (
-    editorStore.currentDocument.groups?.find(
-      (group) => group.id === editorStore.selectedGroupId
-    ) ?? null
-  )
+  if (editorStore.selectedGroupId) {
+    return (
+      editorStore.currentDocument.groups?.find(
+        (group) => group.id === editorStore.selectedGroupId
+      ) ?? null
+    )
+  }
+  if (activeSelectedLayer.value?.groupId) {
+    return (
+      editorStore.currentDocument.groups?.find(
+        (group) => group.id === activeSelectedLayer.value?.groupId
+      ) ?? null
+    )
+  }
+  return null
+})
+
+const isCharacterTarget = computed(() => {
+  const cat = activeSelectedLayer.value?.category
+  return Boolean(cat && ASSET_CATEGORIES[cat]?.placementMode === 'character-anchored')
 })
 
 const isGroupTarget = computed(() => {
-  return editScope.value === 'group' && Boolean(activeSelectedGroup.value)
+  return (editScope.value === 'group' || isCharacterTarget.value) && Boolean(activeSelectedGroup.value)
 })
 
 const activeCamera = computed<CameraFrame>({
@@ -295,6 +309,12 @@ function applyScaleAxes(newScaleX: number, newScaleY: number) {
       scaleX: clampedX,
       scaleY: clampedY
     })
+    if (activeSelectedGroup.value.id === 'grp_berlu') {
+      editorStore.updateCharacterTransform({
+        scaleX: clampedX,
+        scaleY: clampedY
+      })
+    }
   } else if (activeSelectedLayer.value) {
     editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, {
       scaleX: clampedX,
@@ -425,9 +445,16 @@ function onCanvasPointerDown(e: PointerEvent) {
       dragStartPointer.value = { ...pos }
 
       if (isGroupTarget.value && activeSelectedGroup.value) {
-        dragStartGroupPos.value = {
-          x: activeSelectedGroup.value.transform?.x ?? 0,
-          y: activeSelectedGroup.value.transform?.y ?? 0
+        if (activeSelectedGroup.value.id === 'grp_berlu') {
+          dragStartGroupPos.value = {
+            x: editorStore.currentDocument.character?.x ?? 0,
+            y: editorStore.currentDocument.character?.y ?? 0
+          }
+        } else {
+          dragStartGroupPos.value = {
+            x: activeSelectedGroup.value.transform?.x ?? 0,
+            y: activeSelectedGroup.value.transform?.y ?? 0
+          }
         }
       } else if (activeSelectedLayer.value) {
         dragStartLayerPos.value = {
@@ -445,7 +472,8 @@ function onCanvasPointerDown(e: PointerEvent) {
   // 3. Sélection au clic sur un calque
   const hit = hitTestLayer(pos)
   if (hit) {
-    const selectWholeGroup = shouldTargetWholeGroup(hit.groupId, hit.category, editScope.value, e.shiftKey)
+    const isChar = ASSET_CATEGORIES[hit.category]?.placementMode === 'character-anchored'
+    const selectWholeGroup = isChar || shouldTargetWholeGroup(hit.groupId, hit.category, editScope.value, e.shiftKey)
     if (hit.groupId && selectWholeGroup) {
       editorStore.selectGroupForEditing(hit.groupId)
     } else {
@@ -458,8 +486,15 @@ function onCanvasPointerDown(e: PointerEvent) {
     dragStartPointer.value = { ...pos }
 
     if (selectWholeGroup && hit.groupId) {
-      const grp = editorStore.currentDocument.groups?.find((g) => g.id === hit.groupId)
-      dragStartGroupPos.value = { x: grp?.transform?.x ?? 0, y: grp?.transform?.y ?? 0 }
+      if (hit.groupId === 'grp_berlu') {
+        dragStartGroupPos.value = {
+          x: editorStore.currentDocument.character?.x ?? 0,
+          y: editorStore.currentDocument.character?.y ?? 0
+        }
+      } else {
+        const grp = editorStore.currentDocument.groups?.find((g) => g.id === hit.groupId)
+        dragStartGroupPos.value = { x: grp?.transform?.x ?? 0, y: grp?.transform?.y ?? 0 }
+      }
     } else {
       dragStartLayerPos.value = { x: hit.localX ?? 0, y: hit.localY ?? 0 }
     }
@@ -558,7 +593,10 @@ function onCanvasDoubleClick(e: MouseEvent) {
 
   const hit = hitTestLayer(pos)
   if (hit && hit.groupId) {
-    if (e.shiftKey) {
+    const isChar = ASSET_CATEGORIES[hit.category]?.placementMode === 'character-anchored'
+    if (isChar) {
+      editorStore.selectGroupForEditing(hit.groupId)
+    } else if (e.shiftKey) {
       editorStore.selectGroupForEditing(hit.groupId)
     } else {
       editorStore.selectLayerForEditing(hit.layerId)

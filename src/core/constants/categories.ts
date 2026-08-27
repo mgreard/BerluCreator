@@ -62,7 +62,7 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'apparel',
     description: 'Objets portés par le présentateur : chapeaux, lunettes et accessoires de visage',
     defaultZIndex: 27,
-    layerCardinality: 'multi',
+    layerCardinality: 'singleton',
     placementMode: 'character-anchored',
     color: '#c084fc',
     filenamePrefix: 'accessoire-presentateur'

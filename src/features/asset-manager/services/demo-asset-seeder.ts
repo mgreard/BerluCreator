@@ -107,25 +107,25 @@ export function parseSpriteMetadata(filePath: string): {
     const normalizedFileName = fileName.toLowerCase()
     if (normalizedFileName.includes('_left_arm')) {
       category = 'arms_left'
-      tags.push('arms_left', 'bras')
+      tags.push('arms_left', 'bras', 'berlu')
     } else if (
       normalizedFileName.includes('_right_arm') ||
       normalizedFileName.includes('_both_arms')
     ) {
       category = 'arms_right'
-      tags.push('arms_right', 'bras')
+      tags.push('arms_right', 'bras', 'berlu')
     } else {
       throw new Error(`Nom de sprite de bras non reconnu : ${fileName}`)
     }
   } else if (folder === 'head') {
     category = 'head'
-    tags.push('head', 'visage', 'expression')
+    tags.push('head', 'visage', 'expression', 'berlu')
   } else if (folder === 'mouth') {
     category = 'mouth'
-    tags.push('mouth', 'bouche', 'phoneme')
+    tags.push('mouth', 'bouche', 'phoneme', 'berlu')
   } else if (folder === 'torso') {
     category = 'torso'
-    tags.push('torso', 'corps')
+    tags.push('torso', 'corps', 'berlu')
   } else if (folder === 'background') {
     category = 'background'
     tags.push('background', 'fond')
@@ -134,10 +134,10 @@ export function parseSpriteMetadata(filePath: string): {
     tags.push('desk', 'bureau')
   } else if (folder === 'eyes') {
     category = 'eyes'
-    tags.push('eyes', 'regard', 'lunettes')
+    tags.push('eyes', 'regard', 'lunettes', 'berlu')
   } else if (folder === 'props-host') {
     category = 'props_host'
-    tags.push('props_host', 'presentateur', 'accessoire')
+    tags.push('props_host', 'presentateur', 'accessoire', 'berlu')
   } else if (folder === 'props-set') {
     category = 'props_set'
     tags.push('props_set', 'plateau', 'objet')

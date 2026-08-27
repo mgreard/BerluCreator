@@ -183,11 +183,21 @@ function resolveLayer(
       localY: transform.y ?? 0
     })
 
+    const groupTransform = group?.transform ?? {}
+    const isBerluGroup = !group || group.id === 'grp_berlu'
+
+    const rigX = isBerluGroup ? characterRig.x : (groupTransform.x ?? 0)
+    const rigY = isBerluGroup ? characterRig.y : (groupTransform.y ?? 0)
+    const rigScaleX = isBerluGroup ? characterRig.scaleX : (groupTransform.scaleX ?? 1)
+    const rigScaleY = isBerluGroup ? characterRig.scaleY : (groupTransform.scaleY ?? 1)
+    const rigRotation = isBerluGroup ? characterRig.rotation : (groupTransform.rotation ?? 0)
+    const rigZ = isBerluGroup ? characterRig.zIndex : (group?.zIndex ?? 20)
+
     const localScaleX = transform.scaleX ?? 1
     const localScaleY = transform.scaleY ?? 1
 
-    const finalX = Math.round(baseBounds.x + characterRig.x)
-    const finalY = Math.round(baseBounds.y + characterRig.y)
+    const finalX = Math.round(baseBounds.x + rigX)
+    const finalY = Math.round(baseBounds.y + rigY)
 
     return {
       id: layer.id,
@@ -196,7 +206,7 @@ function resolveLayer(
       category: layer.category,
       groupId: group?.id ?? 'grp_berlu',
       groupName: group?.name ?? 'Personnage',
-      groupZIndex: characterRig.zIndex,
+      groupZIndex: rigZ,
       layerZIndex: layer.zIndex,
       order: layer.order ?? 0,
       asset,
@@ -204,17 +214,17 @@ function resolveLayer(
       y: finalY,
       width: baseBounds.width,
       height: baseBounds.height,
-      transformOriginX: baseBounds.transformOriginX + characterRig.x,
-      transformOriginY: baseBounds.transformOriginY + characterRig.y,
-      scaleX: localScaleX * characterRig.scaleX,
-      scaleY: localScaleY * characterRig.scaleY,
+      transformOriginX: baseBounds.transformOriginX + rigX,
+      transformOriginY: baseBounds.transformOriginY + rigY,
+      scaleX: localScaleX * rigScaleX,
+      scaleY: localScaleY * rigScaleY,
       localX: baseBounds.localX,
       localY: baseBounds.localY,
       localScaleX,
       localScaleY,
-      rotation: (transform.rotation ?? 0) + characterRig.rotation,
+      rotation: (transform.rotation ?? 0) + rigRotation,
       zIndex: layer.zIndex,
-      opacity: Math.max(0, Math.min(1, transform.opacity ?? 1)),
+      opacity: Math.max(0, Math.min(1, (transform.opacity ?? 1) * (groupTransform.opacity ?? 1))),
       isMovable: asset.isMovable
     }
   }

@@ -75,7 +75,8 @@ export const useAssetStore = defineStore('asset', () => {
   async function importAsset(
     file: File | Blob,
     category: AssetCategory,
-    name?: string
+    name?: string,
+    tags?: string[]
   ): Promise<Asset> {
     const id = generateId('asset')
     const blobId = generateId('blob')
@@ -89,11 +90,13 @@ export const useAssetStore = defineStore('asset', () => {
     const assetName = name || defaultName
     const spriteConfig = resolveSpriteConfig(assetName, category)
 
+    const initialTags = Array.from(new Set([category, ...(tags ?? [])]))
+
     const newAsset: Asset = {
       id,
       name: assetName,
       category,
-      tags: [category],
+      tags: initialTags,
       blobId,
       width: dimensions.width,
       height: dimensions.height,

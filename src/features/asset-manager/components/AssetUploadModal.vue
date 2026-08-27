@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, useId, watch, useTemplateRef } from 'vue'
+import { computed, ref, watch, useTemplateRef } from 'vue'
 import type { AssetCategory } from '@core/types/asset.types'
+import { ASSET_CATEGORIES, CATEGORY_LIST } from '@core/constants/categories'
 import { generateId } from '@/lib/utils'
 import { useAssetStore } from '../stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
@@ -14,7 +15,8 @@ import { Text } from '@/components/ui/text'
 import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { FormGroup } from '@/components/ui/form-group'
-import { CategorySelect } from '@/components/ui/category-select'
+import { SelectableSurface } from '@/components/ui/selectable-surface'
+import { SegmentedControl } from '@/components/ui/segmented-control'
 import { toast } from '@/ui/shared/services/toast.service'
 
 interface PreparedFile {
@@ -30,44 +32,82 @@ const assetStore = useAssetStore()
 const editorStore = useEditorStore()
 
 const isDragging = ref(false)
-const selectedCategory = ref<AssetCategory>('torso')
 const fileInputRef = useTemplateRef<HTMLInputElement>('fileInput')
 const isImporting = ref(false)
 const preparedFiles = ref<PreparedFile[]>([])
 
-const AUTO_TARGET = '__auto__'
-const NEW_CUSTOM_TARGET = '__new_custom__'
-const selectedTarget = ref(AUTO_TARGET)
-const customCategoryName = ref('')
-const customCategoryInputId = useId()
+// Domaine d'upload : Personnages vs Plateau & Décor
+const assetScope = ref<'character' | 'stage'>('character')
 
-const automaticGroup = computed(() =>
-  (editorStore.currentDocument.groups ?? []).find(
-    (group) => group.isDefault && group.allowedCategories.includes(selectedCategory.value)
-  )
-)
+// Mode Personnage : Personnage complet vs Élément du squelette articulé
+const characterMode = ref<'full' | 'skeleton'>('skeleton')
 
-const groupOptions = computed(() => [
-  {
-    value: AUTO_TARGET,
-    label: `Automatique — ${automaticGroup.value?.name ?? 'groupe par défaut'}`
-  },
-  ...(editorStore.currentDocument.groups ?? []).map((group) => ({
-    value: group.id,
-    label: group.isDefault ? group.name : `${group.customCategory ?? group.name} (personnalisé)`
-  })),
-  { value: NEW_CUSTOM_TARGET, label: '+ Nouveau groupe' }
-])
+// Nom / Tag du personnage (ex: Berlu, Invité...)
+const characterName = ref('Berlu')
 
-const hasValidTarget = computed(() =>
-  selectedTarget.value !== NEW_CUSTOM_TARGET || customCategoryName.value.trim().length > 0
-)
+// Catégorie active résolue
+const selectedCategory = ref<AssetCategory>('head')
+
+const CHARACTER_SKELETON_SLOTS: { id: AssetCategory; label: string; icon: string; description: string }[] = [
+  { id: 'head', label: 'Tête & Visage', icon: 'face', description: 'Expressions faciales et regards' },
+  { id: 'eyes', label: 'Yeux / Regard', icon: 'visibility', description: 'Regard, clignements, lunettes' },
+  { id: 'mouth', label: 'Bouche & Phonèmes', icon: 'lips', description: 'Expressions labiales et phonèmes' },
+  { id: 'arms_left', label: 'Bras Gauche', icon: 'front_hand', description: 'Gestuelle et postures gauches' },
+  { id: 'arms_right', label: 'Bras Droit', icon: 'waving_hand', description: 'Gestuelle et postures droites' },
+  { id: 'torso', label: 'Torse & Buste', icon: 'body_system', description: 'Tronc et vêtements de base' },
+  { id: 'props_host', label: 'Accessoire Porté', icon: 'apparel', description: 'Chapeaux, objets tenus en main' }
+]
+
+const STAGE_SLOTS: { id: AssetCategory; label: string; icon: string; description: string }[] = [
+  { id: 'background', label: 'Arrière-plan', icon: 'tv_gen', description: 'Décors et fonds de plateau' },
+  { id: 'desk', label: 'Bureau', icon: 'desk', description: 'Comptoir et mobilier' },
+  { id: 'props_desk', label: 'Objets du Bureau', icon: 'inventory_2', description: 'Objets posés sur la table' },
+  { id: 'props_set', label: 'Accessoires Plateau', icon: 'category', description: 'Éléments de décor plateau' },
+  { id: 'foreground', label: 'Premier Plan', icon: 'filter_frames', description: 'Titrage, synthés, ambiances' }
+]
+
+const scopeOptions = [
+  { value: 'character', label: 'Personnages', icon: 'accessibility_new' },
+  { value: 'stage', label: 'Plateau & Décor', icon: 'tv_gen' }
+]
+
+function selectFullCharacterMode() {
+  characterMode.value = 'full'
+  selectedCategory.value = 'torso'
+}
+
+function selectSkeletonMode() {
+  characterMode.value = 'skeleton'
+  if (selectedCategory.value === 'torso') {
+    selectedCategory.value = 'head'
+  }
+}
+
+watch(assetScope, (newScope) => {
+  if (newScope === 'character') {
+    if (characterMode.value === 'full') {
+      selectedCategory.value = 'torso'
+    } else if (!CHARACTER_SKELETON_SLOTS.some((s) => s.id === selectedCategory.value)) {
+      selectedCategory.value = 'head'
+    }
+  } else {
+    if (!STAGE_SLOTS.some((s) => s.id === selectedCategory.value)) {
+      selectedCategory.value = 'background'
+    }
+  }
+})
 
 watch(
   () => assetStore.selectedCategory,
   (category) => {
     if (category && category !== 'all') {
       selectedCategory.value = category
+      if (CHARACTER_SKELETON_SLOTS.some((s) => s.id === category)) {
+        assetScope.value = 'character'
+        characterMode.value = category === 'torso' ? 'full' : 'skeleton'
+      } else if (STAGE_SLOTS.some((s) => s.id === category)) {
+        assetScope.value = 'stage'
+      }
     }
   },
   { immediate: true }
@@ -76,8 +116,6 @@ watch(
 watch(open, (isOpen) => {
   if (isOpen) {
     isImporting.value = false
-    customCategoryName.value = ''
-    selectedTarget.value = editorStore.selectedGroupId ?? AUTO_TARGET
     return
   }
   clearPreparedFiles()
@@ -130,28 +168,30 @@ function removePreparedFile(id: string) {
 }
 
 async function performImport() {
-  if (preparedFiles.value.length === 0 || !hasValidTarget.value || isImporting.value) return
+  if (preparedFiles.value.length === 0 || isImporting.value) return
   isImporting.value = true
 
   try {
-    let targetGroupId: string | null = null
-    if (selectedTarget.value === NEW_CUSTOM_TARGET && customCategoryName.value.trim()) {
-      const created = editorStore.createGroup(customCategoryName.value.trim())
-      targetGroupId = created.id
-    } else if (selectedTarget.value !== AUTO_TARGET) {
-      targetGroupId = selectedTarget.value
+    let count = 0
+    const extraTags: string[] = []
+    if (assetScope.value === 'character') {
+      if (characterName.value.trim()) {
+        extraTags.push(characterName.value.trim())
+      }
+      if (characterMode.value === 'full') {
+        extraTags.push('full')
+      }
     }
 
-    let count = 0
     for (const item of preparedFiles.value) {
-      const asset = await assetStore.importAsset(item.file, item.category, item.name)
-      editorStore.assignAssetToGroup(asset.id, item.category, targetGroupId, item.name)
+      const asset = await assetStore.importAsset(item.file, item.category, item.name, extraTags)
+      editorStore.assignAssetToGroup(asset.id, item.category, null, item.name)
       count++
     }
 
     toast.success(
       'Import réussi',
-      `${count} sprite(s) importé(s) avec succès avec dimensions et pixels d'origine.`
+      `${count} sprite(s) importé(s) avec succès.`
     )
     open.value = false
   } catch (error) {
@@ -168,35 +208,142 @@ async function performImport() {
     v-model:open="open"
     size="lg"
     title="Importer des sprites"
-    subtitle="Import direct 1 fichier = 1 asset avec préservation intégrale des dimensions et pixels d’origine."
+    subtitle="Importez des membres de personnage ou des décors avec assignation automatique."
   >
     <div class="space-y-4">
-      <!-- 1. Paramètres de cible -->
-      <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <FormGroup label="Catégorie par défaut" hint="Détermine le rôle sur le plateau">
-          <CategorySelect v-model="selectedCategory" size="sm" />
-        </FormGroup>
+      <!-- 1. Sélecteur de Domaine & Type de pièce -->
+      <div class="space-y-3 p-3.5 rounded-2xl bg-bg-surface/60 border border-border-default shadow-xs">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-text-primary uppercase tracking-wider">Classification du sprite</span>
+          <Badge variant="neutral" size="sm" class="font-mono text-[10px] flex items-center gap-1.5 px-2 py-0.5">
+            <span class="size-2 rounded-full" :style="{ backgroundColor: ASSET_CATEGORIES[selectedCategory]?.color }" />
+            <span>{{ ASSET_CATEGORIES[selectedCategory]?.label }}</span>
+          </Badge>
+        </div>
 
-        <FormGroup label="Groupe cible sur le plateau">
-          <Select
-            v-model="selectedTarget"
-            :options="groupOptions"
-            size="sm"
-            aria-label="Groupe cible"
-          />
-        </FormGroup>
-      </div>
+        <!-- Onglets principaux : Personnages vs Plateau -->
+        <SegmentedControl
+          v-model="assetScope"
+          :options="scopeOptions"
+          size="sm"
+          variant="glass"
+          class="w-full"
+        />
 
-      <div v-if="selectedTarget === NEW_CUSTOM_TARGET" class="rounded-lg border border-primary/30 bg-primary/5 p-3">
-        <FormGroup label="Nom du nouveau groupe" :label-for="customCategoryInputId" class="mb-0">
-          <Input
-            :id="customCategoryInputId"
-            v-model="customCategoryName"
-            size="sm"
-            placeholder="Ex : Décor Extérieur, Accessoires Invité..."
-            autofocus
-          />
-        </FormGroup>
+        <!-- Section A : Personnages -->
+        <div v-if="assetScope === 'character'" class="space-y-3 pt-1">
+          <!-- Nom / Tag du personnage -->
+          <div>
+            <FormGroup label="Nom / Variante du personnage" hint="Ex: Berlu, Invité, Co-Présentateur..." class="mb-0">
+              <Input
+                v-model="characterName"
+                size="sm"
+                placeholder="Ex : Berlu, Invité 1, Avatar..."
+              />
+            </FormGroup>
+          </div>
+
+          <!-- Choix : Personnage complet vs Élément du squelette -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <SelectableSurface
+              as="button"
+              role="radio"
+              :selected="characterMode === 'full'"
+              class="p-2.5 rounded-xl border text-left flex items-start gap-2.5 cursor-pointer transition-all"
+              :class="[
+                characterMode === 'full'
+                  ? 'bg-primary/15 border-primary text-text-primary ring-1 ring-primary/40 shadow-xs'
+                  : 'bg-bg-surface/50 border-border-subtle text-text-secondary hover:text-text-primary hover:border-primary/30'
+              ]"
+              @click="selectFullCharacterMode"
+            >
+              <div class="p-2 rounded-lg shrink-0" :class="characterMode === 'full' ? 'bg-primary/20 text-primary' : 'bg-bg-surface text-text-muted'">
+                <Icon name="person" size="sm" />
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs font-bold leading-tight">Personnage complet</div>
+                <div class="text-[10px] text-text-muted mt-0.5 leading-snug">Avatar entier ou Buste de référence (Torse)</div>
+              </div>
+            </SelectableSurface>
+
+            <SelectableSurface
+              as="button"
+              role="radio"
+              :selected="characterMode === 'skeleton'"
+              class="p-2.5 rounded-xl border text-left flex items-start gap-2.5 cursor-pointer transition-all"
+              :class="[
+                characterMode === 'skeleton'
+                  ? 'bg-primary/15 border-primary text-text-primary ring-1 ring-primary/40 shadow-xs'
+                  : 'bg-bg-surface/50 border-border-subtle text-text-secondary hover:text-text-primary hover:border-primary/30'
+              ]"
+              @click="selectSkeletonMode"
+            >
+              <div class="p-2 rounded-lg shrink-0" :class="characterMode === 'skeleton' ? 'bg-primary/20 text-primary' : 'bg-bg-surface text-text-muted'">
+                <Icon name="view_in_ar" size="sm" />
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs font-bold leading-tight">Élément du squelette</div>
+                <div class="text-[10px] text-text-muted mt-0.5 leading-snug">Membre articulé (Tête, Bras, Yeux, Bouche...)</div>
+              </div>
+            </SelectableSurface>
+          </div>
+
+          <!-- Puces de sélection du membre anatomique précis -->
+          <div v-if="characterMode === 'skeleton'" class="space-y-1.5 pt-1">
+            <div class="text-[11px] font-semibold text-text-secondary flex items-center gap-1.5">
+              <Icon name="device_hub" size="xs" class="text-primary" />
+              <span>Membre du squelette à assigner :</span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              <SelectableSurface
+                v-for="slot in CHARACTER_SKELETON_SLOTS"
+                :key="slot.id"
+                as="button"
+                role="radio"
+                density="compact"
+                :selected="selectedCategory === slot.id"
+                class="p-2 rounded-lg border flex items-center gap-2 cursor-pointer transition-all text-xs"
+                :class="[
+                  selectedCategory === slot.id
+                    ? 'bg-primary/20 border-primary text-text-primary font-bold shadow-xs'
+                    : 'bg-bg-surface/40 border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover/60'
+                ]"
+                @click="selectedCategory = slot.id"
+              >
+                <Icon :name="slot.icon" size="xs" :style="{ color: ASSET_CATEGORIES[slot.id]?.color }" class="shrink-0" />
+                <span class="truncate text-[11px]">{{ slot.label }}</span>
+              </SelectableSurface>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section B : Plateau & Décors -->
+        <div v-else class="space-y-1.5 pt-1">
+          <div class="text-[11px] font-semibold text-text-secondary flex items-center gap-1.5">
+            <Icon name="category" size="xs" class="text-primary" />
+            <span>Sélectionnez le type d'élément de décor :</span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            <SelectableSurface
+              v-for="slot in STAGE_SLOTS"
+              :key="slot.id"
+              as="button"
+              role="radio"
+              density="compact"
+              :selected="selectedCategory === slot.id"
+              class="p-2 rounded-lg border flex items-center gap-2 cursor-pointer transition-all text-xs"
+              :class="[
+                selectedCategory === slot.id
+                  ? 'bg-primary/20 border-primary text-text-primary font-bold shadow-xs'
+                  : 'bg-bg-surface/40 border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover/60'
+              ]"
+              @click="selectedCategory = slot.id"
+            >
+              <Icon :name="slot.icon" size="xs" :style="{ color: ASSET_CATEGORIES[slot.id]?.color }" class="shrink-0" />
+              <span class="truncate text-[11px]">{{ slot.label }}</span>
+            </SelectableSurface>
+          </div>
+        </div>
       </div>
 
       <!-- 2. Zone de Drag & Drop -->
@@ -212,7 +359,7 @@ async function performImport() {
         @drop.prevent="onDrop"
         @click="fileInputRef?.click()"
       >
-        <!-- eslint-disable-next-line vue/no-restricted-html-elements -- Sélecteur de fichier natif caché, sans équivalent dans la librairie. -->
+        <!-- eslint-disable-next-line vue/no-restricted-html-elements -- Sélecteur de fichier natif caché -->
         <input
           ref="fileInput"
           type="file"
@@ -230,7 +377,7 @@ async function performImport() {
           Cliquez pour choisir des images ou glissez-déposez vos fichiers ici
         </Text>
         <Text variant="caption" color="muted" class="text-[11px] mt-1 text-center">
-          PNG, WebP, JPG ou SVG supportés. Les dimensions originales sont conservées.
+          PNG, WebP, JPG ou SVG. Les dimensions natives et proportions $840\times908$ sont conservées.
         </Text>
       </div>
 
@@ -250,11 +397,10 @@ async function performImport() {
             class="flex items-center gap-3 p-2 rounded-lg border border-border-subtle bg-bg-surface/80 text-xs"
           >
             <img :src="item.previewUrl" :alt="item.name" class="w-10 h-10 object-contain rounded bg-bg-base border border-border-subtle shrink-0" />
-            <div class="min-w-0 flex-1">
-              <Input v-model="item.name" size="sm" class="h-6 text-xs font-semibold" />
-              <div class="flex items-center gap-2 mt-1">
-                <Badge variant="neutral" size="sm" class="text-[9px] uppercase font-mono">{{ item.category }}</Badge>
-                <span class="text-[10px] text-text-muted">{{ (item.file.size / 1024).toFixed(0) }} Ko</span>
+            <div class="min-w-0 flex-1 space-y-1">
+              <Input v-model="item.name" size="sm" class="h-7 text-xs font-semibold" />
+              <div class="text-[10px] text-text-muted">
+                {{ (item.file.size / 1024).toFixed(0) }} Ko
               </div>
             </div>
             <IconButton
@@ -277,7 +423,7 @@ async function performImport() {
           variant="primary"
           size="sm"
           class="gap-1.5"
-          :disabled="preparedFiles.length === 0 || !hasValidTarget || isImporting"
+          :disabled="preparedFiles.length === 0 || isImporting"
           :loading="isImporting"
           @click="performImport"
         >

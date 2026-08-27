@@ -107,6 +107,51 @@ function cloneDocument(doc: EditorDocument): EditorDocument {
   return JSON.parse(JSON.stringify(doc))
 }
 
+const SYSTEM_TAGS_SET = new Set([
+  'arms', 'arms_left', 'arms_right', 'bras', 'left', 'right',
+  'head', 'visage', 'expression', 'face',
+  'mouth', 'bouche', 'phoneme', 'lips',
+  'torso', 'corps', 'body', 'buste',
+  'eyes', 'regard', 'lunettes', 'oeil', 'yeux',
+  'props-host', 'props_host', 'presentateur', 'accessoire', 'apparel',
+  'props-set', 'props_set', 'plateau', 'objet',
+  'props-desk', 'props_desk', 'table',
+  'background', 'fond', 'decor', 'arriere-plan',
+  'desk', 'bureau',
+  'foreground', 'premier-plan', 'ambiance',
+  'tenue', 'outfit', 'costume', 'complet', 'full', 'all', 'sprite'
+])
+
+function isCustomCharacterTag(tag: string): boolean {
+  const clean = tag.trim().toLowerCase()
+  if (!clean) return false
+  if (SYSTEM_TAGS_SET.has(clean)) return false
+  if (clean.includes('_') || clean.includes('-')) return false
+  return clean !== 'berlu'
+}
+
+function sanitizeDocumentGroups(doc: EditorDocument): void {
+  const invalidGroupIds = new Set<string>()
+  for (const g of doc.groups ?? []) {
+    if (!g.isDefault && SYSTEM_TAGS_SET.has(g.name.toLowerCase().trim())) {
+      invalidGroupIds.add(g.id)
+    }
+  }
+
+  for (const layer of doc.layers) {
+    const isChar = ASSET_CATEGORIES[layer.category]?.placementMode === 'character-anchored'
+    if (isChar) {
+      if (!layer.groupId || invalidGroupIds.has(layer.groupId)) {
+        layer.groupId = 'grp_berlu'
+      }
+    }
+  }
+
+  if (invalidGroupIds.size > 0) {
+    doc.groups = doc.groups.filter((g) => !invalidGroupIds.has(g.id))
+  }
+}
+
 export const useEditorStore = defineStore('editor', () => {
   const currentDocument = ref<EditorDocument>(createDefaultDocument())
   const selectedLayerId = ref<string | null>(null)
@@ -173,10 +218,12 @@ export const useEditorStore = defineStore('editor', () => {
             zIndex: berluGroup?.zIndex ?? 10
           }
         }
+        sanitizeDocumentGroups(existing)
         currentDocument.value = existing
       } else {
         const byProject = await editorDocumentRepository.getByProjectId(projectId)
         if (byProject.length > 0) {
+          sanitizeDocumentGroups(byProject[0])
           currentDocument.value = byProject[0]
         } else {
           currentDocument.value = createDefaultDocument(projectId)
@@ -197,6 +244,7 @@ export const useEditorStore = defineStore('editor', () => {
     isSaving.value = true
     try {
       commitTransformSession(false)
+      sanitizeDocumentGroups(currentDocument.value)
       await editorDocumentRepository.save(currentDocument.value)
     } finally {
       isSaving.value = false
@@ -210,12 +258,25 @@ export const useEditorStore = defineStore('editor', () => {
     category: AssetCategory,
     targetGroupId?: string | null,
     name?: string
-  ): EditorLayer {
+  ): EditorLayer | null {
     commitTransformSession(false)
     const categoryDef = ASSET_CATEGORIES[category]
     const cardinality = categoryDef?.layerCardinality ?? 'multi'
 
-    // Résolution du groupe cible : s'assurer que le groupe cible autorise impérativement cette catégorie
+    const isCharacter = categoryDef?.placementMode === 'character-anchored'
+    let foundAsset: any = undefined
+    let calibration = undefined
+    try {
+      const assetStore = useAssetStore()
+      foundAsset = assetStore.assets.find((a) => a.id === assetId)
+      if (foundAsset?.calibration) {
+        calibration = foundAsset.calibration
+      }
+    } catch {
+      // Ignorer si appelé hors contexte Pinia actif
+    }
+
+    // 1. Si un groupe cible valide est spécifié par l'utilisateur (ex: groupe actif/sélectionné)
     let group = targetGroupId
       ? currentDocument.value.groups.find(
           (g) =>
@@ -224,8 +285,49 @@ export const useEditorStore = defineStore('editor', () => {
         )
       : null
 
+    // 2. Si c'est un élément de personnage et qu'aucun groupe spécifique n'est spécifié :
+    if (!group && isCharacter) {
+      // Rechercher un tag de personnage personnalisé sur l'asset (ex: "Pedro", "Invité"...)
+      const charTag = foundAsset?.tags?.find((t: string) => isCustomCharacterTag(t))
+
+      if (charTag) {
+        const formattedName = charTag.charAt(0).toUpperCase() + charTag.slice(1)
+        let charGroup = currentDocument.value.groups.find(
+          (g) =>
+            g.name.toLowerCase() === formattedName.toLowerCase() ||
+            g.customCategory?.toLowerCase() === formattedName.toLowerCase()
+        )
+
+        // Si le groupe pour ce personnage n'existe pas encore sur le canvas, le créer automatiquement
+        if (!charGroup) {
+          const maxZ = currentDocument.value.groups.reduce((max, g) => Math.max(max, g.zIndex), 0)
+          charGroup = {
+            id: generateId('grp_char'),
+            name: formattedName,
+            zIndex: Math.max(20, maxZ + 1),
+            color: 'indigo',
+            allowedCategories: [
+              'torso',
+              'head',
+              'mouth',
+              'eyes',
+              'arms_left',
+              'arms_right',
+              'props_host'
+            ],
+            isDefault: false
+          }
+          currentDocument.value.groups.push(charGroup)
+        }
+        group = charGroup
+      } else {
+        // Personnage par défaut : toutes les pièces de Berlu vont solidairement dans grp_berlu
+        group = currentDocument.value.groups.find((g) => g.id === 'grp_berlu')
+      }
+    }
+
+    // 3. Fallback : groupe par défaut autorisant cette catégorie
     if (!group) {
-      // Trouver le premier groupe autorisant explicitement cette catégorie (ex: grp_background pour background, grp_berlu pour head/arms...)
       group = currentDocument.value.groups.find(
         (g) => g.allowedCategories.includes(category)
       ) ?? currentDocument.value.groups.find(
@@ -246,28 +348,26 @@ export const useEditorStore = defineStore('editor', () => {
       group = newGroup
     }
 
-    // Recherche d'une calibration éventuelle sur l'asset
-    let calibration = undefined
-    try {
-      const assetStore = useAssetStore()
-      const foundAsset = assetStore.assets.find((a) => a.id === assetId)
-      if (foundAsset?.calibration) {
-        calibration = foundAsset.calibration
-      }
-    } catch {
-      // Ignorer si appelé hors contexte Pinia actif
-    }
+    // Gestion de la cardinalité (singleton ou catégorie de personnage) :
+    // Un personnage ne peut avoir qu'un seul asset par catégorie à la fois sur le viewport.
+    const isSingleSlot = cardinality === 'singleton' || isCharacter
 
-    // Gestion de la cardinalité : si singleton, remplacer le calque existant
-    if (cardinality === 'singleton') {
+    if (isSingleSlot) {
       const existingLayer = currentDocument.value.layers.find(
         (l) => l.category === category && l.groupId === group!.id
-      ) ?? currentDocument.value.layers.find((l) => l.category === category)
+      ) ?? (isCharacter ? currentDocument.value.layers.find((l) => l.category === category) : undefined)
 
       if (existingLayer) {
+        // Toggle OFF : Si cet asset est déjà sur le calque actif et visible, on le retire du viewport !
+        if (existingLayer.assetId === assetId && !existingLayer.muted) {
+          removeLayer(existingLayer.id)
+          return null
+        }
+
+        // Sinon, on remplace l'asset du calque
         existingLayer.assetId = assetId
         existingLayer.name = name || existingLayer.name
-        existingLayer.groupId = group.id
+        existingLayer.groupId = group!.id
         existingLayer.muted = false
         if (calibration) {
           existingLayer.transform = {
@@ -284,6 +384,15 @@ export const useEditorStore = defineStore('editor', () => {
         selectLayerForEditing(existingLayer.id)
         void saveDocument()
         return existingLayer
+      }
+    } else {
+      // Pour les catégories multi (ex: décor plateau) : si l'asset exact existe déjà dans ce groupe, le retirer au clic (toggle off)
+      const duplicateLayer = currentDocument.value.layers.find(
+        (l) => l.assetId === assetId && l.groupId === group!.id && !l.muted
+      )
+      if (duplicateLayer) {
+        removeLayer(duplicateLayer.id)
+        return null
       }
     }
 

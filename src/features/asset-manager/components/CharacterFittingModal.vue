@@ -249,8 +249,8 @@ async function saveCurrentCalibration() {
     v-model:open="open"
     size="fullscreen"
     surface="glass"
-    title="Atelier d'Assemblage & Calibrage de Berlu"
-    subtitle="Positionnez chaque membre et accessoire directement sur le torse. Ce calibrage est enregistré une fois pour toutes."
+    title="Atelier d'Assemblage & Calibrage de Personnage"
+    subtitle="Positionnez chaque membre et accessoire directement sur le mannequin. Ce calibrage est enregistré pour chaque sprite."
   >
     <div class="flex flex-col h-[82vh] overflow-hidden p-4 gap-3">
       <!-- 1. Barre des slots anatomiques du personnage -->
