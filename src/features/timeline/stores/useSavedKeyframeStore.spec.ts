@@ -8,12 +8,26 @@ function sequence(): Sequence {
     projectId: 'workspace',
     name: 'Sequence',
     steps: [
-      { id: 'step-1', label: 'Étape 01', order: 0 },
-      { id: 'step-2', label: 'Étape 02', order: 1 }
+      {
+        id: 'step-1', label: 'Étape 01', order: 0,
+        camera: { enabled: false, x: 0, y: 0, width: 1792, height: 1024, aspectRatio: 'custom' },
+        groupStates: [
+          { groupId: 'visible-group', zIndex: 10, muted: false, locked: false },
+          { groupId: 'muted-group', zIndex: 20, muted: true, locked: false }
+        ]
+      },
+      {
+        id: 'step-2', label: 'Étape 02', order: 1,
+        camera: { enabled: false, x: 0, y: 0, width: 1792, height: 1024, aspectRatio: 'custom' },
+        groupStates: [
+          { groupId: 'visible-group', zIndex: 10, muted: false, locked: false },
+          { groupId: 'muted-group', zIndex: 20, muted: true, locked: false }
+        ]
+      }
     ],
     groups: [
-      { id: 'visible-group', name: 'Visible', zIndex: 10 },
-      { id: 'muted-group', name: 'Muted', zIndex: 20, muted: true }
+      { id: 'visible-group', name: 'Visible', zIndex: 10, allowedCategories: ['head'] },
+      { id: 'muted-group', name: 'Muted', zIndex: 20, muted: true, allowedCategories: ['eyes'] }
     ],
     tracks: [
       {
@@ -26,10 +40,13 @@ function sequence(): Sequence {
         muted: false,
         locked: false,
         keyframes: [
-          { id: 'early', stepId: 'step-1', sprites: [{ id: 'old', assetId: 'asset-old', order: 0 }] },
+          { id: 'early', stepId: 'step-1', zIndex: 1, muted: false, locked: false, sprites: [{ id: 'old', assetId: 'asset-old', order: 0 }] },
           {
             id: 'active',
             stepId: 'step-2',
+            zIndex: 1,
+            muted: false,
+            locked: false,
             sprites: [
               {
                 id: 'active-sprite',
@@ -51,7 +68,8 @@ function sequence(): Sequence {
         muted: false,
         locked: false,
         keyframes: [
-          { id: 'hidden', stepId: 'step-1', sprites: [{ id: 'hidden-sprite', assetId: 'hidden', order: 0 }] }
+          { id: 'hidden', stepId: 'step-1', zIndex: 2, muted: false, locked: false, sprites: [{ id: 'hidden-sprite', assetId: 'hidden', order: 0 }] },
+          { id: 'hidden-2', stepId: 'step-2', zIndex: 2, muted: false, locked: false, sprites: [{ id: 'hidden-sprite-2', assetId: 'hidden', order: 0 }] }
         ]
       }
     ],

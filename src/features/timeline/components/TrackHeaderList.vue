@@ -33,7 +33,11 @@ function requestGroupDeletion(group: TrackGroup) {
   isDeleteGroupOpen.value = true
 }
 
-const groups = computed(() => timelineStore.currentSequence.groups || [])
+const groups = computed(() => (timelineStore.currentSequence.groups || []).filter(
+  (group) => !group.isDefault || timelineStore.currentSequence.tracks.some(
+    (track) => track.groupId === group.id && track.keyframes.some((keyframe) => keyframe.sprites.length > 0)
+  )
+))
 
 function getTracksByGroup(groupId?: string): TimelineTrack[] {
   return timelineStore.currentSequence.tracks.filter((t) => t.groupId === groupId)
@@ -76,7 +80,7 @@ function createAddTrackItems(groupId?: string): DropdownMenuItemDef[] {
 function getGroupMenuItems(group: TrackGroup): DropdownMenuItemDef[] {
   const items = createAddTrackItems(group.id)
 
-  if (!['grp_character_1', 'grp_background'].includes(group.id)) {
+  if (!group.isDefault) {
     items.push({
       id: 'sep_del',
       label: '---',
@@ -244,6 +248,7 @@ function categoryRowStyle(category: AssetCategory) {
 
             <!-- Menu Options Groupe -->
             <IconButton
+              v-if="!group.isDefault"
               icon="delete"
               size="xs"
               variant="destructive"

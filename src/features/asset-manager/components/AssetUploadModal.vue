@@ -1,19 +1,23 @@
 <script setup lang="ts">
-import { computed, ref, watch, useTemplateRef } from 'vue'
+import { computed, ref, useId, watch, useTemplateRef } from 'vue'
 import type { AssetCategory } from '@core/types/asset.types'
 import { generateId } from '@/lib/utils'
 import { useAssetStore } from '../stores/useAssetStore'
+import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
 import { useSpritesheetSlicer } from '../composables/useSpritesheetSlicer'
 import type { PreparedAssetImport } from '../types/background-removal.types'
 import { applyBackgroundRemovalToBlob } from '../services/background-removal'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Icon } from '@/components/ui/icon'
 import { Badge } from '@/components/ui/badge'
 import { Heading } from '@/components/ui/heading'
 import { Text } from '@/components/ui/text'
-import { Switch } from '@/components/ui/switch'
+import { Select } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { FormGroup } from '@/components/ui/form-group'
 import { CategorySelect } from '@/components/ui/category-select'
 import BackgroundRemovalEditor from './BackgroundRemovalEditor.vue'
 import SpritesheetSlicerCanvas from './SpritesheetSlicerCanvas.vue'
@@ -21,6 +25,7 @@ import SpritesheetSliceList from './SpritesheetSliceList.vue'
 
 const open = defineModel<boolean>('open', { default: false })
 const assetStore = useAssetStore()
+const timelineStore = useTimelineStore()
 const slicer = useSpritesheetSlicer()
 
 const importMode = ref<'single' | 'spritesheet'>('single')
@@ -34,6 +39,11 @@ const preparedFiles = ref<PreparedAssetImport[]>([])
 const selectedPreparedId = ref<string | null>(null)
 const preparedSpritesheet = ref<PreparedAssetImport | null>(null)
 const backgroundRemovalEnabled = ref(false)
+const AUTO_TARGET = '__auto__'
+const NEW_CUSTOM_TARGET = '__new_custom__'
+const selectedTarget = ref(AUTO_TARGET)
+const customCategoryName = ref('')
+const customCategoryInputId = useId()
 const feedback = ref<{ tone: 'info' | 'success' | 'warning' | 'error'; message: string } | null>(null)
 
 const modeOptions = [
@@ -45,12 +55,41 @@ const selectedPreparedFile = computed(() =>
     ?? preparedFiles.value[0]
     ?? null
 )
-const isPreparingImage = computed(() =>
-  backgroundRemovalEnabled.value && (importMode.value === 'single'
-    ? preparedFiles.value.length > 0
-    : Boolean(preparedSpritesheet.value && !slicer.imageElement.value))
+const automaticGroup = computed(() => (timelineStore.currentSequence.groups ?? []).find(
+  (group) => group.isDefault && group.allowedCategories.includes(selectedCategory.value)
+))
+const groupOptions = computed(() => [
+  {
+    value: AUTO_TARGET,
+    label: `Automatique — ${automaticGroup.value?.name ?? 'groupe par défaut'}`
+  },
+  ...(timelineStore.currentSequence.groups ?? []).map((group) => ({
+    value: group.id,
+    label: group.isDefault ? group.name : `${group.customCategory ?? group.name} (personnalisé)`
+  })),
+  { value: NEW_CUSTOM_TARGET, label: '+ Nouvelle catégorie / groupe' }
+])
+const hasValidTarget = computed(() =>
+  selectedTarget.value !== NEW_CUSTOM_TARGET || customCategoryName.value.trim().length > 0
 )
-const isFullscreen = computed(() => isPreparingImage.value || Boolean(slicer.imageElement.value))
+
+function explicitTargetGroupId(): string | null {
+  return selectedTarget.value === AUTO_TARGET || selectedTarget.value === NEW_CUSTOM_TARGET
+    ? null
+    : selectedTarget.value
+}
+
+function targetCustomCategory(): string | null {
+  return selectedTarget.value === NEW_CUSTOM_TARGET
+    ? customCategoryName.value.trim() || null
+    : null
+}
+
+function resolveInitialTargetGroup() {
+  const groups = timelineStore.currentSequence.groups ?? []
+  const active = groups.find((group) => group.id === timelineStore.selectedGroupId)
+  selectedTarget.value = active?.id ?? AUTO_TARGET
+}
 
 watch(
   () => assetStore.selectedCategory,
@@ -70,7 +109,9 @@ watch(selectedCategory, (category) => {
 watch(open, (isOpen) => {
   if (isOpen) {
     isImporting.value = false
+    customCategoryName.value = ''
     feedback.value = null
+    resolveInitialTargetGroup()
     return
   }
   setTimeout(() => {
@@ -103,6 +144,13 @@ function clearPreparedFiles() {
   selectedPreparedId.value = null
 }
 
+function removePreparedFile(id: string) {
+  const entry = preparedFiles.value.find((candidate) => candidate.id === id)
+  if (entry) revokePrepared(entry)
+  preparedFiles.value = preparedFiles.value.filter((candidate) => candidate.id !== id)
+  if (selectedPreparedId.value === id) selectedPreparedId.value = preparedFiles.value[0]?.id ?? null
+}
+
 function clearPreparedSpritesheet() {
   if (preparedSpritesheet.value) revokePrepared(preparedSpritesheet.value)
   preparedSpritesheet.value = null
@@ -130,7 +178,14 @@ async function importPreparedFiles() {
         ? await applyBackgroundRemovalToBlob(entry.file, entry.settings)
         : entry.file
       const name = entry.file.name.replace(/\.[^/.]+$/, '')
-      await assetStore.importAsset(blob, selectedCategory.value, name)
+      const asset = await assetStore.importAsset(blob, selectedCategory.value, name)
+      timelineStore.assignAssetToGroup(
+        asset.id,
+        asset.category,
+        explicitTargetGroupId(),
+        asset.name,
+        targetCustomCategory()
+      )
       uploadedCount.value++
     }
     feedback.value = { tone: 'success', message: `${uploadedCount.value} sprite(s) importé(s).` }
@@ -224,6 +279,15 @@ async function handleBatchImportSlices() {
   try {
     const extracted = await slicer.extractSlicesBlobs()
     const imported = await assetStore.importSlicedAssets(extracted)
+    for (const asset of imported) {
+      timelineStore.assignAssetToGroup(
+        asset.id,
+        asset.category,
+        explicitTargetGroupId(),
+        asset.name,
+        targetCustomCategory()
+      )
+    }
     feedback.value = { tone: 'success', message: `${imported.length} sprite(s) importé(s).` }
     open.value = false
   } catch (error: unknown) {
@@ -237,31 +301,23 @@ async function handleBatchImportSlices() {
 <template>
   <Modal
     v-model:open="open"
-    title="Importer des Sprites"
-    subtitle="Préparez la transparence de vos images avant de les ajouter à la bibliothèque."
-    :size="isFullscreen ? 'fullscreen' : 'md'"
+    title="Importer des assets"
+    size="fullscreen"
     surface="glass"
   >
     <template #header>
-      <div class="flex w-full flex-col items-start justify-between gap-3 pr-8 md:flex-row md:items-center">
-        <div class="flex flex-col">
-          <Heading as="h3" variant="card" class="m-0 font-display text-base font-bold text-text-primary">
-            {{ slicer.imageElement.value ? `Planche : ${slicer.file.value?.name}` : 'Importer des Sprites' }}
-          </Heading>
-          <Text variant="caption" color="muted" class="mt-0.5 text-xs">
-            {{ slicer.imageElement.value ? 'Découpez vos sprites en traçant des rectangles.' : 'La pipette peut rendre un fond uni transparent avant import.' }}
-          </Text>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <div class="w-56">
-            <CategorySelect v-model="selectedCategory" label="Catégorie commune des sprites" />
-          </div>
-          <Switch
-            v-model="backgroundRemovalEnabled"
-            label="Supprimer un fond uni"
+      <div class="flex w-full items-center justify-between gap-4 pr-3">
+        <Heading as="h3" variant="card" class="m-0 font-display text-base font-bold text-text-primary">
+          Importer des assets
+        </Heading>
+        <div class="w-64">
+          <Select
+            v-model="selectedTarget"
+            :options="groupOptions"
+            placeholder="Groupe ou catégorie cible"
             size="sm"
+            aria-label="Groupe cible de l’import"
           />
-          <SegmentedControl v-model="importMode" :options="modeOptions" size="sm" variant="primary" />
         </div>
       </div>
     </template>
@@ -281,7 +337,46 @@ async function handleBatchImportSlices() {
       {{ feedback.message }}
     </div>
 
-    <div v-if="importMode === 'single' && preparedFiles.length === 0" class="flex flex-col gap-4">
+    <div class="mb-4 flex shrink-0 items-center justify-between gap-3 rounded-xl border border-border-subtle bg-bg-surface/35 p-2.5">
+      <div class="flex items-center gap-3">
+        <SegmentedControl v-model="importMode" :options="modeOptions" size="sm" variant="primary" />
+        <div class="w-56">
+          <CategorySelect v-model="selectedCategory" label="Catégorie des assets" />
+        </div>
+      </div>
+      <Button
+        v-if="preparedFiles.length > 0 || (preparedSpritesheet && !slicer.imageElement.value)"
+        type="button"
+        :variant="backgroundRemovalEnabled ? 'primary' : 'secondary'"
+        size="sm"
+        :aria-pressed="backgroundRemovalEnabled"
+        @click="backgroundRemovalEnabled = !backgroundRemovalEnabled"
+      >
+        <Icon name="colorize" size="xs" />
+        Pipette
+      </Button>
+    </div>
+
+    <div
+      v-if="selectedTarget === NEW_CUSTOM_TARGET"
+      class="mb-4 rounded-xl border border-primary/25 bg-primary/10 p-3"
+    >
+      <FormGroup
+        label="Nouvelle catégorie / groupe"
+        :label-for="customCategoryInputId"
+        hint="Le groupe sera créé au premier import, puis réutilisable comme cible pour d’autres catégories techniques."
+        class="mb-0"
+      >
+        <Input
+          :id="customCategoryInputId"
+          v-model="customCategoryName"
+          placeholder="Ex. Invité"
+          autofocus
+        />
+      </FormGroup>
+    </div>
+
+    <div v-if="importMode === 'single' && preparedFiles.length === 0" class="mx-auto flex h-[420px] w-full max-w-3xl flex-col justify-center gap-4">
       <div
         class="flex cursor-pointer select-none flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed bg-surface/20 p-8 text-center transition-all"
         :class="isDragging ? 'scale-[0.99] border-primary bg-primary/10' : 'border-border/60 hover:border-primary/60 hover:bg-surface-hover/40'"
@@ -307,23 +402,30 @@ async function handleBatchImportSlices() {
       </div>
     </div>
 
-    <div v-else-if="importMode === 'single' && selectedPreparedFile" class="-m-6 flex h-full min-h-0 overflow-hidden">
+    <div v-else-if="importMode === 'single' && selectedPreparedFile" class="-mx-6 -mb-6 flex min-h-0 flex-1 overflow-hidden">
       <aside class="w-56 shrink-0 overflow-y-auto border-r border-border-subtle bg-bg-surface/40 p-3 custom-scrollbar">
         <div class="mb-3 text-xs font-semibold text-text-muted">{{ preparedFiles.length }} image(s)</div>
-        <Button
+        <div
           v-for="entry in preparedFiles"
           :key="entry.id"
-          type="button"
-          variant="ghost"
-          size="sm"
+          role="button"
+          tabindex="0"
           class="mb-2 flex w-full items-center gap-2 rounded-lg border p-2 text-left transition-colors"
           :class="entry.id === selectedPreparedFile.id ? 'border-primary bg-primary/10' : 'border-border-subtle hover:bg-surface-hover'"
           @click="selectedPreparedId = entry.id"
+          @keydown.enter="selectedPreparedId = entry.id"
         >
           <img :src="entry.previewUrl" alt="" class="size-10 rounded-md bg-bg-base object-contain" />
           <span class="min-w-0 flex-1 truncate text-xs text-text-primary">{{ entry.file.name }}</span>
           <Icon v-if="entry.settings.seed" name="colorize" size="xs" class="text-primary" />
-        </Button>
+          <IconButton
+            icon="close"
+            size="xs"
+            variant="ghost"
+            :aria-label="`Retirer ${entry.file.name}`"
+            @click.stop="removePreparedFile(entry.id)"
+          />
+        </div>
       </aside>
       <main class="min-w-0 flex-1">
         <BackgroundRemovalEditor
@@ -343,7 +445,7 @@ async function handleBatchImportSlices() {
       </main>
     </div>
 
-    <div v-else-if="importMode === 'spritesheet' && !preparedSpritesheet && !slicer.imageElement.value" class="flex flex-col gap-4">
+    <div v-else-if="importMode === 'spritesheet' && !preparedSpritesheet && !slicer.imageElement.value" class="mx-auto flex h-[420px] w-full max-w-3xl flex-col justify-center gap-4">
       <div
         class="flex cursor-pointer select-none flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed bg-surface/20 p-10 text-center transition-all"
         :class="isDragging ? 'scale-[0.99] border-primary bg-primary/10' : 'border-border/60 hover:border-primary/60 hover:bg-surface-hover/40'"
@@ -364,7 +466,7 @@ async function handleBatchImportSlices() {
       </div>
     </div>
 
-    <div v-else-if="importMode === 'spritesheet' && preparedSpritesheet && !slicer.imageElement.value" class="-m-6 h-full min-h-0">
+    <div v-else-if="importMode === 'spritesheet' && preparedSpritesheet && !slicer.imageElement.value" class="-mx-6 -mb-6 min-h-0 flex-1">
       <BackgroundRemovalEditor
         v-if="backgroundRemovalEnabled"
         v-model:settings="preparedSpritesheet.settings"
@@ -377,7 +479,7 @@ async function handleBatchImportSlices() {
       </div>
     </div>
 
-    <div v-else-if="importMode === 'spritesheet' && slicer.imageElement.value" class="-m-6 flex h-full flex-row overflow-hidden">
+    <div v-else-if="importMode === 'spritesheet' && slicer.imageElement.value" class="-mx-6 -mb-6 flex min-h-0 flex-1 flex-row overflow-hidden">
       <div class="relative h-full min-w-0 flex-1">
         <SpritesheetSlicerCanvas
           v-model:zoom="slicer.zoom.value"
@@ -412,7 +514,7 @@ async function handleBatchImportSlices() {
           <Button v-if="preparedFiles.length === 0" variant="primary" size="sm" @click="openSingleFileDialog">
             <Icon name="add_photo_alternate" size="xs" /> Parcourir
           </Button>
-          <Button v-else variant="primary" size="sm" :loading="isImporting" :disabled="isImporting" @click="importPreparedFiles">
+          <Button v-else variant="primary" size="sm" :loading="isImporting" :disabled="isImporting || !hasValidTarget" @click="importPreparedFiles">
             <Icon name="cloud_done" size="xs" /> Importer les {{ preparedFiles.length }} sprites
           </Button>
         </div>
@@ -428,7 +530,7 @@ async function handleBatchImportSlices() {
           <Button v-if="!preparedSpritesheet" variant="primary" size="sm" @click="openSpritesheetDialog">
             <Icon name="upload_file" size="xs" /> Sélectionner une planche
           </Button>
-          <Button v-else variant="primary" size="sm" :loading="isImporting" :disabled="isImporting" @click="continueToSlicer">
+          <Button v-else variant="primary" size="sm" :loading="isImporting" :disabled="isImporting || !hasValidTarget" @click="continueToSlicer">
             <Icon name="content_cut" size="xs" /> Continuer vers la découpe
           </Button>
         </div>
@@ -441,7 +543,7 @@ async function handleBatchImportSlices() {
         </div>
         <div class="flex gap-2">
           <Button variant="ghost" size="sm" @click="open = false">Annuler</Button>
-          <Button variant="primary" size="sm" :disabled="slicer.slices.value.length === 0 || isImporting" :loading="isImporting" @click="handleBatchImportSlices">
+          <Button variant="primary" size="sm" :disabled="slicer.slices.value.length === 0 || isImporting || !hasValidTarget" :loading="isImporting" @click="handleBatchImportSlices">
             <Icon name="cloud_done" size="xs" /> Importer les {{ slicer.slices.value.length }} sprites découpés
           </Button>
         </div>

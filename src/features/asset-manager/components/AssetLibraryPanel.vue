@@ -3,10 +3,6 @@ import { ref, computed, onMounted, watch } from 'vue'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { CATEGORY_LIST } from '@core/constants/categories'
 import { useAssetStore } from '../stores/useAssetStore'
-import {
-  findAssetTargetTrack,
-  resolveAssetAssignmentStep
-} from '../services/asset-timeline-assignment'
 import AssetCard from './AssetCard.vue'
 import AssetUploadModal from './AssetUploadModal.vue'
 import { Input } from '@/components/ui/input'
@@ -21,6 +17,7 @@ import { ASSET_CATEGORIES } from '@core/constants/categories'
 const assetStore = useAssetStore()
 const timelineStore = useTimelineStore()
 const isUploadModalOpen = ref(false)
+const open = defineModel<boolean>('open', { default: true })
 
 watch(
   () => timelineStore.selectedTrack?.targetSlot ?? timelineStore.selectedTrack?.category,
@@ -49,54 +46,10 @@ const activeAssetIds = computed(() => {
 
 function onSelectAsset(asset: Asset) {
   assetStore.selectAsset(asset.id)
-
-  const catDef = ASSET_CATEGORIES[asset.category]
-  const allowsMultipleTracks = catDef?.trackCardinality === 'multi'
-  const selectedTrack = timelineStore.selectedTrack
   const activeGroupId = timelineStore.editScope === 'group'
     ? timelineStore.selectedGroupId
     : null
-  let targetTrack = findAssetTargetTrack(
-    timelineStore.currentSequence.tracks,
-    selectedTrack,
-    asset.category,
-    activeGroupId
-  )
-
-  if (!targetTrack && (allowsMultipleTracks || activeGroupId)) {
-    targetTrack = timelineStore.addTrack(
-      asset.category,
-      asset.name,
-      undefined,
-      activeGroupId ?? undefined
-    )
-  }
-
-  if (targetTrack) {
-    const targetStepId = resolveAssetAssignmentStep(
-      targetTrack,
-      selectedTrack,
-      timelineStore.selectedKeyframeId,
-      timelineStore.activeStep?.id ?? timelineStore.orderedSteps[0]?.id ?? ''
-    )
-
-    const sprite = timelineStore.addKeyframe(
-      targetTrack.id,
-      targetStepId,
-      asset.id,
-      asset.name
-    )
-    const keyframe = targetTrack.keyframes.find(
-      (candidate) => candidate.stepId === targetStepId
-    )
-    if (activeGroupId) {
-      timelineStore.selectGroupForEditing(activeGroupId)
-    } else if (sprite && keyframe) {
-      timelineStore.selectSpriteForEditing(targetTrack.id, keyframe.id, sprite.id)
-    } else {
-      timelineStore.selectTrackForEditing(targetTrack.id)
-    }
-  }
+  timelineStore.assignAssetToGroup(asset.id, asset.category, activeGroupId, asset.name)
 }
 
 interface CategoryTab extends TabItem {
@@ -192,6 +145,16 @@ function onDeleteAsset(asset: Asset) {
       <!-- En-tête de la bibliothèque -->
       <div class="h-11 border-b border-border-subtle px-3 flex items-center justify-between gap-2 shrink-0 bg-bg-surface/40">
         <div class="flex items-center gap-1.5 min-w-0">
+          <Button
+            variant="ghost"
+            size="xs"
+            class="size-7 px-0"
+            aria-label="Replier la bibliothèque d’assets"
+            title="Replier la bibliothèque d’assets"
+            @click="open = false"
+          >
+            <Icon name="left_panel_close" size="xs" />
+          </Button>
           <Icon
             :name="currentTab.icon"
             size="xs"

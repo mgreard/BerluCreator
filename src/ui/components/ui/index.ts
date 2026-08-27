@@ -27,6 +27,7 @@ export * from './alert-dialog'
 export * from './drawer'
 export * from './dropdown-menu'
 export * from './lightbox-modal'
+export * from './camera-frame-overlay'
 
 // Data Display
 export * from './avatar'

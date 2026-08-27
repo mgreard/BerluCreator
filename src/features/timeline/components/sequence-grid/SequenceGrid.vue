@@ -4,7 +4,6 @@ import { useTimelineStore } from '../../stores/useTimelineStore'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import type { TimelineTrack } from '@core/types/timeline.types'
 import { Icon } from '@/components/ui/icon'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/shared/utils/cn'
 import type { SequenceGridEmits } from './types'
@@ -12,7 +11,11 @@ import type { SequenceGridEmits } from './types'
 const emit = defineEmits<SequenceGridEmits>()
 const timelineStore = useTimelineStore()
 
-const groups = computed(() => timelineStore.currentSequence.groups ?? [])
+const groups = computed(() => (timelineStore.currentSequence.groups ?? []).filter(
+  (group) => !group.isDefault || timelineStore.currentSequence.tracks.some(
+    (track) => track.groupId === group.id && track.keyframes.some((keyframe) => keyframe.sprites.length > 0)
+  )
+))
 const ungroupedTracks = computed(() => {
   const groupIds = new Set(groups.value.map((group) => group.id))
   return timelineStore.currentSequence.tracks.filter(
@@ -37,9 +40,7 @@ function selectCell(track: TimelineTrack, stepId: string) {
 
 function cellLabel(track: TimelineTrack, stepId: string) {
   const explicit = explicitKeyframe(track, stepId)
-  const effective = timelineStore.getEffectiveKeyframeAtStep(track.id, stepId)
-  if (explicit) return `${track.name} : changement explicite, ${explicit.sprites.length} sprite(s)`
-  if (effective?.sprites.length) return `${track.name} : état hérité, ${effective.sprites.length} sprite(s)`
+  if (explicit) return `${track.name} : snapshot autonome, ${explicit.sprites.length} sprite(s)`
   return `${track.name} : aucun sprite`
 }
 </script>
@@ -116,14 +117,6 @@ function cellLabel(track: TimelineTrack, stepId: string) {
               <Icon :name="ASSET_CATEGORIES[track.category].icon" size="11px" />
               {{ explicitKeyframe(track, step.id)?.sprites.length ?? 0 }}
             </span>
-            <Badge
-              v-else-if="timelineStore.getEffectiveKeyframeAtStep(track.id, step.id)?.sprites.length"
-              variant="neutral"
-              size="sm"
-              class="border-dashed px-1.5 py-0 text-[8px] opacity-55"
-            >
-              hérité
-            </Badge>
             <span v-else class="size-1 rounded-full bg-border-default/70" />
           </Button>
         </div>

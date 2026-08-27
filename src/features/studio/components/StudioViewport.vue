@@ -1,17 +1,12 @@
 <script setup lang="ts">
 import StageCanvas from './StageCanvas.vue'
 
-const showHierarchy = defineModel<boolean>('showHierarchy', { default: true })
-const showAssets = defineModel<boolean>('showAssets', { default: true })
 </script>
 
 <template>
   <div class="relative flex-1 h-full bg-bg-base overflow-hidden">
     <div class="absolute inset-0 overflow-hidden bg-dot-pattern">
-      <StageCanvas
-        v-model:show-hierarchy="showHierarchy"
-        v-model:show-assets="showAssets"
-      />
+      <StageCanvas />
     </div>
   </div>
 </template>

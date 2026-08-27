@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { PanelResizeHandle } from '@/components/ui/panel-resize-handle'
+import { IconButton } from '@/components/ui/icon-button'
 
 const {
   side,
@@ -29,8 +30,8 @@ let previousUserSelect = ''
 let handleElement: HTMLElement | null = null
 
 const panelStyle = computed(() => ({
-  width: open.value ? `${width.value}px` : '0px',
-  minWidth: open.value ? `${width.value}px` : '0px'
+  width: open.value ? `${width.value}px` : '40px',
+  minWidth: open.value ? `${width.value}px` : '40px'
 }))
 
 function clampWidth(value: number) {
@@ -113,6 +114,20 @@ watch(width, (value) => {
   >
     <div v-if="open" class="h-full w-full overflow-hidden">
       <slot />
+    </div>
+    <div
+      v-else
+      class="flex h-full w-10 items-start justify-center border-border-subtle bg-bg-surface/50 pt-2 backdrop-blur-md"
+      :class="side === 'left' ? 'border-r' : 'border-l'"
+    >
+      <IconButton
+        :icon="side === 'left' ? 'left_panel_open' : 'right_panel_open'"
+        size="sm"
+        variant="ghost"
+        :aria-label="`Déplier le panneau ${side === 'left' ? 'gauche' : 'droit'}`"
+        :title="`Déplier le panneau ${side === 'left' ? 'gauche' : 'droit'}`"
+        @click="open = true"
+      />
     </div>
 
     <PanelResizeHandle

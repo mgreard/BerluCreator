@@ -11,6 +11,24 @@ vi.mock('@infrastructure/db/repositories/sequence.repository', () => ({
   }
 }))
 
+describe('état initial après reset usine', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('conserve une seule étape vide avec les groupes et pistes de base', () => {
+    const store = useTimelineStore()
+
+    expect(store.currentSequence.steps).toHaveLength(1)
+    expect(store.currentSequence.groups?.length).toBeGreaterThan(0)
+    expect(store.currentSequence.tracks.every((track) => Boolean(track.groupId))).toBe(true)
+    expect(
+      store.currentSequence.tracks.flatMap((track) => track.keyframes)
+        .flatMap((keyframe) => keyframe.sprites)
+    ).toEqual([])
+  })
+})
+
 describe('sélection du périmètre d’édition du studio', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -65,6 +83,72 @@ describe('sélection du périmètre d’édition du studio', () => {
     expect(store.selectedGroupId).toBeNull()
     expect(store.selectedKeyframeId).toBeNull()
     expect(store.editScope).toBe('layer')
+  })
+})
+
+describe('routage des assets vers les groupes', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('route automatiquement une catégorie technique uniquement vers son groupe par défaut', () => {
+    const store = useTimelineStore()
+    const guest = store.addGroup('Invité', undefined, 'emerald', ['head'])
+    store.clearStudioSelection(false)
+
+    store.assignAssetToGroup('asset-head-default', 'head', null, 'Tête par défaut')
+
+    const targetTrack = store.currentSequence.tracks.find((track) =>
+      track.keyframes.some((keyframe) =>
+        keyframe.sprites.some((sprite) => sprite.assetId === 'asset-head-default')
+      )
+    )
+    expect(targetTrack?.groupId).toBe('grp_berlu')
+    expect(targetTrack?.groupId).not.toBe(guest.id)
+  })
+
+  it('injecte plusieurs catégories techniques dans le groupe explicitement ciblé', () => {
+    const store = useTimelineStore()
+    const guest = store.addGroup('Invité')
+
+    store.assignAssetToGroup('asset-guest-head', 'head', guest.id, 'Tête invité')
+    store.assignAssetToGroup('asset-guest-torso', 'torso', guest.id, 'Torse invité')
+
+    const guestTracks = store.currentSequence.tracks.filter((track) => track.groupId === guest.id)
+    expect(guestTracks.map((track) => track.category)).toEqual(expect.arrayContaining(['head', 'torso']))
+    expect(guest.allowedCategories).toEqual(expect.arrayContaining(['head', 'torso']))
+  })
+
+  it('privilégie le groupe actuellement sélectionné en l’absence de cible explicite', () => {
+    const store = useTimelineStore()
+    const guest = store.addGroup('Invité')
+    store.selectGroupForEditing(guest.id)
+
+    store.assignAssetToGroup('asset-selected-group', 'props_host')
+
+    const targetTrack = store.currentSequence.tracks.find((track) =>
+      track.keyframes.some((keyframe) =>
+        keyframe.sprites.some((sprite) => sprite.assetId === 'asset-selected-group')
+      )
+    )
+    expect(targetTrack?.groupId).toBe(guest.id)
+  })
+
+  it('crée une catégorie personnalisée à la demande puis réutilise son groupe sans doublon', () => {
+    const store = useTimelineStore()
+    store.clearStudioSelection(false)
+
+    store.assignAssetToGroup('asset-guest-head', 'head', null, 'Tête invité', 'Invité')
+    store.clearStudioSelection(false)
+    store.assignAssetToGroup('asset-guest-arm', 'arms_left', null, 'Bras invité', ' invite ')
+
+    const guestGroups = store.currentSequence.groups!.filter((group) =>
+      group.customCategory?.toLocaleLowerCase('fr').startsWith('invit')
+    )
+    expect(guestGroups).toHaveLength(1)
+    expect(guestGroups[0].allowedCategories).toEqual(expect.arrayContaining(['head', 'arms_left']))
+    expect(store.currentSequence.tracks.filter((track) => track.groupId === guestGroups[0].id)).toHaveLength(2)
   })
 })
 
@@ -132,7 +216,7 @@ describe('migration des catégories de timeline', () => {
     await store.loadSequence('seq_legacy', 'proj_default')
 
     expect(store.currentSequence.groups?.map((group) => group.id)).toEqual(
-      expect.arrayContaining(['grp_background', 'grp_foreground'])
+      expect.arrayContaining(['grp_background', 'grp_berlu', 'grp_set_props', 'grp_desk', 'grp_desk_items'])
     )
     expect(store.currentSequence.tracks.map((track) => track.category)).toEqual(
       expect.arrayContaining([
@@ -198,6 +282,14 @@ describe('migration des catégories de timeline', () => {
     expect(migratedKeyframe.stepId).toBe(store.currentSequence.steps[0]?.id)
     expect(store.currentSequence).not.toHaveProperty('durationMs')
     expect(store.currentSequence).not.toHaveProperty('fps')
+    expect(store.currentSequence.steps[0]?.camera).toEqual({
+      enabled: false,
+      x: 0,
+      y: 0,
+      width: 1792,
+      height: 1024,
+      aspectRatio: 'custom'
+    })
   })
 })
 
@@ -268,6 +360,9 @@ describe('historique des transformations du canvas', () => {
     const keyframe: Keyframe = {
       id: 'kf_history',
       stepId: store.activeStep!.id,
+      zIndex: track.zIndex,
+      muted: false,
+      locked: false,
       sprites: [
         {
           id: 'sprite-history',
@@ -380,6 +475,15 @@ describe('séquence discrète et suppression locale', () => {
     const second = store.addStepAfter(first.id)
 
     expect(store.getEffectiveKeyframeAtStep('head', second.id)?.sprites[0]?.assetId).toBe('head-a')
+    expect(store.selectedSpriteId).not.toBe(sprite.id)
+    expect(store.getKeyframeAtStep('head', second.id)?.sprites[0]?.id).toBe(store.selectedSpriteId)
+    store.updateKeyframeSpriteTransform(
+      'head',
+      store.getKeyframeAtStep('head', second.id)!.id,
+      store.selectedSpriteId!,
+      { x: 120 }
+    )
+    expect(store.getKeyframeAtStep('head', first.id)?.sprites[0]?.transform).toBeUndefined()
     const duplicate = store.duplicateStep(second.id)!
     expect(store.getKeyframeAtStep('head', duplicate.id)?.sprites[0]?.assetId).toBe('head-a')
 
@@ -399,9 +503,9 @@ describe('séquence discrète et suppression locale', () => {
     const third = store.addStepAfter(second.id)
     store.selectStep(second.id)
 
-    const inherited = store.getEffectiveKeyframeAtStep(track.id, second.id)!
-    const inheritedSprite = inherited.sprites[0]!
-    store.selectSpriteForEditing(track.id, inherited.id, inheritedSprite.id)
+    const secondSnapshot = store.getEffectiveKeyframeAtStep(track.id, second.id)!
+    const secondSprite = secondSnapshot.sprites[0]!
+    store.selectSpriteForEditing(track.id, secondSnapshot.id, secondSprite.id)
     const editableSpriteId = store.selectedSpriteId!
 
     expect(store.removeSpriteFromActiveStep(track.id, editableSpriteId)).toBe(true)
@@ -416,5 +520,43 @@ describe('séquence discrète et suppression locale', () => {
     store.commitTransformSession()
     store.undoLastTransform()
     expect(store.getEffectiveKeyframeAtStep(track.id, second.id)?.sprites[0]?.assetId).toBe('head-a')
+  })
+
+  it('conserve le z-index et la transformation de groupe propres à chaque étape', () => {
+    const store = useTimelineStore()
+    const first = store.activeStep!
+    const group = store.currentSequence.groups!.find((candidate) => candidate.id === 'grp_berlu')!
+    const initialZ = store.currentSequence.tracks.find((track) => track.id === 'head')!.zIndex
+    const second = store.addStepAfter(first.id)
+
+    store.updateTrackZIndex('head', 91)
+    store.updateGroupTransform(group.id, { x: 240 })
+    store.selectStep(first.id)
+    expect(store.currentSequence.tracks.find((track) => track.id === 'head')?.zIndex).toBe(initialZ)
+    expect(group.transform?.x).toBe(0)
+
+    store.selectStep(second.id)
+    expect(store.currentSequence.tracks.find((track) => track.id === 'head')?.zIndex).toBe(91)
+    expect(group.transform?.x).toBe(240)
+  })
+
+  it('clone le cadrage puis garde les modifications autonomes par étape', () => {
+    const store = useTimelineStore()
+    const first = store.activeStep!
+    store.updateActiveStepCamera({
+      enabled: true,
+      x: 100,
+      y: 50,
+      width: 896,
+      height: 504,
+      aspectRatio: '16:9'
+    })
+
+    const second = store.addStepAfter(first.id)
+    expect(second.camera).toEqual(first.camera)
+
+    store.updateActiveStepCamera({ ...second.camera, x: 240 })
+    expect(second.camera.x).toBe(240)
+    expect(first.camera.x).toBe(100)
   })
 })

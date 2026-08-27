@@ -53,4 +53,62 @@ describe('export du canvas', () => {
 
     expect(shouldFillExportBackground([backgroundLayer], 'image/png')).toBe(true)
   })
+
+  it('découpe la caméra puis rééchantillonne vers la résolution demandée', async () => {
+    const sceneContext = {
+      clearRect: vi.fn(),
+      fillRect: vi.fn(),
+      fillStyle: ''
+    } as unknown as CanvasRenderingContext2D
+    const exportDrawImage = vi.fn()
+    const exportContext = {
+      drawImage: exportDrawImage,
+      imageSmoothingEnabled: false,
+      imageSmoothingQuality: 'low'
+    } as unknown as CanvasRenderingContext2D
+    const sceneCanvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn().mockReturnValue(sceneContext),
+      toDataURL: vi.fn()
+    } as unknown as HTMLCanvasElement
+    const exportCanvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn().mockReturnValue(exportContext),
+      toDataURL: vi.fn().mockReturnValue('data:image/png;base64,framed')
+    } as unknown as HTMLCanvasElement
+    const canvases = [sceneCanvas, exportCanvas]
+    const createElement = document.createElement.bind(document)
+
+    vi.spyOn(document, 'createElement').mockImplementation((tagName, options) =>
+      tagName === 'canvas' ? canvases.shift()! : createElement(tagName, options)
+    )
+
+    await expect(captureCleanFrame([], stage, 'image/png', {
+      camera: {
+        enabled: true,
+        x: 120,
+        y: 0,
+        width: 576,
+        height: 1024,
+        aspectRatio: '9:16'
+      },
+      outputResolution: { width: 1080, height: 1920 }
+    })).resolves.toBe('data:image/png;base64,framed')
+
+    expect(exportCanvas.width).toBe(1080)
+    expect(exportCanvas.height).toBe(1920)
+    expect(exportDrawImage).toHaveBeenCalledWith(
+      sceneCanvas,
+      120,
+      0,
+      576,
+      1024,
+      0,
+      0,
+      1080,
+      1920
+    )
+  })
 })

@@ -60,6 +60,6 @@ describe('application d’une keyframe enregistrée', () => {
       .toMatchObject([{ assetId: 'asset-saved', transform: { x: 64, y: 32 }, order: 0 }])
     expect(otherTrack.keyframes.find((keyframe) => keyframe.stepId === activeStep.id)?.sprites).toEqual([])
     expect(group?.transform).toEqual({ x: 20, scaleX: 1.1 })
-    expect(sequenceRepository.save).toHaveBeenCalledTimes(1)
+    expect(sequenceRepository.save).toHaveBeenCalledTimes(2)
   })
 })

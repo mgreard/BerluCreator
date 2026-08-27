@@ -16,14 +16,15 @@ describe('ResizableSidebar', () => {
     expect(separator.attributes('aria-valuenow')).toBe('336')
   })
 
-  it('libère entièrement la largeur lorsqu’il est replié', async () => {
+  it('conserve un rail de réouverture lorsqu’il est replié', async () => {
     const wrapper = mount(ResizableSidebar, {
       props: { side: 'right', defaultWidth: 320, open: true }
     })
 
     await wrapper.setProps({ open: false })
 
-    expect(wrapper.get('aside').attributes('style')).toContain('width: 0px')
+    expect(wrapper.get('aside').attributes('style')).toContain('width: 40px')
     expect(wrapper.find('[role="separator"]').exists()).toBe(false)
+    expect(wrapper.get('button').attributes('aria-label')).toContain('Déplier')
   })
 })

@@ -15,6 +15,7 @@ import type {
 } from '../types/background-removal.types'
 import {
   fitImagePreview,
+  fitInteractiveProcessingBuffer,
   loadImageFromBlob,
   removeConnectedBackground
 } from '../services/background-removal'
@@ -38,6 +39,7 @@ const naturalSize = ref({ width: 0, height: 0 })
 const previewSize = ref({ width: 0, height: 0, scale: 0 })
 let renderVersion = 0
 let previewObserver: ResizeObserver | null = null
+let renderTimer: ReturnType<typeof setTimeout> | null = null
 
 const canvasStyle = computed<CSSProperties>(() => ({
   width: previewSize.value.width ? `${previewSize.value.width}px` : undefined,
@@ -63,34 +65,55 @@ function renderPreview() {
   const context = canvas.getContext('2d')
   if (!context) return
 
-  const processed = removeConnectedBackground(original, settings.value)
+  const seed = settings.value.seed
+  const previewSeed = seed
+    ? {
+        x: Math.floor(seed.x * original.width / naturalSize.value.width),
+        y: Math.floor(seed.y * original.height / naturalSize.value.height)
+      }
+    : null
+  const processed = previewSeed
+    ? removeConnectedBackground(original, { ...settings.value, seed: previewSeed })
+    : original
   const output = context.createImageData(processed.width, processed.height)
   output.data.set(processed.data)
   context.putImageData(output, 0, 0)
 
-  const seed = settings.value.seed
-  if (seed) {
-    const offset = (seed.y * original.width + seed.x) * 4
+  if (previewSeed) {
+    const offset = (previewSeed.y * original.width + previewSeed.x) * 4
     sampledColor.value = `rgb(${original.data[offset] ?? 0} ${original.data[offset + 1] ?? 0} ${original.data[offset + 2] ?? 0})`
   } else {
     sampledColor.value = null
   }
 }
 
+function schedulePreviewRender() {
+  if (renderTimer) clearTimeout(renderTimer)
+  renderTimer = setTimeout(() => {
+    renderTimer = null
+    renderPreview()
+  }, 90)
+}
+
 async function loadSource() {
   const version = ++renderVersion
+  if (renderTimer) {
+    clearTimeout(renderTimer)
+    renderTimer = null
+  }
   isLoading.value = true
   try {
     const image = await loadImageFromBlob(source)
     if (version !== renderVersion) return
     const canvas = canvasRef.value
     if (!canvas) return
-    canvas.width = image.naturalWidth
-    canvas.height = image.naturalHeight
     naturalSize.value = { width: image.naturalWidth, height: image.naturalHeight }
+    const processingSize = fitInteractiveProcessingBuffer(image.naturalWidth, image.naturalHeight)
+    canvas.width = processingSize.width
+    canvas.height = processingSize.height
     const context = canvas.getContext('2d', { willReadFrequently: true })
     if (!context) throw new Error('Canvas 2D indisponible.')
-    context.drawImage(image, 0, 0)
+    context.drawImage(image, 0, 0, canvas.width, canvas.height)
     originalPixels.value = context.getImageData(0, 0, canvas.width, canvas.height)
     renderPreview()
     await nextTick()
@@ -106,8 +129,8 @@ function pickBackground(event: PointerEvent) {
   const bounds = canvas.getBoundingClientRect()
   if (bounds.width === 0 || bounds.height === 0) return
   const point: BackgroundRemovalPoint = {
-    x: Math.max(0, Math.min(canvas.width - 1, Math.floor((event.clientX - bounds.left) * canvas.width / bounds.width))),
-    y: Math.max(0, Math.min(canvas.height - 1, Math.floor((event.clientY - bounds.top) * canvas.height / bounds.height)))
+    x: Math.max(0, Math.min(naturalSize.value.width - 1, Math.floor((event.clientX - bounds.left) * naturalSize.value.width / bounds.width))),
+    y: Math.max(0, Math.min(naturalSize.value.height - 1, Math.floor((event.clientY - bounds.top) * naturalSize.value.height / bounds.height)))
   }
   settings.value = { ...settings.value, seed: point }
 }
@@ -117,7 +140,7 @@ function resetBackground() {
 }
 
 watch(() => source, loadSource, { immediate: true })
-watch(settings, renderPreview, { deep: true })
+watch(settings, schedulePreviewRender, { deep: true })
 onMounted(() => {
   previewObserver = new ResizeObserver(updatePreviewSize)
   if (previewRef.value) previewObserver.observe(previewRef.value)
@@ -125,6 +148,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   renderVersion++
+  if (renderTimer) clearTimeout(renderTimer)
   previewObserver?.disconnect()
 })
 </script>

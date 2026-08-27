@@ -9,12 +9,18 @@ import type {
   KeyframeSprite,
   SequenceNavigationState,
   SequenceStep,
+  StepGroupState,
   Transform2D,
   SavedKeyframePreset,
-  SavedKeyframeSprite
+  SavedKeyframeSprite,
+  CameraFrame
 } from '@core/types/timeline.types'
 import { normalizeAssetCategory, type AssetCategory } from '@core/types/asset.types'
-import { DEFAULT_TRACK_SLOTS, DEFAULT_TRACK_GROUPS } from '@core/constants/timeline'
+import {
+  DEFAULT_STAGE_RESOLUTION,
+  DEFAULT_TRACK_SLOTS,
+  DEFAULT_TRACK_GROUPS
+} from '@core/constants/timeline'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { sequenceRepository } from '@infrastructure/db/repositories/sequence.repository'
 import { generateId } from '@/lib/utils'
@@ -67,6 +73,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     createdAt: Date.now(),
     updatedAt: Date.now()
   })
+  ensureAutonomousSnapshots(currentSequence.value)
 
   const navigation = ref<SequenceNavigationState>({
     activeStepId: initialStep.id
@@ -271,6 +278,8 @@ export const useTimelineStore = defineStore('timeline', () => {
       const group = currentSequence.value.groups?.find((candidate) => candidate.id === target.groupId)
       if (!group) return false
       group.transform = cloneTransform(snapshot)
+      const state = activeStep.value && getGroupStateAtStep(group.id, activeStep.value.id)
+      if (state) state.transform = cloneTransform(snapshot)
     } else {
       const track = currentSequence.value.tracks.find(
         (candidate) => candidate.id === target.trackId
@@ -413,6 +422,76 @@ export const useTimelineStore = defineStore('timeline', () => {
     editScope.value = 'layer'
   }
 
+  function captureSelectionAnchor() {
+    const track = currentSequence.value.tracks.find(
+      (candidate) => candidate.id === selectedTrackId.value
+    )
+    const keyframe = track?.keyframes.find(
+      (candidate) => candidate.id === selectedKeyframeId.value
+    )
+    const sprite = keyframe?.sprites.find(
+      (candidate) => candidate.id === selectedSpriteId.value
+    )
+    return {
+      scope: editScope.value,
+      groupId: selectedGroupId.value,
+      trackId: track?.id ?? null,
+      assetId: sprite?.assetId ?? null,
+      order: sprite?.order ?? null
+    }
+  }
+
+  function restoreSelectionAnchor(
+    anchor: ReturnType<typeof captureSelectionAnchor>,
+    stepId: string
+  ) {
+    if (anchor.scope === 'group' && anchor.groupId) {
+      selectGroupForEditing(anchor.groupId)
+      return
+    }
+    if (!anchor.trackId) {
+      clearStudioSelection(false)
+      return
+    }
+    const keyframe = getKeyframeAtStep(anchor.trackId, stepId)
+    const sprite = keyframe?.sprites.find(
+      (candidate) => candidate.assetId === anchor.assetId && candidate.order === anchor.order
+    )
+    if (keyframe && sprite) {
+      selectSpriteForEditing(anchor.trackId, keyframe.id, sprite.id)
+    } else {
+      selectTrackForEditing(anchor.trackId)
+      selectedKeyframeId.value = keyframe?.id ?? null
+      selectedSpriteId.value = null
+    }
+  }
+
+  function getGroupStateAtStep(groupId: string, stepId: string): StepGroupState | null {
+    return currentSequence.value.steps
+      .find((step) => step.id === stepId)
+      ?.groupStates.find((state) => state.groupId === groupId) ?? null
+  }
+
+  function activateSnapshot(stepId: string) {
+    const step = currentSequence.value.steps.find((candidate) => candidate.id === stepId)
+    if (!step) return
+    for (const group of currentSequence.value.groups ?? []) {
+      const state = step.groupStates.find((candidate) => candidate.groupId === group.id)
+      if (!state) continue
+      group.zIndex = state.zIndex
+      group.transform = cloneTransform(state.transform)
+      group.muted = state.muted
+      group.locked = state.locked
+    }
+    for (const track of currentSequence.value.tracks) {
+      const state = getKeyframeAtStep(track.id, stepId)
+      if (!state) continue
+      track.zIndex = state.zIndex
+      track.muted = state.muted
+      track.locked = state.locked
+    }
+  }
+
   /**
    * Initialise ou charge la séquence depuis Dexie
    */
@@ -423,6 +502,7 @@ export const useTimelineStore = defineStore('timeline', () => {
       const wasMigrated = migrateSequenceStructure(seq)
       currentSequence.value = seq
       navigation.value.activeStepId = seq.steps[0]?.id ?? createInitialStep().id
+      activateSnapshot(navigation.value.activeStepId)
       if (wasMigrated) await sequenceRepository.save(seq)
     } else {
       currentSequence.value.id = sequenceId
@@ -444,25 +524,41 @@ export const useTimelineStore = defineStore('timeline', () => {
 
   function selectStep(stepId: string) {
     if (!currentSequence.value.steps.some((step) => step.id === stepId)) return
+    const selection = captureSelectionAnchor()
     if (activeTransformSession.value) commitTransformSession(false)
     navigation.value.activeStepId = stepId
-    selectedKeyframeId.value = null
-    selectedSpriteId.value = null
+    activateSnapshot(stepId)
+    restoreSelectionAnchor(selection, stepId)
   }
 
   function addStepAfter(afterStepId = activeStep.value?.id): SequenceStep {
     const steps = orderedSteps.value
     const afterIndex = Math.max(0, steps.findIndex((step) => step.id === afterStepId))
+    const sourceStep = steps[afterIndex] ?? steps[0]
+    const selection = captureSelectionAnchor()
     const step: SequenceStep = {
       id: generateId('step'),
       label: '',
-      order: afterIndex + 1
+      order: afterIndex + 1,
+      groupStates: cloneGroupStates(sourceStep?.groupStates ?? []),
+      camera: cloneCameraFrame(sourceStep?.camera)
     }
     for (const candidate of steps.slice(afterIndex + 1)) candidate.order += 1
     currentSequence.value.steps.push(step)
+    for (const track of currentSequence.value.tracks) {
+      const source = sourceStep ? getKeyframeAtStep(track.id, sourceStep.id) : null
+      const snapshot = createTrackSnapshot(track, step.id, source?.sprites ?? [])
+      if (source) {
+        snapshot.zIndex = source.zIndex
+        snapshot.muted = source.muted
+        snapshot.locked = source.locked
+      }
+      track.keyframes.push(snapshot)
+    }
     normalizeStepOrders()
     navigation.value.activeStepId = step.id
-    clearStudioSelection(false)
+    activateSnapshot(step.id)
+    restoreSelectionAnchor(selection, step.id)
     saveSequence()
     return step
   }
@@ -471,18 +567,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     if (!stepId) return null
     const sourceStep = currentSequence.value.steps.find((step) => step.id === stepId)
     if (!sourceStep) return null
-    const newStep = addStepAfter(stepId)
-    for (const track of currentSequence.value.tracks) {
-      const effective = getEffectiveKeyframeAtStep(track.id, stepId)
-      if (!effective) continue
-      track.keyframes.push({
-        id: generateId('kf'),
-        stepId: newStep.id,
-        sprites: effective.sprites.map(cloneKeyframeSprite)
-      })
-    }
-    saveSequence()
-    return newStep
+    return addStepAfter(stepId)
   }
 
   function moveStep(stepId: string, targetIndex: number) {
@@ -501,6 +586,7 @@ export const useTimelineStore = defineStore('timeline', () => {
 
   function removeStep(stepId: string) {
     if (currentSequence.value.steps.length <= 1) return
+    const selection = captureSelectionAnchor()
     const steps = orderedSteps.value
     const removedIndex = steps.findIndex((step) => step.id === stepId)
     if (removedIndex < 0) return
@@ -511,18 +597,37 @@ export const useTimelineStore = defineStore('timeline', () => {
     normalizeStepOrders()
     const next = orderedSteps.value[Math.min(removedIndex, orderedSteps.value.length - 1)]
     if (next) navigation.value.activeStepId = next.id
-    clearStudioSelection(false)
+    activateSnapshot(navigation.value.activeStepId)
+    restoreSelectionAnchor(selection, navigation.value.activeStepId)
     clearTransformHistory()
     saveSequence()
+  }
+
+  function updateActiveStepCamera(camera: CameraFrame, persist = false) {
+    if (!activeStep.value) return
+    activeStep.value.camera = cloneCameraFrame(camera)
+    if (persist) saveSequence()
   }
 
   // =========================================================================
   // Gestion des Groupes de Pistes
   // =========================================================================
 
-  function addGroup(name: string, zIndex?: number, color?: TrackGroupColor): TrackGroup {
+  function addGroup(
+    name: string,
+    zIndex?: number,
+    color?: TrackGroupColor,
+    allowedCategories: AssetCategory[] = []
+  ): TrackGroup {
     if (!currentSequence.value.groups) {
       currentSequence.value.groups = []
+    }
+
+    const normalizedName = name.trim() || 'Nouveau Groupe'
+    const existing = findCustomGroupByCategory(normalizedName)
+    if (existing) {
+      selectGroupForEditing(existing.id)
+      return existing
     }
 
     const defaultZ = zIndex ?? (currentSequence.value.groups.length > 0
@@ -531,16 +636,22 @@ export const useTimelineStore = defineStore('timeline', () => {
 
     const newGroup: TrackGroup = {
       id: generateId('grp'),
-      name: name.trim() || 'Nouveau Groupe',
+      name: normalizedName,
       zIndex: defaultZ,
       transform: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1 },
       muted: false,
       locked: false,
       collapsed: false,
-      color: color || 'indigo'
+      color: color || 'indigo',
+      allowedCategories: [...new Set(allowedCategories)],
+      isDefault: false,
+      customCategory: normalizedName
     }
 
     currentSequence.value.groups.push(newGroup)
+    for (const step of currentSequence.value.steps) {
+      step.groupStates.push(createGroupSnapshot(newGroup))
+    }
     selectGroupForEditing(newGroup.id)
     saveSequence()
     return newGroup
@@ -552,16 +663,17 @@ export const useTimelineStore = defineStore('timeline', () => {
     if (deleteTracks) {
       currentSequence.value.tracks = currentSequence.value.tracks.filter((t) => t.groupId !== groupId)
     } else {
-      // Réassigner les pistes orphelines vers un groupe restant ou undefined
-      const remainingGroup = currentSequence.value.groups.find((g) => g.id !== groupId)
       for (const track of currentSequence.value.tracks) {
         if (track.groupId === groupId) {
-          track.groupId = remainingGroup?.id
+          track.groupId = resolveDefaultGroupId(track.category, groupId)
         }
       }
     }
 
     currentSequence.value.groups = currentSequence.value.groups.filter((g) => g.id !== groupId)
+    for (const step of currentSequence.value.steps) {
+      step.groupStates = step.groupStates.filter((state) => state.groupId !== groupId)
+    }
     if (selectedGroupId.value === groupId) {
       const currentTrackId = selectedTrackId.value
       if (currentTrackId && currentSequence.value.tracks.some((track) => track.id === currentTrackId)) {
@@ -578,6 +690,13 @@ export const useTimelineStore = defineStore('timeline', () => {
     const group = currentSequence.value.groups.find((g) => g.id === groupId)
     if (group) {
       Object.assign(group, partial)
+      const state = activeStep.value && getGroupStateAtStep(groupId, activeStep.value.id)
+      if (state) {
+        if (partial.zIndex !== undefined) state.zIndex = partial.zIndex
+        if (partial.transform !== undefined) state.transform = cloneTransform(partial.transform)
+        if (partial.muted !== undefined) state.muted = partial.muted
+        if (partial.locked !== undefined) state.locked = partial.locked
+      }
       saveSequence()
     }
   }
@@ -590,6 +709,8 @@ export const useTimelineStore = defineStore('timeline', () => {
         ...group.transform,
         ...transform
       }
+      const state = activeStep.value && getGroupStateAtStep(groupId, activeStep.value.id)
+      if (state) state.transform = cloneTransform(group.transform)
       saveSequence()
     }
   }
@@ -599,6 +720,8 @@ export const useTimelineStore = defineStore('timeline', () => {
     const group = currentSequence.value.groups.find((g) => g.id === groupId)
     if (group) {
       group.zIndex = zIndex
+      const state = activeStep.value && getGroupStateAtStep(groupId, activeStep.value.id)
+      if (state) state.zIndex = zIndex
       saveSequence()
     }
   }
@@ -621,6 +744,9 @@ export const useTimelineStore = defineStore('timeline', () => {
     const group = currentSequence.value.groups.find((g) => g.id === groupId)
     if (group) {
       group.muted = !group.muted
+      const state = activeStep.value && getGroupStateAtStep(groupId, activeStep.value.id)
+      if (state) state.muted = Boolean(group.muted)
+      saveSequence()
     }
   }
 
@@ -629,15 +755,59 @@ export const useTimelineStore = defineStore('timeline', () => {
     const group = currentSequence.value.groups.find((g) => g.id === groupId)
     if (group) {
       group.locked = !group.locked
+      const state = activeStep.value && getGroupStateAtStep(groupId, activeStep.value.id)
+      if (state) state.locked = Boolean(group.locked)
+      saveSequence()
     }
   }
 
   function setTrackGroup(trackId: string, groupId: string | null) {
     const track = currentSequence.value.tracks.find((t) => t.id === trackId)
     if (track) {
-      track.groupId = groupId ?? undefined
+      const targetGroupId = groupId && currentSequence.value.groups?.some((group) => group.id === groupId)
+        ? groupId
+        : resolveDefaultGroupId(track.category)
+      track.groupId = targetGroupId
+      const group = currentSequence.value.groups?.find((candidate) => candidate.id === targetGroupId)
+      if (group && !group.allowedCategories.includes(track.category)) group.allowedCategories.push(track.category)
       saveSequence()
     }
+  }
+
+  function resolveDefaultGroupId(category: AssetCategory, excludedGroupId?: string): string {
+    const groups = currentSequence.value.groups ?? []
+    return groups.find(
+      (group) => group.id !== excludedGroupId && group.isDefault && group.allowedCategories.includes(category)
+    )?.id ?? groups.find((group) => group.id !== excludedGroupId)?.id ?? addGroup(
+      ASSET_CATEGORIES[category].label,
+      ASSET_CATEGORIES[category].defaultZIndex,
+      'indigo',
+      [category]
+    ).id
+  }
+
+  function findCustomGroupByCategory(customCategory: string): TrackGroup | null {
+    const key = normalizeRoutingCategory(customCategory)
+    if (!key) return null
+    return currentSequence.value.groups?.find(
+      (group) => !group.isDefault && normalizeRoutingCategory(group.customCategory ?? group.name) === key
+    ) ?? null
+  }
+
+  function ensureCustomGroup(
+    customCategory: string,
+    assetCategory: AssetCategory
+  ): TrackGroup {
+    const name = customCategory.trim()
+    const existing = findCustomGroupByCategory(name)
+    if (existing) {
+      if (!existing.allowedCategories.includes(assetCategory)) {
+        existing.allowedCategories.push(assetCategory)
+        saveSequence()
+      }
+      return existing
+    }
+    return addGroup(name, undefined, 'indigo', [assetCategory])
   }
 
   // =========================================================================
@@ -652,19 +822,9 @@ export const useTimelineStore = defineStore('timeline', () => {
     const trackName = name || (existingSameCat.length > 0 ? `${catDef?.label || category} ${trackIndex}` : catDef?.label || category)
     const trackZIndex = zIndex ?? ((catDef?.defaultZIndex ?? 30) + existingSameCat.length)
 
-    // Déterminer le groupId par défaut si non spécifié
-    let targetGroupId = groupId
-    if (!targetGroupId && currentSequence.value.groups && currentSequence.value.groups.length > 0) {
-      if (category === 'background') {
-        targetGroupId = currentSequence.value.groups.find((g) => g.id === 'grp_background')?.id || currentSequence.value.groups[0].id
-      } else if (category === 'foreground') {
-        targetGroupId = currentSequence.value.groups.find((g) => g.id === 'grp_foreground')?.id || currentSequence.value.groups[0].id
-      } else if (['props_set', 'desk', 'props_desk'].includes(category)) {
-        targetGroupId = currentSequence.value.groups.find((g) => g.id === 'grp_props')?.id || currentSequence.value.groups[0].id
-      } else {
-        targetGroupId = currentSequence.value.groups.find((g) => g.id === 'grp_character_1')?.id || currentSequence.value.groups[0].id
-      }
-    }
+    const targetGroupId = groupId && currentSequence.value.groups?.some((group) => group.id === groupId)
+      ? groupId
+      : resolveDefaultGroupId(category)
 
     const newTrack: TimelineTrack = {
       id: generateId(`trk_${category}`),
@@ -678,6 +838,11 @@ export const useTimelineStore = defineStore('timeline', () => {
       keyframes: []
     }
 
+    const targetGroup = currentSequence.value.groups?.find((group) => group.id === targetGroupId)
+    if (targetGroup && !targetGroup.allowedCategories.includes(category)) targetGroup.allowedCategories.push(category)
+    for (const step of currentSequence.value.steps) {
+      newTrack.keyframes.push(createTrackSnapshot(newTrack, step.id))
+    }
     currentSequence.value.tracks.push(newTrack)
     selectTrackForEditing(newTrack.id)
     saveSequence()
@@ -711,6 +876,8 @@ export const useTimelineStore = defineStore('timeline', () => {
     const track = currentSequence.value.tracks.find((t) => t.id === trackId)
     if (track) {
       track.zIndex = zIndex
+      const keyframe = activeStep.value && getKeyframeAtStep(trackId, activeStep.value.id)
+      if (keyframe) keyframe.zIndex = zIndex
       saveSequence()
     }
   }
@@ -734,11 +901,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     if (existingIndex !== -1) {
       keyframe = track.keyframes[existingIndex]
     } else {
-      keyframe = {
-        id: generateId('kf'),
-        stepId,
-        sprites: []
-      }
+      keyframe = createTrackSnapshot(track, stepId)
       track.keyframes.push(keyframe)
     }
 
@@ -787,18 +950,42 @@ export const useTimelineStore = defineStore('timeline', () => {
       ?.keyframes.find((keyframe) => keyframe.stepId === stepId) ?? null
   }
 
+  function assignAssetToGroup(
+    assetId: string,
+    category: AssetCategory,
+    preferredGroupId?: string | null,
+    label?: string,
+    customCategory?: string | null
+  ): KeyframeSprite | null {
+    const stepId = activeStep.value?.id ?? orderedSteps.value[0]?.id
+    if (!stepId) return null
+    const selectedTarget = editScope.value === 'group' ? selectedGroupId.value : null
+    const explicitGroup = preferredGroupId
+      ? currentSequence.value.groups?.find((group) => group.id === preferredGroupId)
+      : null
+    const customGroup = !explicitGroup && customCategory?.trim()
+      ? ensureCustomGroup(customCategory, category)
+      : null
+    const groupId = explicitGroup?.id ?? customGroup?.id ?? selectedTarget ?? resolveDefaultGroupId(category)
+    const targetGroup = currentSequence.value.groups?.find((group) => group.id === groupId)
+    if (targetGroup && !targetGroup.allowedCategories.includes(category)) {
+      targetGroup.allowedCategories.push(category)
+    }
+    let track = currentSequence.value.tracks.find(
+      (candidate) => candidate.groupId === groupId && candidate.category === category
+    )
+    if (!track) track = addTrack(category, label, undefined, groupId)
+    const sprite = addKeyframe(track.id, stepId, assetId, label)
+    const keyframe = getKeyframeAtStep(track.id, stepId)
+    if (sprite && keyframe) selectSpriteForEditing(track.id, keyframe.id, sprite.id)
+    return sprite
+  }
+
   function getEffectiveKeyframeAtStep(trackId: string, stepId: string): Keyframe | null {
     const track = currentSequence.value.tracks.find((candidate) => candidate.id === trackId)
-    if (!track || track.muted) return null
-    const targetOrder = currentSequence.value.steps.find((step) => step.id === stepId)?.order
-    if (targetOrder === undefined) return null
-    const orderById = new Map(currentSequence.value.steps.map((step) => [step.id, step.order]))
-    return track.keyframes.reduce<Keyframe | null>((active, keyframe) => {
-      const order = orderById.get(keyframe.stepId)
-      if (order === undefined || order > targetOrder) return active
-      if (!active) return keyframe
-      return order > (orderById.get(active.stepId) ?? -1) ? keyframe : active
-    }, null)
+    if (!track) return null
+    const snapshot = track.keyframes.find((keyframe) => keyframe.stepId === stepId) ?? null
+    return snapshot?.muted ? null : snapshot
   }
 
   function upsertTrackStateAtStep(
@@ -813,12 +1000,7 @@ export const useTimelineStore = defineStore('timeline', () => {
       if (sprites) existing.sprites = sprites.map(cloneKeyframeSprite)
       return existing
     }
-    const inherited = getEffectiveKeyframeAtStep(trackId, stepId)
-    const keyframe: Keyframe = {
-      id: generateId('kf'),
-      stepId,
-      sprites: (sprites ?? inherited?.sprites ?? []).map(cloneKeyframeSprite)
-    }
+    const keyframe = createTrackSnapshot(track, stepId, sprites ?? [])
     track.keyframes.push(keyframe)
     return keyframe
   }
@@ -879,10 +1061,6 @@ export const useTimelineStore = defineStore('timeline', () => {
     }
 
     keyframe.sprites = keyframe.sprites.filter((sprite) => sprite.id !== spriteId)
-    if (keyframe.sprites.length === 0) {
-      removeKeyframe(trackId, keyframeId)
-      return
-    }
 
     keyframe.sprites
       .sort((left, right) => left.order - right.order)
@@ -907,7 +1085,6 @@ export const useTimelineStore = defineStore('timeline', () => {
     if (!step || !track || !effective || !sourceSprite) return false
 
     const beforeKeyframes = cloneKeyframes(track.keyframes)
-    const before = effective.sprites.map(cloneKeyframeSprite)
     const current = upsertTrackStateAtStep(trackId, step.id)
     if (!current) return false
     current.sprites = current.sprites.filter(
@@ -915,10 +1092,6 @@ export const useTimelineStore = defineStore('timeline', () => {
     )
     current.sprites.forEach((sprite, index) => { sprite.order = index })
 
-    const nextStep = orderedSteps.value[activeStepIndex.value + 1]
-    if (nextStep && !getKeyframeAtStep(trackId, nextStep.id)) {
-      track.keyframes.push({ id: generateId('kf'), stepId: nextStep.id, sprites: before })
-    }
     const afterKeyframes = cloneKeyframes(track.keyframes)
     const session = activeTransformSession.value
     const entry: TrackKeyframesHistoryEntry = {
@@ -951,7 +1124,8 @@ export const useTimelineStore = defineStore('timeline', () => {
       activeTransformSession.value = null
     }
 
-    track.keyframes = track.keyframes.filter((k) => k.id !== keyframeId)
+    const keyframe = track.keyframes.find((candidate) => candidate.id === keyframeId)
+    if (keyframe) keyframe.sprites = []
     if (selectedKeyframeId.value === keyframeId) {
       selectedKeyframeId.value = null
       selectedSpriteId.value = null
@@ -961,12 +1135,22 @@ export const useTimelineStore = defineStore('timeline', () => {
 
   function toggleTrackMute(trackId: string) {
     const track = currentSequence.value.tracks.find((t) => t.id === trackId)
-    if (track) track.muted = !track.muted
+    if (track) {
+      track.muted = !track.muted
+      const keyframe = activeStep.value && getKeyframeAtStep(trackId, activeStep.value.id)
+      if (keyframe) keyframe.muted = track.muted
+      saveSequence()
+    }
   }
 
   function toggleTrackLock(trackId: string) {
     const track = currentSequence.value.tracks.find((t) => t.id === trackId)
-    if (track) track.locked = !track.locked
+    if (track) {
+      track.locked = !track.locked
+      const keyframe = activeStep.value && getKeyframeAtStep(trackId, activeStep.value.id)
+      if (keyframe) keyframe.locked = track.locked
+      saveSequence()
+    }
   }
 
   async function applySavedKeyframe(preset: SavedKeyframePreset): Promise<number> {
@@ -987,14 +1171,22 @@ export const useTimelineStore = defineStore('timeline', () => {
           zIndex: savedGroup.zIndex,
           muted: false,
           locked: false,
-          collapsed: false
+          collapsed: false,
+          allowedCategories: []
         }
         groups.push(group)
+        for (const step of sequence.steps) step.groupStates.push(createGroupSnapshot(group))
       }
       group.name = savedGroup.name
       group.zIndex = savedGroup.zIndex
       group.transform = cloneTransform(savedGroup.transform)
       group.muted = false
+      const groupState = getGroupStateAtStep(group.id, stepId)
+      if (groupState) {
+        groupState.zIndex = savedGroup.zIndex
+        groupState.transform = cloneTransform(savedGroup.transform)
+        groupState.muted = false
+      }
       groupIdMap.set(savedGroup.sourceGroupId, group.id)
     }
 
@@ -1018,6 +1210,7 @@ export const useTimelineStore = defineStore('timeline', () => {
           name: savedTrack.name,
           category: savedTrack.category,
           targetSlot: savedTrack.targetSlot,
+          groupId: resolveDefaultGroupId(savedTrack.category),
           zIndex: savedTrack.zIndex,
           muted: false,
           locked: false,
@@ -1031,8 +1224,12 @@ export const useTimelineStore = defineStore('timeline', () => {
       track.zIndex = savedTrack.zIndex
       track.muted = false
       track.groupId = savedTrack.sourceGroupId
-        ? groupIdMap.get(savedTrack.sourceGroupId) ?? savedTrack.sourceGroupId
-        : undefined
+        ? groupIdMap.get(savedTrack.sourceGroupId) ?? resolveDefaultGroupId(savedTrack.category)
+        : resolveDefaultGroupId(savedTrack.category)
+      const assignedGroup = groups.find((candidate) => candidate.id === track.groupId)
+      if (assignedGroup && !assignedGroup.allowedCategories.includes(track.category)) {
+        assignedGroup.allowedCategories.push(track.category)
+      }
       assignedTrackIds.add(track.id)
       spritesByTrackId.set(track.id, savedTrack.sprites)
     }
@@ -1041,9 +1238,12 @@ export const useTimelineStore = defineStore('timeline', () => {
       const savedSprites = spritesByTrackId.get(track.id) ?? []
       let keyframe = track.keyframes.find((candidate) => candidate.stepId === stepId)
       if (!keyframe) {
-        keyframe = { id: generateId('kf'), stepId, sprites: [] }
+        keyframe = createTrackSnapshot(track, stepId)
         track.keyframes.push(keyframe)
       }
+      keyframe.zIndex = track.zIndex
+      keyframe.muted = false
+      keyframe.locked = track.locked
       keyframe.sprites = savedSprites.map((sprite) => ({
         id: generateId('kfs'),
         assetId: sprite.assetId,
@@ -1100,7 +1300,10 @@ export const useTimelineStore = defineStore('timeline', () => {
     duplicateStep,
     moveStep,
     removeStep,
+    updateActiveStepCamera,
     addGroup,
+    ensureCustomGroup,
+    findCustomGroupByCategory,
     removeGroup,
     updateGroup,
     updateGroupTransform,
@@ -1114,8 +1317,10 @@ export const useTimelineStore = defineStore('timeline', () => {
     removeTrack,
     updateTrackZIndex,
     addKeyframe,
+    assignAssetToGroup,
     getKeyframeAtStep,
     getEffectiveKeyframeAtStep,
+    getGroupStateAtStep,
     upsertTrackStateAtStep,
     updateKeyframeSpriteTransform,
     removeKeyframeSprite,
@@ -1162,7 +1367,9 @@ function transformTargetsAreEqual(
 
 const LEGACY_GROUP_IDS: Record<string, string> = {
   grp_backdrop: 'grp_background',
-  grp_overlay: 'grp_foreground'
+  grp_overlay: 'grp_set_props',
+  grp_foreground: 'grp_set_props',
+  grp_character_1: 'grp_berlu'
 }
 
 function migrateSequenceStructure(sequence: Sequence): boolean {
@@ -1193,12 +1400,15 @@ function migrateSequenceStructure(sequence: Sequence): boolean {
     persistedSequence.steps = times.map((_time, index) => ({
       id: generateId('step'),
       label: `Étape ${String(index + 1).padStart(2, '0')}`,
-      order: index
+      order: index,
+      groupStates: [],
+      camera: createDefaultCameraFrame()
     }))
-    const stepByTime = new Map(times.map((time, index) => [time, persistedSequence.steps?.[index]?.id]))
+    const migratedSteps = persistedSequence.steps
+    const stepByTime = new Map(times.map((time, index) => [time, migratedSteps[index]?.id]))
     for (const track of persistedSequence.tracks) {
       for (const keyframe of track.keyframes) {
-        keyframe.stepId = stepByTime.get(keyframe.timeMs ?? times[0] ?? 0) ?? persistedSequence.steps[0]!.id
+        keyframe.stepId = stepByTime.get(keyframe.timeMs ?? times[0] ?? 0) ?? migratedSteps[0]!.id
         delete keyframe.timeMs
       }
     }
@@ -1233,10 +1443,22 @@ function migrateSequenceStructure(sequence: Sequence): boolean {
       }
     }
 
+    sequence.groups = sequence.groups.filter(
+      (group, index, groups) =>
+        group.id !== 'grp_props' && groups.findIndex((candidate) => candidate.id === group.id) === index
+    )
+
     for (const defaultGroup of createDefaultGroups()) {
-      if (!sequence.groups.some((group) => group.id === defaultGroup.id)) {
+      const existing = sequence.groups.find((group) => group.id === defaultGroup.id)
+      if (!existing) {
         sequence.groups.push(defaultGroup)
         changed = true
+      } else {
+        if (existing.name !== defaultGroup.name) changed = true
+        existing.name = defaultGroup.name
+        existing.allowedCategories = [...defaultGroup.allowedCategories]
+        existing.color = defaultGroup.color
+        existing.isDefault = true
       }
     }
   }
@@ -1254,7 +1476,10 @@ function migrateSequenceStructure(sequence: Sequence): boolean {
       changed = true
     }
 
-    if (track.groupId && LEGACY_GROUP_IDS[track.groupId]) {
+    if (track.groupId === 'grp_props') {
+      track.groupId = defaultGroupIdForCategory(track.category)
+      changed = true
+    } else if (track.groupId && LEGACY_GROUP_IDS[track.groupId]) {
       track.groupId = LEGACY_GROUP_IDS[track.groupId]
       changed = true
     }
@@ -1264,7 +1489,7 @@ function migrateSequenceStructure(sequence: Sequence): boolean {
       const defaultSlot = DEFAULT_TRACK_SLOTS.find(
         (slot) => slot.category === track.category || slot.id === track.id
       )
-      track.groupId = defaultSlot?.groupId ?? 'grp_character_1'
+      track.groupId = defaultSlot?.groupId ?? defaultGroupIdForCategory(track.category)
       changed = true
     }
 
@@ -1321,6 +1546,8 @@ function migrateSequenceStructure(sequence: Sequence): boolean {
     }
   }
 
+  if (ensureAutonomousSnapshots(sequence)) changed = true
+
   return changed
 }
 
@@ -1349,23 +1576,57 @@ function createDefaultTracks(): TimelineTrack[] {
 }
 
 function createInitialStep(): SequenceStep {
-  return { id: generateId('step'), label: 'Étape 01', order: 0 }
+  return {
+    id: generateId('step'),
+    label: 'Étape 01',
+    order: 0,
+    groupStates: [],
+    camera: createDefaultCameraFrame()
+  }
+}
+
+function createDefaultCameraFrame(): CameraFrame {
+  return {
+    enabled: false,
+    x: 0,
+    y: 0,
+    width: DEFAULT_STAGE_RESOLUTION.width,
+    height: DEFAULT_STAGE_RESOLUTION.height,
+    aspectRatio: 'custom'
+  }
+}
+
+function cloneCameraFrame(camera?: CameraFrame): CameraFrame {
+  if (!camera) return createDefaultCameraFrame()
+
+  return {
+    enabled: camera.enabled,
+    x: camera.x,
+    y: camera.y,
+    width: camera.width,
+    height: camera.height,
+    aspectRatio: camera.aspectRatio
+  }
 }
 
 function cloneKeyframeSprite(sprite: KeyframeSprite): KeyframeSprite {
-  return {
-    id: generateId('kfs'),
+  const snapshot: KeyframeSprite = {
+    id: sprite.id,
     assetId: sprite.assetId,
     transform: cloneTransform(sprite.transform),
     label: sprite.label,
     order: sprite.order
   }
+  return { ...structuredClone(snapshot), id: generateId('kfs') }
 }
 
 function cloneKeyframes(keyframes: Keyframe[]): Keyframe[] {
   return keyframes.map((keyframe) => ({
     id: keyframe.id,
     stepId: keyframe.stepId,
+    zIndex: keyframe.zIndex,
+    muted: keyframe.muted,
+    locked: keyframe.locked,
     sprites: keyframe.sprites.map((sprite) => ({
       id: sprite.id,
       assetId: sprite.assetId,
@@ -1374,4 +1635,144 @@ function cloneKeyframes(keyframes: Keyframe[]): Keyframe[] {
       order: sprite.order
     }))
   }))
+}
+
+function createGroupSnapshot(group: TrackGroup): StepGroupState {
+  return {
+    groupId: group.id,
+    zIndex: group.zIndex,
+    transform: cloneTransform(group.transform),
+    muted: Boolean(group.muted),
+    locked: Boolean(group.locked)
+  }
+}
+
+function cloneGroupStates(states: StepGroupState[]): StepGroupState[] {
+  return states.map((state) => structuredClone({
+    groupId: state.groupId,
+    zIndex: state.zIndex,
+    transform: cloneTransform(state.transform),
+    muted: state.muted,
+    locked: state.locked
+  }))
+}
+
+function createTrackSnapshot(
+  track: TimelineTrack,
+  stepId: string,
+  sprites: KeyframeSprite[] = []
+): Keyframe {
+  return {
+    id: generateId('kf'),
+    stepId,
+    sprites: sprites.map(cloneKeyframeSprite),
+    zIndex: track.zIndex,
+    muted: track.muted,
+    locked: track.locked
+  }
+}
+
+function defaultGroupIdForCategory(category: AssetCategory): string {
+  return DEFAULT_TRACK_SLOTS.find((slot) => slot.category === category)?.groupId ?? 'grp_berlu'
+}
+
+function normalizeRoutingCategory(value: string): string {
+  return value
+    .trim()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('fr')
+}
+
+function ensureAutonomousSnapshots(sequence: Sequence): boolean {
+  let changed = false
+  sequence.groups ??= createDefaultGroups()
+  const orderedSteps = [...sequence.steps].sort((left, right) => left.order - right.order)
+  const stepIds = new Set(orderedSteps.map((step) => step.id))
+
+  for (const group of sequence.groups) {
+    const legacyGroup = group as TrackGroup & { categories?: AssetCategory[] }
+    if (!Array.isArray(group.allowedCategories)) {
+      group.allowedCategories = Array.isArray(legacyGroup.categories)
+        ? [...legacyGroup.categories]
+        : sequence.tracks
+        .filter((track) => track.groupId === group.id)
+        .map((track) => track.category)
+      delete legacyGroup.categories
+      changed = true
+    }
+    const isDefault = DEFAULT_TRACK_GROUPS.some((candidate) => candidate.id === group.id)
+    if (group.isDefault !== isDefault) changed = true
+    group.isDefault = isDefault
+    if (!isDefault && !group.customCategory) {
+      group.customCategory = group.name
+      changed = true
+    }
+  }
+
+  let previousGroupStates: StepGroupState[] = []
+  let previousCamera: CameraFrame | undefined
+  for (const step of orderedSteps) {
+    if (!step.camera) {
+      step.camera = cloneCameraFrame(previousCamera)
+      changed = true
+    }
+    previousCamera = cloneCameraFrame(step.camera)
+    if (!Array.isArray(step.groupStates)) {
+      step.groupStates = []
+      changed = true
+    }
+    for (const group of sequence.groups) {
+      if (step.groupStates.some((state) => state.groupId === group.id)) continue
+      const previous = previousGroupStates.find((state) => state.groupId === group.id)
+      step.groupStates.push(previous ? structuredClone(previous) : createGroupSnapshot(group))
+      changed = true
+    }
+    step.groupStates = step.groupStates.filter((state) =>
+      sequence.groups?.some((group) => group.id === state.groupId)
+    )
+    previousGroupStates = cloneGroupStates(step.groupStates)
+  }
+
+  for (const track of sequence.tracks) {
+    if (!track.groupId || !sequence.groups.some((group) => group.id === track.groupId)) {
+      track.groupId = defaultGroupIdForCategory(track.category)
+      changed = true
+    }
+    const group = sequence.groups.find((candidate) => candidate.id === track.groupId)
+    if (group && !group.allowedCategories.includes(track.category)) {
+      group.allowedCategories.push(track.category)
+      changed = true
+    }
+    track.keyframes = track.keyframes.filter((keyframe) => stepIds.has(keyframe.stepId))
+    let previous: Keyframe | null = null
+    for (const step of orderedSteps) {
+      let snapshot = track.keyframes.find((keyframe) => keyframe.stepId === step.id)
+      if (!snapshot) {
+        snapshot = createTrackSnapshot(track, step.id, previous?.sprites ?? [])
+        if (previous) {
+          snapshot.zIndex = previous.zIndex
+          snapshot.muted = previous.muted
+          snapshot.locked = previous.locked
+        }
+        track.keyframes.push(snapshot)
+        changed = true
+      }
+      if (!Number.isFinite(snapshot.zIndex)) {
+        snapshot.zIndex = previous?.zIndex ?? track.zIndex
+        changed = true
+      }
+      if (typeof snapshot.muted !== 'boolean') {
+        snapshot.muted = previous?.muted ?? track.muted
+        changed = true
+      }
+      if (typeof snapshot.locked !== 'boolean') {
+        snapshot.locked = previous?.locked ?? track.locked
+        changed = true
+      }
+      previous = snapshot
+    }
+  }
+
+  return changed
 }

@@ -1,0 +1,21 @@
+import { db } from '@infrastructure/db/dexie'
+
+export const APPLICATION_STORAGE_KEYS = [
+  'berlu.asset-sidebar-width',
+  'berlu.hierarchy-sidebar-width',
+  'berlu-creator.product-tour.v2',
+  'mycomplib-theme'
+] as const
+
+/**
+ * Supprime toutes les données persistées par BerluCreator.
+ * Le prochain chargement réinitialise ensuite le projet et les assets de démonstration.
+ */
+export async function resetApplicationToFactoryDefaults(): Promise<void> {
+  await db.delete()
+
+  if (typeof window === 'undefined') return
+  for (const key of APPLICATION_STORAGE_KEYS) {
+    window.localStorage.removeItem(key)
+  }
+}

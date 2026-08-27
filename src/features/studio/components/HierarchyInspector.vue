@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SelectableSurface } from '@/components/ui/selectable-surface'
 import CreateGroupModal from '@/features/timeline/components/CreateGroupModal.vue'
@@ -16,6 +17,7 @@ import LayerSettingsModal from './LayerSettingsModal.vue'
 
 const { activeLayers } = useHierarchyResolver()
 const timelineStore = useTimelineStore()
+const open = defineModel<boolean>('open', { default: true })
 
 const isCreateGroupOpen = ref(false)
 const isDeleteGroupOpen = ref(false)
@@ -27,7 +29,11 @@ const listRef = useTemplateRef<HTMLDivElement>('listRef')
 
 const groups = computed(() => {
   const allGroups = timelineStore.currentSequence.groups || []
-  return [...allGroups].sort((left, right) => right.zIndex - left.zIndex)
+  return allGroups
+    .filter((group) => !group.isDefault || timelineStore.currentSequence.tracks.some(
+      (track) => track.groupId === group.id && track.keyframes.some((keyframe) => keyframe.sprites.length > 0)
+    ))
+    .sort((left, right) => right.zIndex - left.zIndex)
 })
 
 function getActiveLayersInGroup(groupId?: string): RenderableLayer[] {
@@ -85,6 +91,11 @@ function removeLayer(layer: RenderableLayer) {
   timelineStore.removeSpriteFromActiveStep(layer.trackId, layer.spriteId)
 }
 
+function updateLayerZIndex(layer: RenderableLayer, value: string | number) {
+  const zIndex = Number(value)
+  if (Number.isFinite(zIndex)) timelineStore.updateTrackZIndex(layer.trackId, zIndex)
+}
+
 function categoryLayerStyle(layer: RenderableLayer) {
   const color = ASSET_CATEGORIES[layer.category].color
   return {
@@ -118,6 +129,14 @@ watch(
   <div data-tour="hierarchy" class="w-full h-full border-l border-border-subtle bg-bg-surface/50 backdrop-blur-md flex flex-col select-none">
     <div class="h-10 border-b border-border-subtle px-3 flex items-center justify-between shrink-0">
       <div class="flex items-center gap-1.5 font-semibold text-xs text-text-primary">
+        <IconButton
+          icon="right_panel_close"
+          size="xs"
+          variant="ghost"
+          aria-label="Replier l’inspecteur de calques"
+          title="Replier l’inspecteur de calques"
+          @click="open = false"
+        />
         <Icon name="account_tree" size="xs" class="text-primary" />
         <span>Groupes & Calques</span>
       </div>
@@ -227,6 +246,19 @@ watch(
             <Badge variant="neutral" size="sm" class="text-[8px] font-mono uppercase px-1 py-0">
               {{ layer.category }}
             </Badge>
+            <Input
+              :model-value="layer.trackZIndex"
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              size="sm"
+              class="h-7 w-16 px-2 text-center font-mono text-[10px]"
+              :aria-label="`Z-index de ${layer.asset.name}`"
+              title="Z-index dans l’étape active"
+              @update:model-value="updateLayerZIndex(layer, $event)"
+              @click.stop
+            />
             <IconButton
               icon="settings"
               size="xs"

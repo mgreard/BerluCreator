@@ -24,12 +24,40 @@ export interface Keyframe {
   stepId: string
   /** Sprites affichés simultanément par cette piste à cette étape. */
   sprites: KeyframeSprite[]
+  /** État de piste sérialisé dans le snapshot, sans héritage entre étapes. */
+  zIndex: number
+  muted: boolean
+  locked: boolean
+}
+
+export interface StepGroupState {
+  groupId: string
+  zIndex: number
+  transform?: Partial<Transform2D>
+  muted: boolean
+  locked: boolean
+}
+
+export type CameraAspectRatio = '16:9' | '9:16' | '1:1' | 'custom'
+
+/** Zone de capture exprimée dans les coordonnées natives du plateau. */
+export interface CameraFrame {
+  enabled: boolean
+  x: number
+  y: number
+  width: number
+  height: number
+  aspectRatio: CameraAspectRatio
 }
 
 export interface SequenceStep {
   id: string
   label: string
   order: number
+  /** État complet des groupes pour cette étape. */
+  groupStates: StepGroupState[]
+  /** Cadrage autonome de cette étape. */
+  camera: CameraFrame
 }
 
 export type TrackGroupColor = 'indigo' | 'emerald' | 'amber' | 'rose' | 'blue' | 'purple' | 'cyan'
@@ -45,6 +73,12 @@ export interface TrackGroup {
   locked?: boolean
   collapsed?: boolean
   color?: TrackGroupColor
+  /** Catégories techniques acceptées pour le routage automatique ou explicite. */
+  allowedCategories: AssetCategory[]
+  /** Les groupes prédéfinis vides sont masqués de l'interface. */
+  isDefault?: boolean
+  /** Catégorie de routage personnalisée, distincte de la catégorie technique des assets. */
+  customCategory?: string
 }
 
 export interface TimelineTrack {
@@ -53,7 +87,7 @@ export interface TimelineTrack {
   category: AssetCategory
   targetSlot: AssetCategory
   /** ID du groupe parent auquel appartient la piste */
-  groupId?: string
+  groupId: string
   /** Z-Index local à l'intérieur du groupe */
   zIndex: number
   muted: boolean

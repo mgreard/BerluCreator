@@ -4,6 +4,7 @@ import type {
 } from '../types/background-removal.types'
 
 const MAX_RGB_DISTANCE = Math.sqrt(3 * 255 * 255)
+export const MAX_INTERACTIVE_PREVIEW_PIXELS = 750_000
 
 function colorDistanceSquared(
   data: Uint8ClampedArray,
@@ -38,23 +39,20 @@ export function removeConnectedBackground(
   const tolerance = Math.max(0, Math.min(100, settings.tolerance)) / 100
   const maxDistanceSquared = (MAX_RGB_DISTANCE * tolerance) ** 2
   const visited = new Uint8Array(width * height)
-  const queueX = new Int32Array(width * height)
-  const queueY = new Int32Array(width * height)
+  const queue = new Int32Array(width * height)
   let head = 0
   let tail = 0
 
-  queueX[tail] = seedX
-  queueY[tail] = seedY
+  const seedIndex = seedY * width + seedX
+  queue[tail] = seedIndex
+  visited[seedIndex] = 1
   tail++
 
   while (head < tail) {
-    const x = queueX[head] ?? 0
-    const y = queueY[head] ?? 0
+    const pixelIndex = queue[head] ?? 0
     head++
-    const pixelIndex = y * width + x
-    if (visited[pixelIndex]) continue
-    visited[pixelIndex] = 1
-
+    const x = pixelIndex % width
+    const y = Math.floor(pixelIndex / width)
     const offset = pixelIndex * 4
     if (
       (data[offset + 3] ?? 0) === 0 ||
@@ -72,8 +70,8 @@ export function removeConnectedBackground(
         if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height) continue
         const nextIndex = nextY * width + nextX
         if (!visited[nextIndex]) {
-          queueX[tail] = nextX
-          queueY[tail] = nextY
+          visited[nextIndex] = 1
+          queue[tail] = nextIndex
           tail++
         }
       }
@@ -118,6 +116,23 @@ export function fitImagePreview(
   return {
     width: Math.max(1, Math.round(imageWidth * scale)),
     height: Math.max(1, Math.round(imageHeight * scale)),
+    scale
+  }
+}
+
+export function fitInteractiveProcessingBuffer(
+  imageWidth: number,
+  imageHeight: number,
+  maxPixels = MAX_INTERACTIVE_PREVIEW_PIXELS
+): { width: number; height: number; scale: number } {
+  if (imageWidth <= 0 || imageHeight <= 0 || maxPixels <= 0) {
+    return { width: 0, height: 0, scale: 0 }
+  }
+
+  const scale = Math.min(1, Math.sqrt(maxPixels / (imageWidth * imageHeight)))
+  return {
+    width: Math.max(1, Math.floor(imageWidth * scale)),
+    height: Math.max(1, Math.floor(imageHeight * scale)),
     scale
   }
 }

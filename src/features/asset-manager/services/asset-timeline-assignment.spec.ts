@@ -16,7 +16,7 @@ function createTrack(
     name: id,
     category,
     targetSlot: category,
-    groupId,
+    groupId: groupId ?? 'group-default',
     zIndex: 0,
     muted: false,
     locked: false,
@@ -68,6 +68,9 @@ describe('asset timeline assignment', () => {
       {
         id: 'keyframe-1',
         stepId: 'step-1',
+        zIndex: 0,
+        muted: false,
+        locked: false,
         sprites: [{ id: 'sprite-1', assetId: 'asset-old', order: 0 }]
       }
     ])
@@ -81,6 +84,9 @@ describe('asset timeline assignment', () => {
       {
         id: 'keyframe-1',
         stepId: 'step-1',
+        zIndex: 0,
+        muted: false,
+        locked: false,
         sprites: [{ id: 'sprite-1', assetId: 'asset-old', order: 0 }]
       }
     ])

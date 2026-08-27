@@ -18,14 +18,13 @@ import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { SegmentedControl, type SegmentOption } from '@/components/ui/segmented-control'
+import { CameraFrameOverlay } from '@/components/ui/camera-frame-overlay'
+import type { CameraFrame } from '@core/types/timeline.types'
 
 const projectStore = useProjectStore()
 const timelineStore = useTimelineStore()
 const assetStore = useAssetStore()
-const showHierarchy = defineModel<boolean>('showHierarchy', { default: true })
-const showAssets = defineModel<boolean>('showAssets', { default: true })
 
 const stage = computed(() => projectStore.currentProject.stage)
 const canvasRef = useTemplateRef<HTMLCanvasElement>('canvas')
@@ -89,7 +88,45 @@ const isGroupTarget = computed(() => {
   return editScope.value === 'group' && Boolean(activeSelectedGroup.value)
 })
 
-const showSelection = computed(() => true)
+const activeCamera = computed<CameraFrame>({
+  get: () => timelineStore.activeStep?.camera ?? {
+    enabled: false,
+    x: 0,
+    y: 0,
+    width: stage.value.width,
+    height: stage.value.height,
+    aspectRatio: 'custom'
+  },
+  set: (camera) => timelineStore.updateActiveStepCamera(camera)
+})
+
+const showSelection = computed(() => !activeCamera.value.enabled)
+
+function toggleCameraFrame() {
+  const current = activeCamera.value
+  const enabled = !current.enabled
+  const frameFitsStage =
+    current.width >= 64 && current.height >= 64 &&
+    current.x >= 0 && current.y >= 0 &&
+    current.x + current.width <= stage.value.width &&
+    current.y + current.height <= stage.value.height
+
+  timelineStore.clearStudioSelection()
+  timelineStore.updateActiveStepCamera(frameFitsStage
+    ? { ...current, enabled }
+    : {
+        enabled,
+        x: 0,
+        y: 0,
+        width: stage.value.width,
+        height: stage.value.height,
+        aspectRatio: 'custom'
+      }, true)
+}
+
+function commitCameraFrame(camera: CameraFrame) {
+  timelineStore.updateActiveStepCamera(camera, true)
+}
 
 // Calcul des bornes englobantes (Bounding Box) du groupe ou du sprite individuel
 const selectedBounds = computed<BoxBounds | null>(() => {
@@ -514,10 +551,14 @@ function onCanvasPointerMove(e: PointerEvent) {
 }
 
 function onCanvasPointerUp(e: PointerEvent) {
+  const restoreGroupId = (isDragging.value || isResizing.value) && !isGroupTarget.value
+    ? activeSelectedLayer.value?.groupId
+    : undefined
   isDragging.value = false
   isResizing.value = false
   activeHandle.value = null
   timelineStore.commitTransformGesture()
+  if (restoreGroupId) timelineStore.selectGroupForEditing(restoreGroupId)
 
   const target = e.currentTarget as HTMLElement
   if (target?.hasPointerCapture?.(e.pointerId)) {
@@ -573,34 +614,31 @@ function onCanvasDoubleClick(e: MouseEvent) {
         class="w-full h-full object-contain block pointer-events-none"
       />
 
+      <CameraFrameOverlay
+        v-if="activeCamera.enabled"
+        v-model="activeCamera"
+        :stage-width="stage.width"
+        :stage-height="stage.height"
+        @commit="commitCameraFrame"
+      />
+
       <div
-        class="absolute top-3 right-3 z-20 flex items-center gap-1 rounded-xl border border-border-default bg-bg-elevated/95 p-1 shadow-glass-md backdrop-blur-md"
+        class="absolute top-3 right-3 z-40 flex items-center gap-1 rounded-xl border border-border-default bg-bg-elevated/95 p-1 shadow-glass-md backdrop-blur-md"
         @pointerdown.stop
         @dblclick.stop
       >
         <Badge variant="neutral" size="sm" class="font-mono text-[10px] mx-1">
           {{ stage.width }} × {{ stage.height }}
         </Badge>
-        <Separator orientation="vertical" variant="subtle" class="h-4 mx-0.5" />
         <IconButton
-          icon="photo_library"
+          icon="crop_free"
           size="xs"
           variant="ghost"
-          :active="showAssets"
-          aria-label="Afficher ou masquer la bibliothèque d’assets"
-          title="Afficher/Masquer la bibliothèque d’assets"
-          @click="showAssets = !showAssets"
+          :active="activeCamera.enabled"
+          :aria-label="activeCamera.enabled ? 'Désactiver le cadrage caméra' : 'Activer le cadrage caméra'"
+          :title="activeCamera.enabled ? 'Désactiver le cadrage et exporter la scène complète' : 'Activer le cadrage caméra pour cette étape'"
+          @click="toggleCameraFrame"
         />
-        <IconButton
-          icon="account_tree"
-          size="xs"
-          variant="ghost"
-          :active="showHierarchy"
-          aria-label="Afficher ou masquer la hiérarchie"
-          title="Afficher/Masquer la hiérarchie"
-          @click="showHierarchy = !showHierarchy"
-        />
-        <Separator orientation="vertical" variant="subtle" class="h-4 mx-0.5" />
         <IconButton
           icon="undo"
           size="xs"

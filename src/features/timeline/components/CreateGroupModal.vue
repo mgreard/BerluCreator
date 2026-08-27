@@ -46,13 +46,13 @@ function handleCreate() {
 <template>
   <Modal
     v-model:open="open"
-    title="Nouveau Groupe de Pistes"
-    subtitle="Regroupez des pistes de sprites pour les ordonner et les déplacer ensemble."
+    title="Nouveau groupe / catégorie"
+    subtitle="Créez un calque parent réutilisable comme cible d’import pour plusieurs catégories techniques."
     size="sm"
     surface="glass"
   >
     <form class="space-y-4" @submit.prevent="handleCreate">
-      <FormGroup label="Nom du groupe" hint="Ex: Personnage 2, Bureau Plateau, Accessoires Front">
+      <FormGroup label="Nom du groupe et de la catégorie" hint="Ex. Invité. Un groupe du même nom sera réutilisé.">
         <Input
           v-model="groupName"
           placeholder="Nom du groupe..."

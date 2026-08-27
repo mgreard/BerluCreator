@@ -1,4 +1,6 @@
-import type { KeyframeSprite, Sequence, Transform2D } from '@core/types/timeline.types'
+import type { CameraFrame, KeyframeSprite, Sequence, Transform2D } from '@core/types/timeline.types'
+import type { StageSettings } from '@core/types/project.types'
+import type { ExportResolution } from '@/features/studio/composables/useCanvasRenderer'
 
 const TRANSFORM_KEYS: (keyof Transform2D)[] = [
   'x',
@@ -17,47 +19,49 @@ function serializeSprite(sprite: KeyframeSprite) {
   }
 }
 
-function getVisibleStateSignature(sequence: Sequence, stepId: string): string {
+function getVisibleStateSignature(sequence: Sequence, stepId: string, includeCamera: boolean): string {
+  const step = sequence.steps.find((candidate) => candidate.id === stepId)
   const mutedGroups = new Set(
-    (sequence.groups ?? []).filter((group) => group.muted).map((group) => group.id)
+    (step?.groupStates ?? []).filter((group) => group.muted).map((group) => group.groupId)
   )
 
-  return JSON.stringify(
-    sequence.tracks
-      .filter((track) => !track.muted && (!track.groupId || !mutedGroups.has(track.groupId)))
+  return JSON.stringify({
+    tracks: sequence.tracks
       .map((track) => {
-        const targetOrder = sequence.steps.find((step) => step.id === stepId)?.order ?? -1
-        const orderById = new Map(sequence.steps.map((step) => [step.id, step.order]))
-        const keyframe = [...track.keyframes]
-          .sort((left, right) => (orderById.get(left.stepId) ?? -1) - (orderById.get(right.stepId) ?? -1))
-          .filter((candidate) => (orderById.get(candidate.stepId) ?? -1) <= targetOrder)
-          .at(-1)
+        const keyframe = track.keyframes.find((candidate) => candidate.stepId === stepId)
+        if (keyframe?.muted || mutedGroups.has(track.groupId)) return [track.id, null]
 
         return keyframe
-          ? [track.id, [...keyframe.sprites].sort((left, right) => left.order - right.order).map(serializeSprite)]
+          ? [track.id, keyframe.zIndex, [...keyframe.sprites].sort((left, right) => left.order - right.order).map(serializeSprite)]
           : [track.id, null]
-      })
-  )
+      }),
+    groups: step?.groupStates ?? [],
+    camera: includeCamera ? step?.camera ?? null : null
+  })
 }
 
-export function getChangedKeyframeStepIds(sequence: Sequence): string[] {
-  const mutedGroups = new Set(
-    (sequence.groups ?? []).filter((group) => group.muted).map((group) => group.id)
-  )
-  const candidateStepIds = new Set(
-      sequence.tracks
-        .filter((track) => !track.muted && (!track.groupId || !mutedGroups.has(track.groupId)))
-        .flatMap((track) => track.keyframes.map((keyframe) => keyframe.stepId))
-  )
+export function get1080pExportResolution(
+  stage: Pick<StageSettings, 'width' | 'height'>,
+  camera?: CameraFrame
+): ExportResolution {
+  const width = camera?.enabled ? camera.width : stage.width
+  const height = camera?.enabled ? camera.height : stage.height
+  const ratio = width / height
+
+  return ratio >= 1
+    ? { width: Math.round(1080 * ratio), height: 1080 }
+    : { width: 1080, height: Math.round(1080 / ratio) }
+}
+
+export function getChangedKeyframeStepIds(sequence: Sequence, includeCamera = true): string[] {
   const orderedCandidates = [...sequence.steps]
     .sort((left, right) => left.order - right.order)
-    .filter((step) => candidateStepIds.has(step.id))
 
   const changedStepIds: string[] = []
   let previousSignature = ''
 
   for (const step of orderedCandidates) {
-    const signature = getVisibleStateSignature(sequence, step.id)
+    const signature = getVisibleStateSignature(sequence, step.id, includeCamera)
     if (signature !== previousSignature) {
       changedStepIds.push(step.id)
       previousSignature = signature

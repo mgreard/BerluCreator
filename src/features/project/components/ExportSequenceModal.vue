@@ -9,6 +9,7 @@ import { captureCleanFrame } from '@/features/studio/composables/useCanvasRender
 import {
   dataUrlToBytes,
   formatKeyframeFilename,
+  get1080pExportResolution,
   getChangedKeyframeStepIds,
   sanitizeExportPrefix
 } from '../services/keyframe-export.service'
@@ -20,6 +21,8 @@ import { Heading } from '@/components/ui/heading'
 import { Text } from '@/components/ui/text'
 import { Input } from '@/components/ui/input'
 import { FormGroup } from '@/components/ui/form-group'
+import { Switch } from '@/components/ui/switch'
+import { Select, type SelectOption } from '@/components/ui/select'
 import { toast } from '@/ui/shared/services/toast.service'
 
 const open = defineModel<boolean>('open', { default: false })
@@ -33,7 +36,25 @@ const stage = computed(() => projectStore.currentProject.stage)
 const isExporting = ref(false)
 const exportPrefix = ref('keyframe')
 const exportProgress = ref(0)
-const changedStepIds = computed(() => getChangedKeyframeStepIds(timelineStore.currentSequence))
+const applyCameraFrames = ref(true)
+const resolutionMode = ref<'native' | '1080p'>('native')
+const resolutionOptions: SelectOption[] = [
+  { value: 'native', label: 'Résolution native du cadrage' },
+  { value: '1080p', label: 'Forcer en 1080p' }
+]
+const changedStepIds = computed(() =>
+  getChangedKeyframeStepIds(timelineStore.currentSequence, applyCameraFrames.value)
+)
+
+function getCaptureOptions() {
+  const camera = applyCameraFrames.value ? timelineStore.activeStep?.camera : undefined
+  return {
+    camera,
+    outputResolution: resolutionMode.value === '1080p'
+      ? get1080pExportResolution(stage.value, camera)
+      : undefined
+  }
+}
 
 function downloadJson() {
   const exportPayload = {
@@ -59,7 +80,12 @@ async function captureCurrentFrame() {
   isExporting.value = true
 
   try {
-    const dataUrl = await captureCleanFrame(activeLayers.value, stage.value, 'image/png')
+    const dataUrl = await captureCleanFrame(
+      activeLayers.value,
+      stage.value,
+      'image/png',
+      getCaptureOptions()
+    )
     const link = document.createElement('a')
     link.href = dataUrl
     link.download = `berlu_creator_${timelineStore.activeStep?.label.toLowerCase().replace(/\s+/g, '-') ?? 'etape'}.png`
@@ -94,7 +120,12 @@ async function exportChangedKeyframes() {
     for (const [index, stepId] of stepIds.entries()) {
       timelineStore.selectStep(stepId)
       await nextTick()
-      const dataUrl = await captureCleanFrame(activeLayers.value, stage.value, 'image/png')
+      const dataUrl = await captureCleanFrame(
+        activeLayers.value,
+        stage.value,
+        'image/png',
+        getCaptureOptions()
+      )
       files[formatKeyframeFilename(exportPrefix.value, index + 1, stepIds.length)] = dataUrlToBytes(dataUrl)
       exportProgress.value = index + 1
     }
@@ -164,6 +195,23 @@ async function exportChangedKeyframes() {
           />
         </FormGroup>
 
+        <div class="grid gap-3 rounded-lg border border-border-subtle bg-bg-surface/50 p-3 sm:grid-cols-[1fr_190px] sm:items-center">
+          <Switch
+            v-model="applyCameraFrames"
+            size="sm"
+            label="Appliquer les cadrages Caméra / Zoom"
+            description="Chaque étape utilise sa propre zone de capture."
+          />
+          <FormGroup label="Format de sortie">
+            <Select
+              v-model="resolutionMode"
+              :options="resolutionOptions"
+              size="sm"
+              aria-label="Format de sortie des images"
+            />
+          </FormGroup>
+        </div>
+
         <div class="flex items-center justify-between gap-3">
           <Text v-if="isExporting" variant="caption" color="muted">
             Génération {{ exportProgress }} / {{ changedStepIds.length }}…
@@ -187,7 +235,7 @@ async function exportChangedKeyframes() {
         <div>
           <Heading as="h4" variant="sm" class="font-semibold text-foreground">Instantané PNG de l’étape active</Heading>
           <Text variant="caption" color="muted" class="text-[11px] mt-0.5">
-            Rendu haute résolution de {{ timelineStore.activeStep?.label ?? 'l’étape active' }}, sans repères d’édition.
+            Rendu de {{ timelineStore.activeStep?.label ?? 'l’étape active' }}, sans repères d’édition{{ applyCameraFrames ? ' et avec son cadrage caméra' : '' }}.
           </Text>
         </div>
         <Button

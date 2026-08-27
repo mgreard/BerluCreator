@@ -5,7 +5,6 @@ import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
 import { useWorkspaceBackupStore } from '@/features/project/stores/useWorkspaceBackupStore'
 import { seedDemoAssetsIfEmpty } from '@/features/asset-manager/services/demo-asset-seeder'
-import type { Asset, AssetCategory } from '@core/types/asset.types'
 
 import StudioHeader from '@/features/project/components/StudioHeader.vue'
 import AssetLibraryPanel from '@/features/asset-manager/components/AssetLibraryPanel.vue'
@@ -68,7 +67,7 @@ const productTourSteps: ProductTourStep[] = [
     element: '[data-tour="timeline"]',
     popover: {
       title: '4. Construisez votre séquence',
-      description: 'Ajoutez des étapes discrètes et ne renseignez que les pistes dont l’état change.',
+      description: 'Ajoutez des étapes autonomes : chacune conserve une copie complète et indépendante de la scène.',
       side: 'top',
       align: 'center'
     }
@@ -93,18 +92,6 @@ const productTourSteps: ProductTourStep[] = [
   }
 ]
 
-function addInitialKeyframe(
-  category: AssetCategory,
-  asset: Asset | undefined,
-  stepId: string
-) {
-  if (!asset) return
-  const track = timelineStore.currentSequence.tracks.find(
-    (candidate) => candidate.targetSlot === category || candidate.category === category
-  )
-  if (track) timelineStore.addKeyframe(track.id, stepId, asset.id, asset.name)
-}
-
 onMounted(async () => {
   // 1. Initialiser l'espace de travail unique
   const proj = await projectStore.loadInitialProject()
@@ -115,70 +102,6 @@ onMounted(async () => {
 
   // 3. Charger la séquence active
   await timelineStore.loadSequence(proj.activeSequenceId, proj.id)
-
-  // 4. Si la séquence n'a aucune keyframe ou utilise des IDs obsolètes, configurer une composition initiale
-  const hasValidKeyframes = timelineStore.currentSequence.tracks.some((t) =>
-    t.keyframes.some((keyframe) =>
-      keyframe.sprites.some((sprite) =>
-        assetStore.assets.some((asset) => asset.id === sprite.assetId)
-      )
-    )
-  )
-
-  if (!hasValidKeyframes && assetStore.assets.length > 0) {
-    const background =
-      assetStore.assets.find((a) => a.category === 'background' && a.name.toLowerCase().includes('background')) ||
-      assetStore.assets.find((a) => a.category === 'background')
-    const torso = assetStore.assets.find((a) => a.category === 'torso')
-    const head =
-      assetStore.assets.find((a) => a.category === 'head' && a.name.toLowerCase().includes('smile')) ||
-      assetStore.assets.find((a) => a.category === 'head')
-    const mouth1 =
-      assetStore.assets.find((a) => a.category === 'mouth' && a.name.toLowerCase().includes('smile1')) ||
-      assetStore.assets.find((a) => a.category === 'mouth')
-    const mouth2 = assetStore.assets.find((a) => a.category === 'mouth' && a.name.toLowerCase().includes('smile2'))
-    const mouth3 = assetStore.assets.find((a) => a.category === 'mouth' && a.name.toLowerCase().includes('smile3'))
-    const eyes = assetStore.assets.find((a) => a.category === 'eyes')
-    const armLeft =
-      assetStore.assets.find((a) => a.category === 'arms_left' && a.name.toLowerCase().includes('default')) ||
-      assetStore.assets.find((a) => a.category === 'arms_left')
-    const armRight =
-      assetStore.assets.find((a) => a.category === 'arms_right' && a.name.toLowerCase().includes('open')) ||
-      assetStore.assets.find((a) => a.category === 'arms_right')
-    const desk = assetStore.assets.find((a) => a.category === 'desk')
-    const light = assetStore.assets.find(
-      (a) => a.category === 'props_set' && a.name.toLowerCase().includes('light')
-    )
-
-    // Réinitialiser les pistes
-    for (const track of timelineStore.currentSequence.tracks) {
-      if (track.category === 'arms_left' && track.zIndex < 10) {
-        track.zIndex = 12
-      }
-      track.keyframes = []
-    }
-
-    const firstStep = timelineStore.orderedSteps[0]
-    if (!firstStep) return
-    const secondStep = timelineStore.addStepAfter(firstStep.id)
-    const thirdStep = timelineStore.addStepAfter(secondStep.id)
-    const fourthStep = timelineStore.addStepAfter(thirdStep.id)
-    addInitialKeyframe('background', background, firstStep.id)
-    addInitialKeyframe('torso', torso, firstStep.id)
-    addInitialKeyframe('head', head, firstStep.id)
-    addInitialKeyframe('mouth', mouth1, firstStep.id)
-    addInitialKeyframe('mouth', mouth2, secondStep.id)
-    addInitialKeyframe('mouth', mouth3, thirdStep.id)
-    addInitialKeyframe('mouth', mouth1, fourthStep.id)
-    addInitialKeyframe('eyes', eyes, firstStep.id)
-    addInitialKeyframe('arms_left', armLeft, firstStep.id)
-    addInitialKeyframe('arms_right', armRight, firstStep.id)
-    addInitialKeyframe('desk', desk, firstStep.id)
-    addInitialKeyframe('props_set', light, firstStep.id)
-    timelineStore.selectStep(firstStep.id)
-    timelineStore.clearStudioSelection(false)
-    await timelineStore.saveSequence()
-  }
 
   await workspaceBackupStore.initialize()
   stopWorkspaceWatch = watch(
@@ -219,14 +142,11 @@ onBeforeUnmount(() => {
         :max-width="560"
         storage-key="berlu.asset-sidebar-width"
       >
-        <AssetLibraryPanel />
+        <AssetLibraryPanel v-model:open="showAssetLibrary" />
       </ResizableSidebar>
 
       <!-- Viewport & Canvas de Composition (Centre) -->
-      <StudioViewport
-        v-model:show-hierarchy="showHierarchy"
-        v-model:show-assets="showAssetLibrary"
-      />
+      <StudioViewport />
 
       <!-- Inspecteur de Hiérarchie des Calques (Droite) -->
       <ResizableSidebar
@@ -237,7 +157,7 @@ onBeforeUnmount(() => {
         :max-width="520"
         storage-key="berlu.hierarchy-sidebar-width"
       >
-        <HierarchyInspector />
+        <HierarchyInspector v-model:open="showHierarchy" />
       </ResizableSidebar>
     </div>
 

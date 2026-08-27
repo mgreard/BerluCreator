@@ -10,15 +10,17 @@ import {
   getManualSnapshotSummary,
   restoreManualWorkspaceSnapshot
 } from '../services/workspace-snapshot.service'
+import { resetApplicationToFactoryDefaults } from '../services/factory-reset.service'
 import type { WorkspaceSnapshotSummary } from '@core/types/project.types'
 import { toast } from '@/ui/shared/services/toast.service'
 import { Button } from '@/components/ui/button'
-import { ButtonGroup } from '@/components/ui/button-group'
 import { IconButton } from '@/components/ui/icon-button'
 import { Icon } from '@/components/ui/icon'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Heading } from '@/components/ui/heading'
+import { DropdownMenu, type DropdownMenuItemDef } from '@/components/ui/dropdown-menu'
+import { AlertDialog } from '@/components/ui/alert-dialog'
 
 const emit = defineEmits<{
   (event: 'openSettings'): void
@@ -34,6 +36,8 @@ const assetStore = useAssetStore()
 const workspaceBackupStore = useWorkspaceBackupStore()
 const snapshotSummary = ref<WorkspaceSnapshotSummary | null>(null)
 const isSnapshotBusy = ref(false)
+const isResetConfirmOpen = ref(false)
+const isResetting = ref(false)
 
 const backupBadge = computed(() => ({
   checking: { label: 'Vérification…', variant: 'neutral' as const, pulse: true },
@@ -43,6 +47,42 @@ const backupBadge = computed(() => ({
   saving: { label: 'Sauvegarde…', variant: 'neutral' as const, pulse: true },
   error: { label: 'Erreur de sauvegarde', variant: 'danger' as const, pulse: false }
 })[workspaceBackupStore.status])
+
+const applicationMenuItems = computed<DropdownMenuItemDef[]>(() => [
+  {
+    id: 'settings',
+    label: 'Paramètres du plateau',
+    icon: 'settings',
+    onClick: () => emit('openSettings')
+  },
+  { id: 'separator-settings', type: 'separator' },
+  { id: 'application-data', type: 'label', label: 'Données de l’application' },
+  {
+    id: 'save-application',
+    label: 'Sauvegarder l’application',
+    icon: 'save',
+    disabled: isSnapshotBusy.value || isResetting.value,
+    onClick: () => void saveSnapshot()
+  },
+  {
+    id: 'restore-application',
+    label: 'Restaurer l’application',
+    icon: 'restore',
+    disabled: isSnapshotBusy.value || isResetting.value || !snapshotSummary.value,
+    onClick: () => void restoreSnapshot()
+  },
+  { id: 'separator-reset', type: 'separator' },
+  {
+    id: 'reset-application',
+    label: 'Reset app',
+    icon: 'delete_forever',
+    destructive: true,
+    disabled: isSnapshotBusy.value || isResetting.value,
+    onClick: () => {
+      isResetConfirmOpen.value = true
+    }
+  }
+])
 
 function formatSnapshotDate(timestamp: number) {
   return new Intl.DateTimeFormat('fr-FR', {
@@ -112,6 +152,24 @@ async function restoreSnapshot() {
   }
 }
 
+async function resetApplication() {
+  if (isResetting.value) return
+  isResetting.value = true
+  workspaceBackupStore.dispose()
+  try {
+    await resetApplicationToFactoryDefaults()
+    window.location.reload()
+  } catch (error) {
+    isResetting.value = false
+    isResetConfirmOpen.value = false
+    await workspaceBackupStore.initialize()
+    toast.error(
+      'Échec du reset de l’application',
+      error instanceof Error ? error.message : 'Erreur inconnue.'
+    )
+  }
+}
+
 onMounted(async () => {
   try {
     snapshotSummary.value = await getManualSnapshotSummary()
@@ -140,34 +198,6 @@ onMounted(async () => {
     </div>
 
     <div class="flex items-center gap-2">
-      <ButtonGroup data-tour="backup" aria-label="Sauvegarde complète de l’application">
-        <Button
-          variant="ghost"
-          size="sm"
-          class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
-          :disabled="isSnapshotBusy"
-          title="Créer ou remplacer la sauvegarde complète de l’application"
-          @click="saveSnapshot"
-        >
-          <Icon name="save" size="xs" />
-          <span>Sauvegarder l’application</span>
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
-          :disabled="isSnapshotBusy || !snapshotSummary"
-          :title="snapshotSummary ? `Restaurer l’application du ${formatSnapshotDate(snapshotSummary.createdAt)}` : 'Aucune sauvegarde complète disponible'"
-          @click="restoreSnapshot"
-        >
-          <Icon name="restore" size="xs" />
-          <span>Restaurer l’application</span>
-        </Button>
-      </ButtonGroup>
-
-      <Separator orientation="vertical" variant="subtle" class="h-5 mx-1" />
-
       <Button
         variant="ghost"
         size="sm"
@@ -188,14 +218,25 @@ onMounted(async () => {
         @click="emit('startTour')"
       />
 
-      <IconButton
-        icon="settings"
-        variant="ghost"
-        size="sm"
-        aria-label="Paramètres du plateau"
-        title="Paramètres du plateau"
-        @click="emit('openSettings')"
-      />
+      <div data-tour="backup">
+        <DropdownMenu
+          :items="applicationMenuItems"
+          align="end"
+          width="md"
+          surface="glass"
+          :disabled="isResetting"
+        >
+          <template #trigger>
+            <IconButton
+              icon="settings"
+              variant="ghost"
+              size="sm"
+              aria-label="Menu des paramètres de l’application"
+              title="Paramètres et données de l’application"
+            />
+          </template>
+        </DropdownMenu>
+      </div>
 
       <Button
         data-tour="export"
@@ -209,5 +250,17 @@ onMounted(async () => {
         <span>Exporter</span>
       </Button>
     </div>
+
+    <AlertDialog
+      v-model:open="isResetConfirmOpen"
+      title="Réinitialiser complètement l’application ?"
+      description="Tous les projets, assets importés, groupes, keyframes et sauvegardes seront définitivement supprimés. L’application redémarrera ensuite dans son état de sortie d’usine."
+      variant="danger"
+      confirm-text="Reset app"
+      cancel-text="Conserver mes données"
+      require-confirmation-text="RESET"
+      :confirm-loading="isResetting"
+      @confirm="resetApplication"
+    />
   </header>
 </template>

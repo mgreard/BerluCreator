@@ -35,7 +35,7 @@ function confirmDeletion() {
   <AlertDialog
     v-model:open="open"
     :title="`Supprimer le groupe « ${group?.name ?? ''} » ?`"
-    :description="`${trackCount} piste(s) seront conservées et réassignées à un autre groupe disponible, ou laissées libres.`"
+    :description="`${trackCount} piste(s) seront conservées et réassignées automatiquement à leur groupe de catégorie.`"
     variant="danger"
     icon="delete_forever"
     confirm-text="Supprimer le groupe"

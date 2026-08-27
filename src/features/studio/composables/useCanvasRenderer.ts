@@ -3,6 +3,7 @@ import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 import type { RenderableLayer } from './useHierarchyResolver'
 import type { StageSettings } from '@core/types/project.types'
 import type { BoxBounds } from '../engine/transform-matrix'
+import type { CameraFrame } from '@core/types/timeline.types'
 
 const globalImageCache = new Map<string, HTMLImageElement>()
 
@@ -95,13 +96,35 @@ export function shouldFillExportBackground(
   return !supportsTransparency || layers.some((layer) => layer.category === 'background')
 }
 
+export interface ExportResolution {
+  width: number
+  height: number
+}
+
+export interface FrameCaptureOptions {
+  camera?: CameraFrame
+  outputResolution?: ExportResolution
+}
+
+function normalizeCameraCrop(camera: CameraFrame, stage: StageSettings) {
+  const x = Math.max(0, Math.min(camera.x, stage.width - 1))
+  const y = Math.max(0, Math.min(camera.y, stage.height - 1))
+  return {
+    x,
+    y,
+    width: Math.max(1, Math.min(camera.width, stage.width - x)),
+    height: Math.max(1, Math.min(camera.height, stage.height - y))
+  }
+}
+
 /**
  * Capture un instantané PNG/JPEG propre, sans aides d’édition.
  */
 export async function captureCleanFrame(
   layers: RenderableLayer[],
   stage: StageSettings,
-  format: string = 'image/png'
+  format: string = 'image/png',
+  options: FrameCaptureOptions = {}
 ): Promise<string> {
   const { width, height, backgroundColor } = stage
   const offscreenCanvas = document.createElement('canvas')
@@ -125,7 +148,31 @@ export async function captureCleanFrame(
   // 3. Dessiner strictement les calques
   drawLayersOnContext(ctx, layers, globalImageCache)
 
-  return offscreenCanvas.toDataURL(format)
+  const camera = options.camera?.enabled ? normalizeCameraCrop(options.camera, stage) : null
+  const outputResolution = options.outputResolution
+  if (!camera && !outputResolution) return offscreenCanvas.toDataURL(format)
+
+  const exportCanvas = document.createElement('canvas')
+  exportCanvas.width = Math.round(outputResolution?.width ?? camera?.width ?? width)
+  exportCanvas.height = Math.round(outputResolution?.height ?? camera?.height ?? height)
+  const exportContext = exportCanvas.getContext('2d')
+  if (!exportContext) throw new Error("Impossible d'initialiser le contexte 2D pour le cadrage.")
+  exportContext.imageSmoothingEnabled = true
+  exportContext.imageSmoothingQuality = 'high'
+
+  exportContext.drawImage(
+    offscreenCanvas,
+    camera?.x ?? 0,
+    camera?.y ?? 0,
+    camera?.width ?? width,
+    camera?.height ?? height,
+    0,
+    0,
+    exportCanvas.width,
+    exportCanvas.height
+  )
+
+  return exportCanvas.toDataURL(format)
 }
 
 export function useCanvasRenderer(
