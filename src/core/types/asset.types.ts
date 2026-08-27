@@ -39,8 +39,7 @@ export interface AssetCategoryDefinition {
   icon: string
   description: string
   defaultZIndex: number
-  trackCardinality: CategoryCardinality
-  keyframeCardinality: CategoryCardinality
+  layerCardinality: CategoryCardinality
   placementMode: CategoryPlacementMode
   /** Couleur CSS stable partagée par toutes les surfaces de catégorie. */
   color: string
@@ -83,6 +82,21 @@ export interface AssetTrimFrame {
   offsetY: number
 }
 
+export interface AssetCalibration {
+  /** Offset horizontal relatif au centre / point d'ancrage de l'avatar Berlu */
+  x: number
+  /** Offset vertical relatif au centre / point d'ancrage de l'avatar Berlu */
+  y: number
+  /** Échelle horizontale par défaut */
+  scaleX: number
+  /** Échelle verticale par défaut */
+  scaleY: number
+  /** Rotation par défaut en degrés */
+  rotation?: number
+  /** Z-Index par défaut au sein du personnage */
+  zIndex?: number
+}
+
 export interface Asset {
   id: string
   name: string
@@ -95,6 +109,8 @@ export interface Asset {
   displayWidth?: number
   displayHeight?: number
   trimFrame?: AssetTrimFrame
+  /** Calibration d'ancrage et positionnement pré-étalonné sur l'avatar Berlu */
+  calibration?: AssetCalibration
   /** Indique si le sprite peut être déplacé librement à la souris sur le canvas */
   isMovable: boolean
   createdAt: number

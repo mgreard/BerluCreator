@@ -3,9 +3,23 @@ import { ref, computed } from 'vue'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { assetRepository } from '@infrastructure/db/repositories/asset.repository'
 import { generateId } from '@/lib/utils'
-import { trimTransparentImage } from '../services/transparent-image-trimmer'
-
 import { resolveSpriteConfig } from '@core/constants/sprites-config'
+
+async function getImageDimensions(blob: Blob): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve({ width: img.naturalWidth, height: img.naturalHeight })
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error("Impossible de lire les dimensions de l'image."))
+    }
+    img.src = url
+  })
+}
 
 export const useAssetStore = defineStore('asset', () => {
   const assets = ref<Asset[]>([])
@@ -66,11 +80,12 @@ export const useAssetStore = defineStore('asset', () => {
     const id = generateId('asset')
     const blobId = generateId('blob')
 
-    const trimmed = await trimTransparentImage(file)
-    const sourceWidth = trimmed.trimFrame?.sourceWidth ?? trimmed.width
-    const sourceHeight = trimmed.trimFrame?.sourceHeight ?? trimmed.height
+    const dimensions = await getImageDimensions(file)
 
-    const defaultName = file instanceof File ? file.name.replace(/\.[^/.]+$/, '') : `sprite_${category}_${Date.now().toString().slice(-4)}`
+    const defaultName =
+      file instanceof File
+        ? file.name.replace(/\.[^/.]+$/, '')
+        : `sprite_${category}_${Date.now().toString().slice(-4)}`
     const assetName = name || defaultName
     const spriteConfig = resolveSpriteConfig(assetName, category)
 
@@ -80,32 +95,20 @@ export const useAssetStore = defineStore('asset', () => {
       category,
       tags: [category],
       blobId,
-      width: trimmed.width,
-      height: trimmed.height,
-      displayWidth: sourceWidth,
-      displayHeight: sourceHeight,
-      trimFrame: trimmed.trimFrame,
+      width: dimensions.width,
+      height: dimensions.height,
+      displayWidth: dimensions.width,
+      displayHeight: dimensions.height,
       isMovable: spriteConfig.isMovable,
       createdAt: Date.now(),
       updatedAt: Date.now()
     }
 
-    await assetRepository.create(newAsset, trimmed.blob)
+    await assetRepository.create(newAsset, file)
     assets.value.push(newAsset)
     selectedAssetId.value = newAsset.id
 
     return newAsset
-  }
-
-  async function importSlicedAssets(
-    slices: { blob: Blob; name: string; category: AssetCategory }[]
-  ): Promise<Asset[]> {
-    const created: Asset[] = []
-    for (const slice of slices) {
-      const asset = await importAsset(slice.blob, slice.category, slice.name)
-      created.push(asset)
-    }
-    return created
   }
 
   async function updateAsset(id: string, changes: Partial<Asset>) {
@@ -128,60 +131,6 @@ export const useAssetStore = defineStore('asset', () => {
     }
   }
 
-  async function trimExistingAssets(): Promise<{
-    cropped: number
-    unchanged: number
-    failed: number
-  }> {
-    let cropped = 0
-    let unchanged = 0
-    let failed = 0
-
-    for (const asset of [...assets.value]) {
-      if (asset.trimFrame) {
-        unchanged += 1
-        continue
-      }
-
-      try {
-        const source = await assetRepository.getBlob(asset.blobId)
-        if (!source) throw new Error(`Blob introuvable pour ${asset.name}`)
-
-        const trimmed = await trimTransparentImage(source)
-        if (!trimmed.changed || !trimmed.trimFrame) {
-          unchanged += 1
-          continue
-        }
-
-        const blobId = generateId('blob')
-        const changes: Partial<Asset> = {
-          blobId,
-          width: trimmed.width,
-          height: trimmed.height,
-          displayWidth: asset.displayWidth ?? trimmed.trimFrame.sourceWidth,
-          displayHeight: asset.displayHeight ?? trimmed.trimFrame.sourceHeight,
-          trimFrame: trimmed.trimFrame
-        }
-        await assetRepository.replaceBlob(asset.id, blobId, trimmed.blob, changes)
-
-        const index = assets.value.findIndex((candidate) => candidate.id === asset.id)
-        if (index !== -1) {
-          assets.value[index] = {
-            ...assets.value[index],
-            ...changes,
-            updatedAt: Date.now()
-          }
-        }
-        cropped += 1
-      } catch (error) {
-        console.error(`Échec du recadrage de l'asset ${asset.name}:`, error)
-        failed += 1
-      }
-    }
-
-    return { cropped, unchanged, failed }
-  }
-
   function selectAsset(id: string | null) {
     selectedAssetId.value = id
   }
@@ -198,10 +147,8 @@ export const useAssetStore = defineStore('asset', () => {
     allTags,
     loadAssets,
     importAsset,
-    importSlicedAssets,
     updateAsset,
     deleteAsset,
-    trimExistingAssets,
     selectAsset
   }
 })

@@ -6,7 +6,6 @@ import {
 } from '@core/types/asset.types'
 import { resolveSpriteConfig } from '@core/constants/sprites-config'
 import { generateId } from '@/lib/utils'
-import { trimTransparentImage } from './transparent-image-trimmer'
 
 // Import eager de tous les sprites PNG du dossier assets
 const spriteModules = import.meta.glob<string>('@/assets/sprites/**/*.png', {
@@ -14,14 +13,29 @@ const spriteModules = import.meta.glob<string>('@/assets/sprites/**/*.png', {
   import: 'default'
 })
 
+async function getImageDimensions(blob: Blob): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve({ width: img.naturalWidth, height: img.naturalHeight })
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('Impossible de lire les dimensions du sprite.'))
+    }
+    img.src = url
+  })
+}
+
 /**
  * Charge l'ensemble des sprites réels du studio dans la base locale Dexie
- * et nettoie les anciens placeholders vectoriels s'ils existent.
+ * avec leurs dimensions natives, sans recadrage transparent.
  */
 export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
   const existing = await assetRepository.getAll()
 
-  // Une ancienne catégorie indique que la base référence encore l'ancien pack de sprites.
   const needsSpritePackMigration = existing.some(
     (asset) => !isAssetCategory(asset.category) || asset.isMovable === undefined
   )
@@ -42,9 +56,7 @@ export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
     try {
       const response = await fetch(url)
       const blob = await response.blob()
-      const trimmed = await trimTransparentImage(blob)
-      const sourceWidth = trimmed.trimFrame?.sourceWidth ?? trimmed.width
-      const sourceHeight = trimmed.trimFrame?.sourceHeight ?? trimmed.height
+      const dimensions = await getImageDimensions(blob)
       const { name, category, tags } = parseSpriteMetadata(path)
       const spriteConfig = resolveSpriteConfig(name, category)
 
@@ -57,17 +69,16 @@ export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
         category,
         tags,
         blobId,
-        width: trimmed.width,
-        height: trimmed.height,
-        displayWidth: sourceWidth,
-        displayHeight: sourceHeight,
-        trimFrame: trimmed.trimFrame,
+        width: dimensions.width,
+        height: dimensions.height,
+        displayWidth: dimensions.width,
+        displayHeight: dimensions.height,
         isMovable: spriteConfig.isMovable,
         createdAt: Date.now(),
         updatedAt: Date.now()
       }
 
-      await assetRepository.create(asset, trimmed.blob)
+      await assetRepository.create(asset, blob)
     } catch (err) {
       console.error(`Erreur chargement sprite ${path}:`, err)
     }
@@ -101,8 +112,6 @@ export function parseSpriteMetadata(filePath: string): {
       normalizedFileName.includes('_right_arm') ||
       normalizedFileName.includes('_both_arms')
     ) {
-      // Les poses combinant les deux bras restent pilotées par la piste droite,
-      // comme dans l'ancien pack où toute pose non gauche y était affectée.
       category = 'arms_right'
       tags.push('arms_right', 'bras')
     } else {

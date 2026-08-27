@@ -5,18 +5,18 @@ import { FormGroup } from '@/components/ui/form-group'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
-import { useTimelineStore } from '../stores/useTimelineStore'
-import type { TrackGroupColor } from '@core/types/timeline.types'
+import { useEditorStore } from '../stores/useEditorStore'
+import type { EditorGroupColor } from '@core/types/editor.types'
 
 const open = defineModel<boolean>('open', { default: false })
 
-const timelineStore = useTimelineStore()
+const editorStore = useEditorStore()
 
 const groupName = ref('')
 const groupZIndex = ref(20)
-const selectedColor = ref<TrackGroupColor>('indigo')
+const selectedColor = ref<EditorGroupColor>('indigo')
 
-const colorOptions: { id: TrackGroupColor; label: string; class: string }[] = [
+const colorOptions: { id: EditorGroupColor; label: string; class: string }[] = [
   { id: 'indigo', label: 'Indigo', class: 'bg-indigo-500 hover:ring-indigo-400' },
   { id: 'emerald', label: 'Émeraude', class: 'bg-emerald-500 hover:ring-emerald-400' },
   { id: 'amber', label: 'Ambre', class: 'bg-amber-500 hover:ring-amber-400' },
@@ -29,7 +29,7 @@ const colorOptions: { id: TrackGroupColor; label: string; class: string }[] = [
 watch(open, (isOpen) => {
   if (isOpen) {
     groupName.value = ''
-    const currentGroups = timelineStore.currentSequence.groups || []
+    const currentGroups = editorStore.currentDocument.groups || []
     const nextZ = currentGroups.length > 0 ? Math.max(...currentGroups.map((g) => g.zIndex)) + 10 : 20
     groupZIndex.value = nextZ
     selectedColor.value = 'indigo'
@@ -38,7 +38,8 @@ watch(open, (isOpen) => {
 
 function handleCreate() {
   if (!groupName.value.trim()) return
-  timelineStore.addGroup(groupName.value.trim(), Number(groupZIndex.value), selectedColor.value)
+  const group = editorStore.createGroup(groupName.value.trim(), undefined, selectedColor.value)
+  editorStore.updateGroupZIndex(group.id, Number(groupZIndex.value))
   open.value = false
 }
 </script>
@@ -47,7 +48,7 @@ function handleCreate() {
   <Modal
     v-model:open="open"
     title="Nouveau groupe / catégorie"
-    subtitle="Créez un calque parent réutilisable comme cible d’import pour plusieurs catégories techniques."
+    subtitle="Créez un calque parent réutilisable comme cible d’organisation pour vos calques."
     size="sm"
     surface="glass"
   >

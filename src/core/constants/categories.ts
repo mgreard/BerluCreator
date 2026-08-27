@@ -7,9 +7,8 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'tv_gen',
     description: 'Arrière-plans et environnements du plateau télévisé',
     defaultZIndex: 0,
-    trackCardinality: 'singleton',
-    keyframeCardinality: 'singleton',
-    placementMode: 'character-anchored',
+    layerCardinality: 'singleton',
+    placementMode: 'free-transform',
     color: '#38bdf8',
     filenamePrefix: 'arriere-plan'
   },
@@ -19,8 +18,7 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'body_system',
     description: 'Corps du présentateur (racine de la cinématique)',
     defaultZIndex: 10,
-    trackCardinality: 'singleton',
-    keyframeCardinality: 'singleton',
+    layerCardinality: 'singleton',
     placementMode: 'character-anchored',
     color: '#fbbf24',
     filenamePrefix: 'torse'
@@ -31,8 +29,7 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'face',
     description: 'Tête recevant les expressions et les accessoires',
     defaultZIndex: 20,
-    trackCardinality: 'singleton',
-    keyframeCardinality: 'singleton',
+    layerCardinality: 'singleton',
     placementMode: 'character-anchored',
     color: '#fb7185',
     filenamePrefix: 'tete'
@@ -43,8 +40,7 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'lips',
     description: 'Expressions labiales et formes de bouche pour le dialogue',
     defaultZIndex: 25,
-    trackCardinality: 'singleton',
-    keyframeCardinality: 'singleton',
+    layerCardinality: 'singleton',
     placementMode: 'character-anchored',
     color: '#f87171',
     filenamePrefix: 'bouche'
@@ -55,8 +51,7 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'visibility',
     description: 'Regard, clignements et émotions / Lunettes',
     defaultZIndex: 26,
-    trackCardinality: 'singleton',
-    keyframeCardinality: 'singleton',
+    layerCardinality: 'singleton',
     placementMode: 'character-anchored',
     color: '#22d3ee',
     filenamePrefix: 'yeux'
@@ -67,8 +62,7 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'apparel',
     description: 'Objets portés par le présentateur : chapeaux, lunettes et accessoires de visage',
     defaultZIndex: 27,
-    trackCardinality: 'multi',
-    keyframeCardinality: 'multi',
+    layerCardinality: 'multi',
     placementMode: 'character-anchored',
     color: '#c084fc',
     filenamePrefix: 'accessoire-presentateur'
@@ -79,8 +73,7 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'front_hand',
     description: 'Bras gauche, postures et gestuelle',
     defaultZIndex: 12,
-    trackCardinality: 'singleton',
-    keyframeCardinality: 'singleton',
+    layerCardinality: 'singleton',
     placementMode: 'character-anchored',
     color: '#34d399',
     filenamePrefix: 'bras-gauche'
@@ -91,8 +84,7 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'waving_hand',
     description: 'Bras droit, postures et gestuelle',
     defaultZIndex: 15,
-    trackCardinality: 'singleton',
-    keyframeCardinality: 'singleton',
+    layerCardinality: 'singleton',
     placementMode: 'character-anchored',
     color: '#a3e635',
     filenamePrefix: 'bras-droit'
@@ -103,8 +95,7 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'category',
     description: 'Objets et éléments de décor positionnés sur le plateau',
     defaultZIndex: 30,
-    trackCardinality: 'multi',
-    keyframeCardinality: 'multi',
+    layerCardinality: 'multi',
     placementMode: 'free-transform',
     color: '#facc15',
     filenamePrefix: 'accessoire-plateau'
@@ -115,8 +106,7 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'desk',
     description: 'Bureau du présentateur',
     defaultZIndex: 28,
-    trackCardinality: 'singleton',
-    keyframeCardinality: 'singleton',
+    layerCardinality: 'singleton',
     placementMode: 'free-transform',
     color: '#a3a3a3',
     filenamePrefix: 'bureau'
@@ -127,8 +117,7 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'inventory_2',
     description: 'Objets posés sur le bureau du présentateur',
     defaultZIndex: 35,
-    trackCardinality: 'multi',
-    keyframeCardinality: 'multi',
+    layerCardinality: 'multi',
     placementMode: 'free-transform',
     color: '#818cf8',
     filenamePrefix: 'objet-bureau'
@@ -139,8 +128,7 @@ export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = 
     icon: 'filter_frames',
     description: 'Ambiances et effets couvrant le premier plan de la scène',
     defaultZIndex: 50,
-    trackCardinality: 'multi',
-    keyframeCardinality: 'singleton',
+    layerCardinality: 'multi',
     placementMode: 'free-transform',
     color: '#f87171',
     filenamePrefix: 'premier-plan'

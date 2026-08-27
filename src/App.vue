@@ -2,7 +2,7 @@
 import { ref, onBeforeUnmount, onMounted, useTemplateRef, watch, type WatchStopHandle } from 'vue'
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
-import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
+import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useWorkspaceBackupStore } from '@/features/project/stores/useWorkspaceBackupStore'
 import { seedDemoAssetsIfEmpty } from '@/features/asset-manager/services/demo-asset-seeder'
 
@@ -10,10 +10,9 @@ import StudioHeader from '@/features/project/components/StudioHeader.vue'
 import AssetLibraryPanel from '@/features/asset-manager/components/AssetLibraryPanel.vue'
 import StudioViewport from '@/features/studio/components/StudioViewport.vue'
 import HierarchyInspector from '@/features/studio/components/HierarchyInspector.vue'
-import TimelinePanel from '@/features/timeline/components/TimelinePanel.vue'
 import ProjectSettingsModal from '@/features/project/components/ProjectSettingsModal.vue'
-import ExportSequenceModal from '@/features/project/components/ExportSequenceModal.vue'
-import SavedKeyframesModal from '@/features/timeline/components/SavedKeyframesModal.vue'
+import ExportModal from '@/features/project/components/ExportModal.vue'
+import ViewportSnapshotsModal from '@/features/editor/components/ViewportSnapshotsModal.vue'
 import ResizableSidebar from '@/features/studio/components/ResizableSidebar.vue'
 import ToastContainer from '@/components/ui/toast-container/ToastContainer.vue'
 import {
@@ -24,13 +23,13 @@ import {
 
 const projectStore = useProjectStore()
 const assetStore = useAssetStore()
-const timelineStore = useTimelineStore()
+const editorStore = useEditorStore()
 const workspaceBackupStore = useWorkspaceBackupStore()
 let stopWorkspaceWatch: WatchStopHandle | null = null
 
 const isSettingsOpen = ref(false)
 const isExportOpen = ref(false)
-const isSavedKeyframesOpen = ref(false)
+const isSavedSnapshotsOpen = ref(false)
 const showHierarchy = ref(true)
 const showAssetLibrary = ref(true)
 const productTourRef = useTemplateRef<ProductTourExpose>('productTourRef')
@@ -40,7 +39,7 @@ const productTourSteps: ProductTourStep[] = [
     element: '[data-tour="asset-library"]',
     popover: {
       title: '1. Choisissez vos sprites',
-      description: 'Filtrez la bibliothèque puis cliquez sur un sprite pour l’ajouter à la piste ou au groupe actif.',
+      description: 'Filtrez la bibliothèque puis cliquez sur un sprite pour l’ajouter sur le plateau ou dans le groupe actif.',
       side: 'right',
       align: 'start'
     }
@@ -57,25 +56,16 @@ const productTourSteps: ProductTourStep[] = [
   {
     element: '[data-tour="hierarchy"]',
     popover: {
-      title: '3. Organisez les groupes',
-      description: 'Sélectionnez un groupe cible, configurez ses calques ou supprimez-le avec confirmation.',
+      title: '3. Organisez les calques',
+      description: 'Sélectionnez un groupe cible, configurez la profondeur des calques ou supprimez-en.',
       side: 'left',
       align: 'start'
     }
   },
   {
-    element: '[data-tour="timeline"]',
-    popover: {
-      title: '4. Construisez votre séquence',
-      description: 'Ajoutez des étapes autonomes : chacune conserve une copie complète et indépendante de la scène.',
-      side: 'top',
-      align: 'center'
-    }
-  },
-  {
     element: '[data-tour="backup"]',
     popover: {
-      title: '5. Sauvegardez votre travail',
+      title: '4. Sauvegardez votre travail',
       description: 'Créez une sauvegarde complète de l’application ou restaurez la dernière version enregistrée.',
       side: 'bottom',
       align: 'end'
@@ -84,8 +74,8 @@ const productTourSteps: ProductTourStep[] = [
   {
     element: '[data-tour="export"]',
     popover: {
-      title: '6. Exportez les changements',
-      description: 'Téléchargez une étape, les données JSON ou une archive des changements nommés séquentiellement.',
+      title: '5. Exportez votre création',
+      description: 'Téléchargez une image PNG haute définition ou la structure de scène en JSON.',
       side: 'bottom',
       align: 'end'
     }
@@ -100,14 +90,14 @@ onMounted(async () => {
   await seedDemoAssetsIfEmpty()
   await assetStore.loadAssets()
 
-  // 3. Charger la séquence active
-  await timelineStore.loadSequence(proj.activeSequenceId, proj.id)
+  // 3. Charger le document courant de l'éditeur
+  await editorStore.loadDocument(proj.editorDocumentId, proj.id)
 
   await workspaceBackupStore.initialize()
   stopWorkspaceWatch = watch(
     [
       () => projectStore.currentProject,
-      () => timelineStore.currentSequence,
+      () => editorStore.currentDocument,
       () => assetStore.assets
     ],
     () => workspaceBackupStore.markDirty(),
@@ -127,11 +117,11 @@ onBeforeUnmount(() => {
     <StudioHeader
       @open-settings="isSettingsOpen = true"
       @open-export="isExportOpen = true"
-      @open-saved-keyframes="isSavedKeyframesOpen = true"
+      @open-saved-snapshots="isSavedSnapshotsOpen = true"
       @start-tour="productTourRef?.start()"
     />
 
-    <!-- Zone Centrale du Studio (3 Colonnes) -->
+    <!-- Zone Centrale du Studio (3 Colonnes plein écran) -->
     <div class="flex-1 flex overflow-hidden">
       <!-- Bibliothèque d'Assets (Gauche) -->
       <ResizableSidebar
@@ -145,7 +135,7 @@ onBeforeUnmount(() => {
         <AssetLibraryPanel v-model:open="showAssetLibrary" />
       </ResizableSidebar>
 
-      <!-- Viewport & Canvas de Composition (Centre) -->
+      <!-- Viewport & Canvas de Composition (Centre, occupant tout l'espace restant) -->
       <StudioViewport />
 
       <!-- Inspecteur de Hiérarchie des Calques (Droite) -->
@@ -161,21 +151,18 @@ onBeforeUnmount(() => {
       </ResizableSidebar>
     </div>
 
-    <!-- Séquenceur & Timeline Discrète (Bas) -->
-    <TimelinePanel />
-
     <!-- Modales Globales -->
     <ProjectSettingsModal v-model:open="isSettingsOpen" />
-    <ExportSequenceModal v-model:open="isExportOpen" />
-    <SavedKeyframesModal v-model:open="isSavedKeyframesOpen" />
+    <ExportModal v-model:open="isExportOpen" />
+    <ViewportSnapshotsModal v-model:open="isSavedSnapshotsOpen" />
 
-    <!-- Système de notifications Toasts -->
+    <!-- Système de notifications Toasts & Tour -->
     <ToastContainer />
     <ProductTour
       ref="productTourRef"
       :steps="productTourSteps"
       auto-start
-      storage-key="berlu-creator.product-tour.v2"
+      storage-key="berlu-creator.product-tour.v3"
       :start-delay-ms="1400"
       :config="{ skipMissingElement: true }"
     />

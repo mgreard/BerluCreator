@@ -1,32 +1,32 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TrackGroup } from '@core/types/timeline.types'
-import { useTimelineStore } from '../stores/useTimelineStore'
+import type { EditorGroup } from '@core/types/editor.types'
+import { useEditorStore } from '../stores/useEditorStore'
 import { AlertDialog } from '@/components/ui/alert-dialog'
 import { toast } from '@/ui/shared/services/toast.service'
 
 const { group = null } = defineProps<{
-  group?: TrackGroup | null
+  group?: EditorGroup | null
 }>()
 
 const open = defineModel<boolean>('open', { default: false })
-const timelineStore = useTimelineStore()
+const editorStore = useEditorStore()
 
-const trackCount = computed(() =>
+const layerCount = computed(() =>
   group
-    ? timelineStore.currentSequence.tracks.filter((track) => track.groupId === group.id).length
+    ? editorStore.currentDocument.layers.filter((layer) => layer.groupId === group.id).length
     : 0
 )
 
 function confirmDeletion() {
   if (!group) return
   const groupName = group.name
-  const preservedTrackCount = trackCount.value
-  timelineStore.removeGroup(group.id, false)
+  const count = layerCount.value
+  editorStore.deleteGroup(group.id, false)
   open.value = false
   toast.success(
     'Groupe supprimé',
-    `« ${groupName} » a été supprimé. Ses ${preservedTrackCount} piste(s) ont été conservées.`
+    `« ${groupName} » a été supprimé. Ses ${count} calque(s) ont été conservés.`
   )
 }
 </script>
@@ -35,7 +35,7 @@ function confirmDeletion() {
   <AlertDialog
     v-model:open="open"
     :title="`Supprimer le groupe « ${group?.name ?? ''} » ?`"
-    :description="`${trackCount} piste(s) seront conservées et réassignées automatiquement à leur groupe de catégorie.`"
+    :description="`${layerCount} calque(s) seront conservés et réassignés au premier groupe disponible.`"
     variant="danger"
     icon="delete_forever"
     confirm-text="Supprimer le groupe"

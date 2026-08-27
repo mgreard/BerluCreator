@@ -9,7 +9,7 @@ Primitive headless destinée aux cartes, lignes et éléments d'arbre sélection
 | `as` | `string \| Component` | `'div'` | Élément rendu |
 | `selected` | `boolean` | `false` | État sélectionné |
 | `disabled` | `boolean` | `false` | Désactive la surface |
-| `role` | `'button' \| 'option' \| 'radio' \| 'treeitem'` | `'option'` | Sémantique ARIA |
+| `role` | `'button' \| 'option' \| 'radio' \| 'treeitem' \| 'tab'` | `'option'` | Sémantique ARIA |
 | `density` | `'default' \| 'compact'` | `'default'` | Hauteur et cible tactile |
 | `class` | `HTMLAttributes['class']` | `undefined` | Classes de présentation |
 

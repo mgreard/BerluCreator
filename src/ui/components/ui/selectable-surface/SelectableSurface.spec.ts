@@ -41,4 +41,15 @@ describe('SelectableSurface', () => {
     await wrapper.trigger('click')
     expect(wrapper.emitted('click')).toBeUndefined()
   })
+
+  it('gère correctement le rôle tab et aria-selected sur un bouton natif', () => {
+    const wrapper = mount(SelectableSurface, {
+      props: { as: 'button', role: 'tab', selected: true },
+      slots: { default: 'Onglet actif' }
+    })
+
+    expect(wrapper.element.tagName).toBe('BUTTON')
+    expect(wrapper.attributes('role')).toBe('tab')
+    expect(wrapper.attributes('aria-selected')).toBe('true')
+  })
 })

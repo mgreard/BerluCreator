@@ -280,89 +280,89 @@ Pour les snapshots d’application v1/v2 :
 
 ### Phase 0 — Filet de sécurité et contrat
 
-- [ ] Figer des fixtures legacy représentatives : une étape, plusieurs étapes, groupes custom, catégories singleton/multi, caméra active et assets recadrés.
-- [ ] Écrire les critères de conversion attendus avant de toucher au schéma.
-- [ ] Capturer des rendus de référence du document initial et de chaque fixture.
-- [ ] Confirmer le vocabulaire UI final : « Vues sauvegardées » ou « Compositions sauvegardées ».
+- [x] Figer des fixtures legacy représentatives : une étape, plusieurs étapes, groupes custom, catégories singleton/multi, caméra active et assets recadrés.
+- [x] Écrire les critères de conversion attendus avant de toucher au schéma.
+- [x] Capturer des rendus de référence du document initial et de chaque fixture.
+- [x] Confirmer le vocabulaire UI final : « Vues sauvegardées » ou « Compositions sauvegardées ».
 
 Sortie : tests de migration rouges et référence visuelle stable.
 
 ### Phase 1 — Nouveau domaine et persistance additive
 
-- [ ] Introduire `EditorDocument`, `EditorGroup`, `EditorLayer` et `ViewportSnapshot` dans des fichiers sans vocabulaire timeline.
-- [ ] Ajouter les repositories `editor-document` et `viewport-snapshot`.
-- [ ] Ajouter une version Dexie additive avec migration transactionnelle des séquences et presets.
-- [ ] Faire évoluer `Project` et `WorkspaceSnapshot` vers le schéma v3.
-- [ ] Garder les lecteurs legacy uniquement dans un module de migration clairement borné.
-- [ ] Vérifier idempotence, absence de doublons et reprise après échec.
+- [x] Introduire `EditorDocument`, `EditorGroup`, `EditorLayer` et `ViewportSnapshot` dans des fichiers sans vocabulaire timeline.
+- [x] Ajouter les repositories `editor-document` et `viewport-snapshot`.
+- [x] Ajouter une version Dexie additive avec migration transactionnelle des séquences et presets.
+- [x] Faire évoluer `Project` et `WorkspaceSnapshot` vers le schéma v3.
+- [x] Garder les lecteurs legacy uniquement dans un module de migration clairement borné.
+- [x] Vérifier idempotence, absence de doublons et reprise après échec.
 
 Sortie : les données anciennes produisent un document courant et des snapshots, sans perte.
 
 ### Phase 2 — Store d’éditeur unique
 
-- [ ] Créer `useEditorStore` ou renommer/refondre complètement `useTimelineStore`.
-- [ ] Porter les opérations groupe/calque : ajouter, remplacer selon cardinalité, supprimer, ordonner, verrouiller, masquer et transformer.
-- [ ] Simplifier sélection et historique vers des IDs de groupe/calque.
-- [ ] Porter la caméra au niveau du document courant.
-- [ ] Supprimer navigation, duplication d’étape, matérialisation, autonomie de snapshots et helpers de keyframes.
-- [ ] Remplacer `trackCardinality/keyframeCardinality` par une règle de calque unique.
+- [x] Créer `useEditorStore` ou renommer/refondre complètement `useTimelineStore`.
+- [x] Porter les opérations groupe/calque : ajouter, remplacer selon cardinalité, supprimer, ordonner, verrouiller, masquer et transformer.
+- [x] Simplifier sélection et historique vers des IDs de groupe/calque.
+- [x] Porter la caméra au niveau du document courant.
+- [x] Supprimer navigation, duplication d’étape, matérialisation, autonomie de snapshots et helpers de keyframes.
+- [x] Remplacer `trackCardinality/keyframeCardinality` par une règle de calque unique.
 
 Sortie : toutes les opérations métier fonctionnent sans `stepId`, `trackId` ou `keyframeId`.
 
 ### Phase 3 — Canvas, hiérarchie et shell
 
-- [ ] Faire résoudre le rendu directement depuis les calques courants.
-- [ ] Remplacer `RenderableLayer.trackId/keyframeId/spriteId` par `layerId`.
-- [ ] Adapter StageCanvas, LayerSettingsModal et HierarchyInspector.
-- [ ] Adapter l’ajout d’asset au groupe courant et supprimer `asset-timeline-assignment`.
-- [ ] Retirer TimelinePanel, TrackHeaderList et SequenceGrid de `App.vue`, puis supprimer leurs fichiers.
-- [ ] Redistribuer l’espace vertical libéré au viewport.
-- [ ] Réécrire la visite guidée, les libellés, aria-labels et empty states.
+- [x] Faire résoudre le rendu directement depuis les calques courants.
+- [x] Remplacer `RenderableLayer.trackId/keyframeId/spriteId` par `layerId`.
+- [x] Adapter StageCanvas, LayerSettingsModal et HierarchyInspector.
+- [x] Adapter l’ajout d’asset au groupe courant et supprimer `asset-timeline-assignment`.
+- [x] Retirer TimelinePanel, TrackHeaderList et SequenceGrid de `App.vue`, puis supprimer leurs fichiers.
+- [x] Redistribuer l’espace vertical libéré au viewport.
+- [x] Réécrire la visite guidée, les libellés, aria-labels et empty states.
 
 Sortie : l’application n’expose plus aucune timeline ou étape.
 
 ### Phase 4 — Sauvegarde et chargement du viewport
 
-- [ ] Renommer store, repository, types et modale des saved keyframes.
-- [ ] Capturer caméra, groupes et calques dans un snapshot autonome.
-- [ ] Charger un snapshot par remplacement atomique du document courant.
-- [ ] Réinitialiser sélection et undo/redo après chargement.
-- [ ] Afficher le nombre de calques restaurés et les références d’assets manquantes.
-- [ ] Mettre à jour la sauvegarde complète et son résumé (`viewportSnapshotCount`).
+- [x] Renommer store, repository, types et modale des saved keyframes.
+- [x] Capturer caméra, groupes et calques dans un snapshot autonome.
+- [x] Charger un snapshot par remplacement atomique du document courant.
+- [x] Réinitialiser sélection et undo/redo après chargement.
+- [x] Afficher le nombre de calques restaurés et les références d’assets manquantes.
+- [x] Mettre à jour la sauvegarde complète et son résumé (`viewportSnapshotCount`).
 
 Sortie : une composition peut être nommée, sauvegardée, rechargée et supprimée sans recréer une timeline.
 
 ### Phase 5 — Export du seul état courant
 
-- [ ] Simplifier la modale à « Exporter le viewport courant ».
-- [ ] Conserver PNG natif et option 1080p si elle reste utile.
-- [ ] Appliquer directement la caméra du document.
-- [ ] Remplacer le payload JSON `sequence` par `editorDocument`.
-- [ ] Supprimer l’export ZIP, le calcul de changements et le service `keyframe-export`.
-- [ ] Retirer `fflate` et mettre à jour le lockfile si aucun usage restant.
+- [x] Simplifier la modale à « Exporter le viewport courant ».
+- [x] Conserver PNG natif et option 1080p si elle reste utile.
+- [x] Appliquer directement la caméra du document.
+- [x] Remplacer le payload JSON `sequence` par `editorDocument`.
+- [x] Supprimer l’export ZIP, le calcul de changements et le service `keyframe-export`.
+- [x] Retirer `fflate` et mettre à jour le lockfile si aucun usage restant.
 
 Sortie : aucun snapshot sauvegardé n’est exportable directement ; il faut d’abord le charger.
 
 ### Phase 6 — Import d’assets unitaire
 
-- [ ] Réduire AssetUploadModal au flux pass-through.
-- [ ] Retirer le sélecteur `single/spritesheet` et tout état de slicing/background removal.
-- [ ] Supprimer composants, composables, services, types et tests devenus morts.
-- [ ] Remplacer `useAssetStore.importAsset` par un stockage du blob original.
-- [ ] Migrer les assets `trimFrame`, puis supprimer ce format et son traitement dans le resolver.
-- [ ] Retirer le script de trim et `sharp` si devenus inutiles.
-- [ ] Tester import simple, import multiple, rejet type/taille et erreur partielle.
+- [x] Réduire AssetUploadModal au flux pass-through.
+- [x] Retirer le sélecteur `single/spritesheet` et tout état de slicing/background removal.
+- [x] Supprimer composants, composables, services, types et tests devenus morts.
+- [x] Remplacer `useAssetStore.importAsset` par un stockage du blob original.
+- [x] Migrer les assets `trimFrame`, puis supprimer ce format et son traitement dans le resolver.
+- [x] Retirer le script de trim et `sharp` si devenus inutiles.
+- [x] Tester import simple, import multiple, rejet type/taille et erreur partielle.
 
 Sortie : un fichier produit un asset identique au fichier source.
 
 ### Phase 7 — Nettoyage final et preuve d’absence
 
-- [ ] Supprimer `features/timeline` ou déplacer ses rares composants génériques restants vers `features/editor`/`features/studio`.
-- [ ] Renommer `timeline.types.ts` et `timeline.ts` selon leur contenu restant.
-- [ ] Supprimer tables, repositories, adaptateurs et tests legacy uniquement après couverture de migration.
-- [ ] Rechercher `keyframe|stepId|activeStep|orderedSteps|timeline|sequence` et justifier chaque occurrence restante.
-- [ ] Autoriser seulement les `@keyframes` CSS génériques et les références de migration explicitement documentées.
-- [ ] Mettre à jour l’ancienne `ROADMAP.md` et les README obsolètes après validation fonctionnelle.
+- [x] Supprimer `features/timeline` ou déplacer ses rares composants génériques restants vers `features/editor`/`features/studio`.
+- [x] Renommer `timeline.types.ts` et `timeline.ts` selon leur contenu restant.
+- [x] Supprimer tables, repositories, adaptateurs et tests legacy uniquement après couverture de migration.
+- [x] Rechercher `keyframe|stepId|activeStep|orderedSteps|timeline|sequence` et justifier chaque occurrence restante.
+- [x] Autoriser seulement les `@keyframes` CSS génériques et les références de migration explicitement documentées.
+- [x] Mettre à jour l’ancienne `ROADMAP.md` et les README obsolètes après validation fonctionnelle.
 
 Sortie : aucun concept métier de keyframe/timeline/séquence ne subsiste dans le code courant.
 

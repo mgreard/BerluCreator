@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch } from 'vue'
-import { useTimelineStore } from '../stores/useTimelineStore'
-import { useSavedKeyframeStore } from '../stores/useSavedKeyframeStore'
+import { useEditorStore } from '../stores/useEditorStore'
+import { useViewportSnapshotStore } from '../stores/useViewportSnapshotStore'
 import { useHierarchyResolver } from '@/features/studio/composables/useHierarchyResolver'
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { captureCleanFrame } from '@/features/studio/composables/useCanvasRenderer'
-import type { SavedKeyframePreset } from '@core/types/timeline.types'
+import type { ViewportSnapshot } from '@core/types/editor.types'
 import { toast } from '@/ui/shared/services/toast.service'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
@@ -19,17 +19,18 @@ import { Heading } from '@/components/ui/heading'
 import { Text } from '@/components/ui/text'
 
 const open = defineModel<boolean>('open', { default: false })
-const timelineStore = useTimelineStore()
-const savedKeyframeStore = useSavedKeyframeStore()
+const editorStore = useEditorStore()
+const snapshotStore = useViewportSnapshotStore()
 const projectStore = useProjectStore()
 const { activeLayers } = useHierarchyResolver()
+
 const nameInputId = useId()
 const name = ref('')
 const isSaving = ref(false)
-const loadingPresetId = ref<string | null>(null)
+const loadingSnapshotId = ref<string | null>(null)
 
 const defaultName = computed(
-  () => `Pose ${timelineStore.activeStep?.label ?? 'actuelle'}`
+  () => `Vue ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
 )
 
 watch(
@@ -37,31 +38,30 @@ watch(
   async (isOpen) => {
     if (!isOpen) return
     name.value = defaultName.value
-    await savedKeyframeStore.loadPresets()
+    await snapshotStore.loadSnapshots()
   },
   { immediate: true }
 )
 
-async function saveCurrentKeyframe() {
-  if (isSaving.value || activeLayers.value.length === 0) return
+async function saveCurrentViewport() {
+  if (isSaving.value) return
   isSaving.value = true
   try {
-    timelineStore.commitTransformSession(false)
+    editorStore.commitTransformSession(false)
     const thumbnail = await captureCleanFrame(
       activeLayers.value,
       projectStore.currentProject.stage,
       'image/png'
     )
-    const preset = await savedKeyframeStore.saveCurrentPose(
-      timelineStore.currentSequence,
-      timelineStore.activeStep?.id ?? timelineStore.orderedSteps[0]?.id ?? '',
+    const snapshot = await snapshotStore.createSnapshot(
+      editorStore.currentDocument,
       name.value,
       thumbnail
     )
     name.value = defaultName.value
     toast.success(
-      'Pose enregistrée',
-      `« ${preset.name} » contient ${countSprites(preset)} sprite(s).`
+      'Composition enregistrée',
+      `« ${snapshot.name} » contient ${snapshot.layers.length} calque(s).`
     )
   } catch (error) {
     toast.error(
@@ -73,14 +73,14 @@ async function saveCurrentKeyframe() {
   }
 }
 
-async function loadPreset(preset: SavedKeyframePreset) {
-  if (loadingPresetId.value) return
-  loadingPresetId.value = preset.id
+async function loadSnapshot(snapshot: ViewportSnapshot) {
+  if (loadingSnapshotId.value) return
+  loadingSnapshotId.value = snapshot.id
   try {
-    const spriteCount = await timelineStore.applySavedKeyframe(preset)
+    const layerCount = editorStore.applyViewportSnapshot(snapshot)
     toast.success(
-      'Pose chargée',
-      `${spriteCount} sprite(s) appliqué(s) à ${timelineStore.activeStep?.label ?? 'l’étape active'}.`
+      'Composition chargée',
+      `${layerCount} calque(s) restauré(s).`
     )
     open.value = false
   } catch (error) {
@@ -89,18 +89,14 @@ async function loadPreset(preset: SavedKeyframePreset) {
       error instanceof Error ? error.message : 'Erreur inconnue.'
     )
   } finally {
-    loadingPresetId.value = null
+    loadingSnapshotId.value = null
   }
 }
 
-async function deletePreset(preset: SavedKeyframePreset) {
-  if (!confirm(`Supprimer la pose enregistrée « ${preset.name} » ?`)) return
-  await savedKeyframeStore.deletePreset(preset.id)
-  toast.success('Pose supprimée', `« ${preset.name} » a été retirée de la bibliothèque.`)
-}
-
-function countSprites(preset: SavedKeyframePreset) {
-  return preset.tracks.reduce((count, track) => count + track.sprites.length, 0)
+async function deleteSnapshot(snapshot: ViewportSnapshot) {
+  if (!confirm(`Supprimer la composition « ${snapshot.name} » ?`)) return
+  await snapshotStore.deleteSnapshot(snapshot.id)
+  toast.success('Composition supprimée', `« ${snapshot.name} » a été retirée.`)
 }
 
 function formatDate(timestamp: number) {
@@ -115,14 +111,14 @@ function formatDate(timestamp: number) {
   <Modal
     v-model:open="open"
     size="xl"
-    title="Poses enregistrées"
-    subtitle="Sauvegardez une pose du canvas ou appliquez-la à l’étape active. Cette bibliothèque ne restaure ni les assets ni l’état complet de l’application."
+    title="Compositions & Vues sauvegardées"
+    subtitle="Enregistrez une composition du viewport ou rechargez-la instantanément dans l’éditeur."
   >
     <div class="space-y-5">
       <section class="rounded-xl border border-primary/25 bg-primary/5 p-4">
         <div class="flex items-end gap-3">
           <FormGroup
-            label="Nom de la pose"
+            label="Nom de la composition"
             :label-for="nameInputId"
             class="mb-0 min-w-0 flex-1"
           >
@@ -131,74 +127,77 @@ function formatDate(timestamp: number) {
               v-model="name"
               size="sm"
               :placeholder="defaultName"
-              @keydown.enter="saveCurrentKeyframe"
+              @keydown.enter="saveCurrentViewport"
             />
           </FormGroup>
           <Button
             variant="primary"
             size="sm"
             class="gap-1.5 shrink-0"
-            :disabled="isSaving || activeLayers.length === 0"
-            @click="saveCurrentKeyframe"
+            :disabled="isSaving"
+            @click="saveCurrentViewport"
           >
             <Icon name="add_a_photo" size="xs" />
-            {{ isSaving ? 'Capture…' : 'Enregistrer la pose actuelle' }}
+            {{ isSaving ? 'Capture…' : 'Enregistrer la vue actuelle' }}
           </Button>
         </div>
         <Text as="p" variant="caption" color="muted" class="mt-2 text-[11px]">
-          Étape active : {{ timelineStore.activeStep?.label }} ·
-          {{ activeLayers.length }} élément(s) visible(s)
+          {{ activeLayers.length }} élément(s) visible(s) sur le plateau
         </Text>
       </section>
 
       <section>
         <div class="mb-3 flex items-center justify-between">
-          <Heading as="h3" variant="sm">Bibliothèque de poses</Heading>
-          <Badge variant="neutral" size="sm">{{ savedKeyframeStore.presets.length }}</Badge>
+          <Heading as="h3" variant="sm">Bibliothèque de compositions</Heading>
+          <Badge variant="neutral" size="sm">{{ snapshotStore.snapshots.length }}</Badge>
         </div>
 
         <div
-          v-if="savedKeyframeStore.presets.length > 0"
+          v-if="snapshotStore.snapshots.length > 0"
           class="grid max-h-[52vh] grid-cols-1 gap-3 overflow-y-auto pr-1 custom-scrollbar sm:grid-cols-2"
         >
           <article
-            v-for="preset in savedKeyframeStore.presets"
-            :key="preset.id"
+            v-for="snapshot in snapshotStore.snapshots"
+            :key="snapshot.id"
             class="overflow-hidden rounded-xl border border-border-subtle bg-bg-surface/70 shadow-glass-sm"
           >
             <div class="aspect-video bg-bg-base">
               <img
-                :src="preset.thumbnailDataUrl"
-                :alt="`Capture de la keyframe ${preset.name}`"
+                v-if="snapshot.thumbnailDataUrl"
+                :src="snapshot.thumbnailDataUrl"
+                :alt="`Aperçu de ${snapshot.name}`"
                 class="h-full w-full object-contain"
               />
+              <div v-else class="h-full w-full flex items-center justify-center text-text-muted">
+                <Icon name="photo_camera" size="md" />
+              </div>
             </div>
             <div class="flex items-center gap-3 p-3">
               <div class="min-w-0 flex-1">
                 <Text as="p" variant="caption" color="primary" weight="semibold" truncate class="text-xs">
-                  {{ preset.name }}
+                  {{ snapshot.name }}
                 </Text>
                 <Text as="p" variant="caption" color="muted" class="mt-0.5 text-[10px]">
-                  {{ countSprites(preset) }} sprite(s) · {{ formatDate(preset.createdAt) }}
+                  {{ snapshot.layers.length }} calque(s) · {{ formatDate(snapshot.createdAt) }}
                 </Text>
               </div>
               <Button
                 variant="secondary"
                 size="xs"
                 class="gap-1"
-                :disabled="Boolean(loadingPresetId)"
-                @click="loadPreset(preset)"
+                :disabled="Boolean(loadingSnapshotId)"
+                @click="loadSnapshot(snapshot)"
               >
                 <Icon name="input" size="xs" />
-                Charger ici
+                Charger
               </Button>
               <IconButton
                 icon="delete"
                 size="xs"
                 variant="ghost"
                 class="text-danger hover:text-danger"
-                :title="`Supprimer ${preset.name}`"
-                @click="deletePreset(preset)"
+                :title="`Supprimer ${snapshot.name}`"
+                @click="deleteSnapshot(snapshot)"
               />
             </div>
           </article>
@@ -207,8 +206,8 @@ function formatDate(timestamp: number) {
         <EmptyState
           v-else
           icon="collections_bookmark"
-          title="Aucune pose enregistrée"
-          description="Sélectionnez une étape utile, puis enregistrez sa pose."
+          title="Aucune composition enregistrée"
+          description="Composez votre scène sur le plateau, puis enregistrez sa vue."
           class="min-h-52 border border-dashed border-border-subtle bg-bg-base/30"
         />
       </section>
@@ -216,7 +215,7 @@ function formatDate(timestamp: number) {
 
     <template #footer>
       <div class="flex w-full items-center justify-between text-[11px] text-text-muted">
-        <span>Le chargement écrit la pose dans l’étape active.</span>
+        <span>Le chargement remplace le contenu du document courant.</span>
         <Button variant="ghost" size="sm" @click="open = false">Fermer</Button>
       </div>
     </template>

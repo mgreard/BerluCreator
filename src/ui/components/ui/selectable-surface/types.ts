@@ -1,6 +1,6 @@
 import type { Component, HTMLAttributes } from 'vue'
 
-export type SelectableSurfaceRole = 'button' | 'option' | 'radio' | 'treeitem'
+export type SelectableSurfaceRole = 'button' | 'option' | 'radio' | 'treeitem' | 'tab'
 export type SelectableSurfaceDensity = 'default' | 'compact'
 
 export interface SelectableSurfaceProps {

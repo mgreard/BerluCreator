@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch } from 'vue'
-import type { TrackGroup } from '@core/types/timeline.types'
+import type { EditorGroup } from '@core/types/editor.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import type { RenderableLayer } from '../composables/useHierarchyResolver'
-import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
+import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
@@ -13,13 +13,13 @@ import { FormGroup } from '@/components/ui/form-group'
 import { Text } from '@/components/ui/text'
 
 const { group = null, layer = null } = defineProps<{
-  group?: TrackGroup | null
+  group?: EditorGroup | null
   layer?: RenderableLayer | null
 }>()
 
 const open = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ (event: 'saved'): void }>()
-const timelineStore = useTimelineStore()
+const editorStore = useEditorStore()
 const assetStore = useAssetStore()
 
 const fieldId = useId()
@@ -33,7 +33,7 @@ const logicalHeight = ref<string | number>(1)
 const zIndex = ref<string | number>(0)
 
 const canEditLogicalSize = computed(
-  () => Boolean(layer) && ASSET_CATEGORIES[layer!.category].placementMode === 'free-transform'
+  () => Boolean(layer) && ASSET_CATEGORIES[layer!.category]?.placementMode === 'free-transform'
 )
 
 const scaleXModel = computed<string | number>({
@@ -69,7 +69,7 @@ watch(
       scaleY.value = layer.localScaleY
       logicalWidth.value = layer.asset.displayWidth ?? layer.width
       logicalHeight.value = layer.asset.displayHeight ?? layer.height
-      zIndex.value = layer.trackZIndex
+      zIndex.value = layer.layerZIndex
     }
     ratioLocked.value = Math.abs(Number(scaleX.value) - Number(scaleY.value)) < 0.001
   },
@@ -89,13 +89,13 @@ async function save() {
   const safeScaleY = clampScale(scaleY.value)
 
   if (group) {
-    timelineStore.updateGroupTransform(group.id, {
+    editorStore.updateGroupTransform(group.id, {
       x: Number(x.value),
       y: Number(y.value),
       scaleX: safeScaleX,
       scaleY: safeScaleY
     })
-    timelineStore.updateGroupZIndex(group.id, Number(zIndex.value))
+    editorStore.updateGroupZIndex(group.id, Number(zIndex.value))
   } else if (layer) {
     if (canEditLogicalSize.value) {
       await assetStore.updateAsset(layer.asset.id, {
@@ -103,18 +103,13 @@ async function save() {
         displayHeight: normalizeDimension(logicalHeight.value, layer.height)
       })
     }
-    timelineStore.updateKeyframeSpriteTransform(
-      layer.trackId,
-      layer.keyframeId,
-      layer.spriteId,
-      {
-        x: Number(x.value),
-        y: Number(y.value),
-        scaleX: safeScaleX,
-        scaleY: safeScaleY
-      }
-    )
-    timelineStore.updateTrackZIndex(layer.trackId, Number(zIndex.value))
+    editorStore.updateLayerTransform(layer.layerId, {
+      x: Number(x.value),
+      y: Number(y.value),
+      scaleX: safeScaleX,
+      scaleY: safeScaleY
+    })
+    editorStore.updateLayerZIndex(layer.layerId, Number(zIndex.value))
   }
 
   open.value = false
@@ -126,7 +121,7 @@ async function save() {
   <Modal
     v-model="open"
     :title="group ? `Réglages — ${group.name}` : `Réglages — ${layer?.asset.name ?? 'Calque'}`"
-    subtitle="Ajustez précisément la transformation et la profondeur. La validation finale s’effectue avec OK dans le viewport."
+    subtitle="Ajustez précisément la transformation et la profondeur."
     size="sm"
     :close-on-backdrop="false"
   >

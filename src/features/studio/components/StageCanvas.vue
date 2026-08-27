@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, useTemplateRef, computed, onMounted, onUnmounted } from 'vue'
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
-import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
+import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useHierarchyResolver, type RenderableLayer } from '../composables/useHierarchyResolver'
 import { getCachedAssetImage, useCanvasRenderer } from '../composables/useCanvasRenderer'
 import { isLayerPointOpaque } from '../engine/alpha-hit-test'
 import { shouldTargetWholeGroup } from '../engine/selection-target'
+import { clampBackgroundCover } from '../engine/background-cover.engine'
 import {
   computeResizeScales,
   computeTransformedBounds,
@@ -18,57 +19,42 @@ import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { SegmentedControl, type SegmentOption } from '@/components/ui/segmented-control'
 import { CameraFrameOverlay } from '@/components/ui/camera-frame-overlay'
-import type { CameraFrame } from '@core/types/timeline.types'
+import type { CameraFrame } from '@core/types/editor.types'
 
 const projectStore = useProjectStore()
-const timelineStore = useTimelineStore()
+const editorStore = useEditorStore()
 const assetStore = useAssetStore()
 
 const stage = computed(() => projectStore.currentProject.stage)
 const canvasRef = useTemplateRef<HTMLCanvasElement>('canvas')
 const { activeLayers } = useHierarchyResolver()
 
-// Mode d'édition : 'group' (déplace/scale tout le groupe) vs 'layer' (ouvre le groupe pour positionner/scaler ce sprite spécifique)
+// Mode d'édition : 'group' (déplace/scale tout le groupe) vs 'layer' (positionne/scale ce calque spécifique)
 const editScope = computed({
-  get: () => timelineStore.editScope,
+  get: () => editorStore.editScope,
   set: (scope: 'group' | 'layer') => {
     if (scope === 'group' && activeSelectedGroup.value) {
-      timelineStore.selectGroupForEditing(activeSelectedGroup.value.id)
+      editorStore.selectGroupForEditing(activeSelectedGroup.value.id)
     } else if (scope === 'layer' && activeSelectedLayer.value) {
-      timelineStore.selectSpriteForEditing(
-        activeSelectedLayer.value.trackId,
-        activeSelectedLayer.value.keyframeId,
-        activeSelectedLayer.value.spriteId
-      )
+      editorStore.selectLayerForEditing(activeSelectedLayer.value.layerId)
     }
   }
 })
 
-const editScopeOptions: SegmentOption[] = [
-  { value: 'layer', label: 'Élément', icon: 'crop_free' },
-  { value: 'group', label: 'Groupe entier', icon: 'warning' }
-]
-
-const selectedTrackId = computed(() => timelineStore.selectedTrackId)
+const selectedLayerId = computed(() => editorStore.selectedLayerId)
 
 const activeSelectedLayer = computed(() => {
-  if (timelineStore.selectedSpriteId) {
-    const selectedSpriteLayer = activeLayers.value.find(
-      (layer) => layer.spriteId === timelineStore.selectedSpriteId
+  if (editorStore.selectedLayerId) {
+    const selected = activeLayers.value.find(
+      (layer) => layer.layerId === editorStore.selectedLayerId
     )
-    if (selectedSpriteLayer) return selectedSpriteLayer
+    if (selected) return selected
   }
 
-  const selectedLayer = activeLayers.value.find(
-    (layer) => layer.trackId === timelineStore.selectedTrackId
-  )
-  if (selectedLayer) return selectedLayer
-
-  if (timelineStore.selectedGroupId) {
+  if (editorStore.selectedGroupId) {
     return (
-      activeLayers.value.find((layer) => layer.groupId === timelineStore.selectedGroupId) ?? null
+      activeLayers.value.find((layer) => layer.groupId === editorStore.selectedGroupId) ?? null
     )
   }
 
@@ -76,10 +62,10 @@ const activeSelectedLayer = computed(() => {
 })
 
 const activeSelectedGroup = computed(() => {
-  if (!timelineStore.selectedGroupId) return null
+  if (!editorStore.selectedGroupId) return null
   return (
-    timelineStore.currentSequence.groups?.find(
-      (group) => group.id === timelineStore.selectedGroupId
+    editorStore.currentDocument.groups?.find(
+      (group) => group.id === editorStore.selectedGroupId
     ) ?? null
   )
 })
@@ -89,15 +75,8 @@ const isGroupTarget = computed(() => {
 })
 
 const activeCamera = computed<CameraFrame>({
-  get: () => timelineStore.activeStep?.camera ?? {
-    enabled: false,
-    x: 0,
-    y: 0,
-    width: stage.value.width,
-    height: stage.value.height,
-    aspectRatio: 'custom'
-  },
-  set: (camera) => timelineStore.updateActiveStepCamera(camera)
+  get: () => editorStore.currentDocument.camera,
+  set: (camera) => editorStore.updateCamera(camera)
 })
 
 const showSelection = computed(() => !activeCamera.value.enabled)
@@ -111,8 +90,8 @@ function toggleCameraFrame() {
     current.x + current.width <= stage.value.width &&
     current.y + current.height <= stage.value.height
 
-  timelineStore.clearStudioSelection()
-  timelineStore.updateActiveStepCamera(frameFitsStage
+  editorStore.clearStudioSelection()
+  editorStore.updateCamera(frameFitsStage
     ? { ...current, enabled }
     : {
         enabled,
@@ -121,19 +100,18 @@ function toggleCameraFrame() {
         width: stage.value.width,
         height: stage.value.height,
         aspectRatio: 'custom'
-      }, true)
+      })
 }
 
 function commitCameraFrame(camera: CameraFrame) {
-  timelineStore.updateActiveStepCamera(camera, true)
+  editorStore.updateCamera(camera)
 }
 
-// Calcul des bornes englobantes (Bounding Box) du groupe ou du sprite individuel
+// Calcul des bornes englobantes (Bounding Box) du groupe ou du calque individuel
 const selectedBounds = computed<BoxBounds | null>(() => {
   if (!activeSelectedLayer.value) return null
 
   if (isGroupTarget.value && activeSelectedGroup.value) {
-    // Calculer le rectangle englobant composé de tous les calques visibles du groupe
     const groupLayers = activeLayers.value.filter((l) => l.groupId === activeSelectedGroup.value?.id)
     if (groupLayers.length === 0) {
       const l = activeSelectedLayer.value
@@ -179,7 +157,7 @@ const selectedBounds = computed<BoxBounds | null>(() => {
     }
   }
 
-  // Sprite unique
+  // Calque unique
   const l = activeSelectedLayer.value
   return computeTransformedBounds(
     l.x,
@@ -202,22 +180,22 @@ const targetLabel = computed<string | null>(() => {
     return `Groupe : ${activeSelectedGroup.value.name} (X ${scaleX.toFixed(2)}× · Y ${scaleY.toFixed(2)}×)`
   }
   const l = activeSelectedLayer.value
-  return `${l.trackName || l.asset.name} (X ${l.scaleX.toFixed(2)}× · Y ${l.scaleY.toFixed(2)}×)`
+  return `${l.name || l.asset.name} (X ${l.scaleX.toFixed(2)}× · Y ${l.scaleY.toFixed(2)}×)`
 })
 
-// Envoi vers le moteur de rendu
+// Envoi vers le moteur de rendu canvas
 useCanvasRenderer(
   canvasRef,
   activeLayers,
   stage,
-  selectedTrackId,
+  selectedLayerId,
   selectedBounds,
   targetLabel,
   isGroupTarget,
   showSelection
 )
 
-// --- GESTION DU DRAG & DROP ET DU RESIZE INTERACTIF ---
+// --- GESTION DU DRAG & DROP ET DU REDIMENSIONNEMENT INTERACTIF ---
 const isDragging = ref(false)
 const isResizing = ref(false)
 const activeHandle = ref<ResizeHandle | null>(null)
@@ -257,13 +235,13 @@ const resizeCursorClass = computed(() => {
 
 function undoCanvasTransform() {
   if (!isDragging.value && !isResizing.value) {
-    timelineStore.undoLastTransform()
+    editorStore.undoLastTransform()
   }
 }
 
 function redoCanvasTransform() {
   if (!isDragging.value && !isResizing.value) {
-    timelineStore.redoLastTransform()
+    editorStore.redoLastTransform()
   }
 }
 
@@ -279,23 +257,23 @@ function onHistoryKeydown(event: KeyboardEvent) {
   }
   if (event.key === 'Escape') {
     event.preventDefault()
-    if (timelineStore.hasActiveTransformSession) {
-      timelineStore.cancelTransformSession()
+    if (editorStore.hasActiveTransformSession) {
+      editorStore.cancelTransformSession()
     } else {
-      timelineStore.clearStudioSelection(false)
+      editorStore.clearStudioSelection(false)
     }
     return
   }
   if (!(event.ctrlKey || event.metaKey) || event.altKey) return
 
   const key = event.key.toLowerCase()
-  if (key === 'z' && event.shiftKey && timelineStore.canRedoTransform) {
+  if (key === 'z' && event.shiftKey && editorStore.canRedoTransform) {
     event.preventDefault()
     redoCanvasTransform()
-  } else if (key === 'z' && timelineStore.canUndoTransform) {
+  } else if (key === 'z' && editorStore.canUndoTransform) {
     event.preventDefault()
     undoCanvasTransform()
-  } else if (key === 'y' && timelineStore.canRedoTransform) {
+  } else if (key === 'y' && editorStore.canRedoTransform) {
     event.preventDefault()
     redoCanvasTransform()
   }
@@ -313,33 +291,28 @@ function applyScaleAxes(newScaleX: number, newScaleY: number) {
   const clampedY = clampScale(newScaleY)
 
   if (isGroupTarget.value && activeSelectedGroup.value) {
-    timelineStore.updateGroupTransform(activeSelectedGroup.value.id, {
+    editorStore.updateGroupTransform(activeSelectedGroup.value.id, {
       scaleX: clampedX,
       scaleY: clampedY
     })
-  } else if (activeSelectedLayer.value?.keyframeId) {
-    timelineStore.updateKeyframeSpriteTransform(
-      activeSelectedLayer.value.trackId,
-      activeSelectedLayer.value.keyframeId,
-      activeSelectedLayer.value.spriteId,
-      {
-        scaleX: clampedX,
-        scaleY: clampedY
-      }
-    )
+  } else if (activeSelectedLayer.value) {
+    editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, {
+      scaleX: clampedX,
+      scaleY: clampedY
+    })
   }
 }
 
 function adjustScale(delta: number) {
-  timelineStore.beginTransformGesture()
+  editorStore.beginTransformGesture()
   applyScaleAxes(currentScaleX.value + delta, currentScaleY.value + delta)
-  timelineStore.commitTransformGesture()
+  editorStore.endTransformGesture()
 }
 
 function setExactScale(value: number) {
-  timelineStore.beginTransformGesture()
+  editorStore.beginTransformGesture()
   applyScaleAxes(value, value)
-  timelineStore.commitTransformGesture()
+  editorStore.endTransformGesture()
 }
 
 function onCanvasWheel(e: WheelEvent) {
@@ -426,11 +399,11 @@ function onCanvasPointerDown(e: PointerEvent) {
   const pos = getStageCoordinates(e)
   if (!pos) return
 
-  // 1. Priorité 1 : clic sur l'une des 8 poignées de redimensionnement.
+  // 1. Clic sur l'une des 8 poignées de redimensionnement
   if (selectedBounds.value) {
     const hitHandle = hitTestResizeHandle(pos, selectedBounds.value)
     if (hitHandle) {
-      timelineStore.beginTransformGesture()
+      editorStore.beginTransformGesture()
       isResizing.value = true
       activeHandle.value = hitHandle
       dragStartPointer.value = { ...pos }
@@ -442,12 +415,12 @@ function onCanvasPointerDown(e: PointerEvent) {
       return
     }
 
-    // 2. Priorité 2 : Clic à l'intérieur de la boîte de sélection active (Déplacement direct)
+    // 2. Clic à l'intérieur de la boîte de sélection active (Déplacement)
     const b = selectedBounds.value
     const isInsideSelection =
       pos.x >= b.x && pos.x <= b.x + b.width && pos.y >= b.y && pos.y <= b.y + b.height
     if (isInsideSelection) {
-      timelineStore.beginTransformGesture()
+      editorStore.beginTransformGesture()
       isDragging.value = true
       dragStartPointer.value = { ...pos }
 
@@ -469,23 +442,23 @@ function onCanvasPointerDown(e: PointerEvent) {
     }
   }
 
-  // 3. Priorité 3 : Sélection d'un autre élément au clic
+  // 3. Sélection au clic sur un calque
   const hit = hitTestLayer(pos)
   if (hit) {
-    const selectWholeGroup = shouldTargetWholeGroup(hit.groupId, editScope.value, e.shiftKey)
+    const selectWholeGroup = shouldTargetWholeGroup(hit.groupId, hit.category, editScope.value, e.shiftKey)
     if (hit.groupId && selectWholeGroup) {
-      timelineStore.selectGroupForEditing(hit.groupId)
+      editorStore.selectGroupForEditing(hit.groupId)
     } else {
-      timelineStore.selectSpriteForEditing(hit.trackId, hit.keyframeId, hit.spriteId)
+      editorStore.selectLayerForEditing(hit.layerId)
     }
-    timelineStore.beginTransformGesture()
+    editorStore.beginTransformGesture()
     assetStore.selectAsset(hit.asset.id)
 
     isDragging.value = true
     dragStartPointer.value = { ...pos }
 
     if (selectWholeGroup && hit.groupId) {
-      const grp = timelineStore.currentSequence.groups?.find((g) => g.id === hit.groupId)
+      const grp = editorStore.currentDocument.groups?.find((g) => g.id === hit.groupId)
       dragStartGroupPos.value = { x: grp?.transform?.x ?? 0, y: grp?.transform?.y ?? 0 }
     } else {
       dragStartLayerPos.value = { x: hit.localX ?? 0, y: hit.localY ?? 0 }
@@ -494,8 +467,7 @@ function onCanvasPointerDown(e: PointerEvent) {
     const target = e.currentTarget as HTMLElement
     target?.setPointerCapture?.(e.pointerId)
   } else {
-    // Une session reste active jusqu'à validation explicite par OK ou annulation par Escape.
-    if (!timelineStore.hasActiveTransformSession) timelineStore.clearStudioSelection(false)
+    if (!editorStore.hasActiveTransformSession) editorStore.clearStudioSelection(false)
   }
 }
 
@@ -503,7 +475,7 @@ function onCanvasPointerMove(e: PointerEvent) {
   const pos = getStageCoordinates(e)
   if (!pos) return
 
-  // A. Les coins conservent le ratio ; les poignées latérales ciblent un axe.
+  // A. Redimensionnement
   if (isResizing.value && activeHandle.value) {
     const scales = computeResizeScales(
       activeHandle.value,
@@ -523,25 +495,39 @@ function onCanvasPointerMove(e: PointerEvent) {
     const dy = pos.y - dragStartPointer.value.y
 
     if (isGroupTarget.value && activeSelectedGroup.value) {
-      // Déplacement solidaire du groupe complet
       const newGroupX = Math.round(dragStartGroupPos.value.x + dx)
       const newGroupY = Math.round(dragStartGroupPos.value.y + dy)
-      timelineStore.updateGroupTransform(activeSelectedGroup.value.id, { x: newGroupX, y: newGroupY })
-    } else if (activeSelectedLayer.value?.keyframeId) {
-      // Déplacement de l'élément individuel (coordonnées locales dans le groupe)
-      const newX = Math.round(dragStartLayerPos.value.x + dx)
-      const newY = Math.round(dragStartLayerPos.value.y + dy)
-      timelineStore.updateKeyframeSpriteTransform(
-        activeSelectedLayer.value.trackId,
-        activeSelectedLayer.value.keyframeId,
-        activeSelectedLayer.value.spriteId,
-        { x: newX, y: newY }
-      )
+      editorStore.updateGroupTransform(activeSelectedGroup.value.id, { x: newGroupX, y: newGroupY })
+      if (activeSelectedGroup.value.id === 'grp_berlu') {
+        editorStore.updateCharacterTransform({ x: newGroupX, y: newGroupY })
+      }
+    } else if (activeSelectedLayer.value) {
+      if (activeSelectedLayer.value.category === 'background') {
+        const clamped = clampBackgroundCover(
+          {
+            x: dragStartLayerPos.value.x + dx,
+            y: dragStartLayerPos.value.y + dy,
+            scaleX: currentScaleX.value,
+            scaleY: currentScaleY.value
+          },
+          {
+            assetWidth: activeSelectedLayer.value.asset.width || stage.value.width,
+            assetHeight: activeSelectedLayer.value.asset.height || stage.value.height,
+            stageWidth: stage.value.width,
+            stageHeight: stage.value.height
+          }
+        )
+        editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, { x: clamped.x, y: clamped.y })
+      } else {
+        const newX = Math.round(dragStartLayerPos.value.x + dx)
+        const newY = Math.round(dragStartLayerPos.value.y + dy)
+        editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, { x: newX, y: newY })
+      }
     }
     return
   }
 
-  // C. Survol (Hover Cursor Tracking)
+  // C. Survol
   if (selectedBounds.value) {
     hoveredHandle.value = hitTestResizeHandle(pos, selectedBounds.value)
   } else {
@@ -557,8 +543,8 @@ function onCanvasPointerUp(e: PointerEvent) {
   isDragging.value = false
   isResizing.value = false
   activeHandle.value = null
-  timelineStore.commitTransformGesture()
-  if (restoreGroupId) timelineStore.selectGroupForEditing(restoreGroupId)
+  editorStore.endTransformGesture()
+  if (restoreGroupId) editorStore.selectGroupForEditing(restoreGroupId)
 
   const target = e.currentTarget as HTMLElement
   if (target?.hasPointerCapture?.(e.pointerId)) {
@@ -566,7 +552,6 @@ function onCanvasPointerUp(e: PointerEvent) {
   }
 }
 
-// Le groupe reste une cible explicite : Shift+double-clic le sélectionne, sinon l’item gagne.
 function onCanvasDoubleClick(e: MouseEvent) {
   const pos = getStageCoordinates(e as unknown as PointerEvent)
   if (!pos) return
@@ -574,13 +559,13 @@ function onCanvasDoubleClick(e: MouseEvent) {
   const hit = hitTestLayer(pos)
   if (hit && hit.groupId) {
     if (e.shiftKey) {
-      timelineStore.selectGroupForEditing(hit.groupId)
+      editorStore.selectGroupForEditing(hit.groupId)
     } else {
-      timelineStore.selectSpriteForEditing(hit.trackId, hit.keyframeId, hit.spriteId)
+      editorStore.selectLayerForEditing(hit.layerId)
     }
     assetStore.selectAsset(hit.asset.id)
-  } else if (!hit && !timelineStore.hasActiveTransformSession) {
-    timelineStore.clearStudioSelection(false)
+  } else if (!hit && !editorStore.hasActiveTransformSession) {
+    editorStore.clearStudioSelection(false)
   }
 }
 </script>
@@ -589,7 +574,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
   <div
     data-tour="stage"
     class="relative flex items-center justify-center w-full h-full overflow-hidden p-4 select-none"
-    @pointerdown.self="timelineStore.clearStudioSelection()"
+    @pointerdown.self="editorStore.clearStudioSelection()"
   >
     <div
       class="relative shadow-glass-2xl rounded-xl overflow-hidden border transition-all duration-200 bg-black/90 border-border-subtle/80 ring-1 ring-white/5"
@@ -636,7 +621,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
           variant="ghost"
           :active="activeCamera.enabled"
           :aria-label="activeCamera.enabled ? 'Désactiver le cadrage caméra' : 'Activer le cadrage caméra'"
-          :title="activeCamera.enabled ? 'Désactiver le cadrage et exporter la scène complète' : 'Activer le cadrage caméra pour cette étape'"
+          :title="activeCamera.enabled ? 'Désactiver le cadrage' : 'Activer le cadrage caméra'"
           @click="toggleCameraFrame"
         />
         <IconButton
@@ -645,8 +630,8 @@ function onCanvasDoubleClick(e: MouseEvent) {
           variant="ghost"
           aria-label="Annuler la dernière transformation"
           aria-keyshortcuts="Control+Z Meta+Z"
-          title="Annuler le dernier déplacement ou redimensionnement (Ctrl/Cmd+Z)"
-          :disabled="!timelineStore.canUndoTransform || isDragging || isResizing"
+          title="Annuler (Ctrl/Cmd+Z)"
+          :disabled="!editorStore.canUndoTransform || isDragging || isResizing"
           @click="undoCanvasTransform"
         />
         <IconButton
@@ -655,17 +640,17 @@ function onCanvasDoubleClick(e: MouseEvent) {
           variant="ghost"
           aria-label="Rétablir la dernière transformation"
           aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y"
-          title="Rétablir le dernier déplacement ou redimensionnement (Ctrl/Cmd+Shift+Z ou Ctrl+Y)"
-          :disabled="!timelineStore.canRedoTransform || isDragging || isResizing"
+          title="Rétablir (Ctrl/Cmd+Shift+Z ou Ctrl+Y)"
+          :disabled="!editorStore.canRedoTransform || isDragging || isResizing"
           @click="redoCanvasTransform"
         />
         <Button
-          v-if="timelineStore.hasActiveTransformSession"
+          v-if="editorStore.hasActiveTransformSession"
           size="xs"
           variant="primary"
           class="ml-1 gap-1 font-bold"
-          title="Valider toutes les modifications depuis le focus"
-          @click="timelineStore.commitTransformSession()"
+          title="Valider toutes les modifications"
+          @click="editorStore.commitTransformSession()"
         >
           <Icon name="check" size="xs" />
           OK
@@ -686,32 +671,10 @@ function onCanvasDoubleClick(e: MouseEvent) {
               size="xs"
               class="text-primary"
             />
-            <span>{{ activeSelectedLayer.asset.name }}</span>
+            <span>{{ isGroupTarget && activeSelectedGroup ? activeSelectedGroup.name : (activeSelectedLayer.name || activeSelectedLayer.asset.name) }}</span>
           </span>
 
-          <!-- Groupe & Bascule Ouvrir/Fermer le Groupe -->
-          <div v-if="activeSelectedGroup" class="flex items-center gap-1.5 pl-2 border-l border-border-subtle/60">
-            <Badge
-              v-if="isGroupTarget"
-              variant="danger"
-              size="sm"
-              class="gap-1 text-[10px]"
-              title="Toute transformation affecte directement le groupe entier."
-            >
-              <Icon name="warning" size="xs" />
-              Groupe entier
-            </Badge>
-            <SegmentedControl
-              v-model="editScope"
-              :options="editScopeOptions"
-              size="sm"
-              variant="primary"
-              class="p-0.5 rounded-lg [&_[data-reka-collection-item]]:min-h-[24px] [&_[data-reka-collection-item]]:px-2 [&_[data-reka-collection-item]]:py-0.5 [&_[data-reka-collection-item]]:text-[10px]"
-              title="En mode Groupe entier, les clics et redimensionnements conservent le groupe comme cible"
-            />
-          </div>
-
-          <!-- Contrôle de l'Échelle (Scale) & Drag Corner info -->
+          <!-- Contrôle de l'Échelle (Scale) -->
           <div class="flex items-center gap-1 pl-2 border-l border-border-subtle/60">
             <span class="text-[10px] text-text-muted">Échelle :</span>
             <IconButton
@@ -719,7 +682,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
               size="xs"
               variant="secondary"
               class="w-5 h-5 rounded bg-bg-surface hover:bg-bg-surface-hover text-text-muted hover:text-text-primary border border-border-subtle flex items-center justify-center text-xs font-bold cursor-pointer transition-colors"
-              title="Réduire l'échelle (-0.05) [ou glissez un coin]"
+              title="Réduire l'échelle (-0.05)"
               @click="adjustScale(-0.05)"
             />
             <span class="font-mono text-[10px] font-bold text-primary min-w-[82px] text-center">
@@ -730,7 +693,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
               size="xs"
               variant="secondary"
               class="w-5 h-5 rounded bg-bg-surface hover:bg-bg-surface-hover text-text-muted hover:text-text-primary border border-border-subtle flex items-center justify-center text-xs font-bold cursor-pointer transition-colors"
-              title="Augmenter l'échelle (+0.05) [ou glissez un coin]"
+              title="Augmenter l'échelle (+0.05)"
               @click="adjustScale(0.05)"
             />
             <Button
@@ -745,18 +708,29 @@ function onCanvasDoubleClick(e: MouseEvent) {
             </Button>
           </div>
 
-          <!-- Dimensions et coordonnée en direct -->
+          <!-- Dimensions en direct -->
           <span v-if="selectedBounds" class="text-[10px] text-text-muted font-mono pl-1 border-l border-border-subtle/60">
             {{ selectedBounds.width }}&times;{{ selectedBounds.height }}px
           </span>
+
           <IconButton
             v-if="!isGroupTarget"
             icon="delete"
             size="xs"
             variant="destructive"
-            :aria-label="`Retirer ${activeSelectedLayer.asset.name} de l’étape active`"
-            title="Retirer ce sprite de l’étape active"
-            @click="timelineStore.removeSpriteFromActiveStep(activeSelectedLayer.trackId, activeSelectedLayer.spriteId)"
+            :aria-label="`Supprimer ${activeSelectedLayer.asset.name}`"
+            title="Supprimer ce calque"
+            @click="editorStore.removeLayer(activeSelectedLayer.layerId)"
+          />
+
+          <!-- Bouton Désélectionner / Fermer HUD -->
+          <IconButton
+            icon="close"
+            size="xs"
+            variant="ghost"
+            class="text-text-muted hover:text-text-primary size-5 p-0"
+            title="Désélectionner"
+            @click="editorStore.clearStudioSelection()"
           />
         </div>
       </div>

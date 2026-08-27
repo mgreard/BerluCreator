@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useProjectStore } from '../stores/useProjectStore'
-import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
-import { useSavedKeyframeStore } from '@/features/timeline/stores/useSavedKeyframeStore'
+import { useEditorStore } from '@/features/editor/stores/useEditorStore'
+import { useViewportSnapshotStore } from '@/features/editor/stores/useViewportSnapshotStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useWorkspaceBackupStore } from '../stores/useWorkspaceBackupStore'
 import {
@@ -25,13 +25,13 @@ import { AlertDialog } from '@/components/ui/alert-dialog'
 const emit = defineEmits<{
   (event: 'openSettings'): void
   (event: 'openExport'): void
-  (event: 'openSavedKeyframes'): void
+  (event: 'openSavedSnapshots'): void
   (event: 'startTour'): void
 }>()
 
 const projectStore = useProjectStore()
-const timelineStore = useTimelineStore()
-const savedKeyframeStore = useSavedKeyframeStore()
+const editorStore = useEditorStore()
+const snapshotStore = useViewportSnapshotStore()
 const assetStore = useAssetStore()
 const workspaceBackupStore = useWorkspaceBackupStore()
 const snapshotSummary = ref<WorkspaceSnapshotSummary | null>(null)
@@ -101,13 +101,13 @@ async function saveSnapshot() {
   isSnapshotBusy.value = true
   workspaceBackupStore.beginSaving()
   try {
-    timelineStore.commitTransformSession(false)
-    await Promise.all([projectStore.saveProject(), timelineStore.saveSequence()])
+    editorStore.commitTransformSession(false)
+    await Promise.all([projectStore.saveProject(), editorStore.saveDocument()])
     snapshotSummary.value = await createManualWorkspaceSnapshot(projectStore.currentProject.id)
     await workspaceBackupStore.finishSaving()
     toast.success(
       'Sauvegarde de l’application créée',
-      `${snapshotSummary.value.assetCount} assets (${formatBytes(snapshotSummary.value.totalBlobSize)}) et ${snapshotSummary.value.savedKeyframeCount} keyframe(s) enregistrée(s).`
+      `${snapshotSummary.value.assetCount} assets (${formatBytes(snapshotSummary.value.totalBlobSize)}) et ${snapshotSummary.value.viewportSnapshotCount} vue(s) enregistrée(s).`
     )
   } catch (error) {
     workspaceBackupStore.failSaving()
@@ -130,12 +130,12 @@ async function restoreSnapshot() {
   isSnapshotBusy.value = true
   workspaceBackupStore.beginSaving()
   try {
-    timelineStore.commitTransformSession(false)
+    editorStore.commitTransformSession(false)
     const snapshot = await restoreManualWorkspaceSnapshot()
     const workspace = await projectStore.loadInitialProject()
-    await Promise.all([assetStore.loadAssets(), savedKeyframeStore.loadPresets()])
-    await timelineStore.loadSequence(workspace.activeSequenceId, workspace.id)
-    timelineStore.clearStudioSelection(false)
+    await Promise.all([assetStore.loadAssets(), snapshotStore.loadSnapshots()])
+    await editorStore.loadDocument(workspace.editorDocumentId, workspace.id)
+    editorStore.clearStudioSelection(false)
     await workspaceBackupStore.finishSaving()
     toast.success(
       'Application restaurée',
@@ -202,11 +202,11 @@ onMounted(async () => {
         variant="ghost"
         size="sm"
         class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
-        title="Enregistrer ou charger une pose de keyframe"
-        @click="emit('openSavedKeyframes')"
+        title="Enregistrer ou charger une composition du viewport"
+        @click="emit('openSavedSnapshots')"
       >
         <Icon name="collections_bookmark" size="xs" class="text-primary" />
-        <span>Keyframes</span>
+        <span>Vues sauvegardées</span>
       </Button>
 
       <IconButton
@@ -243,7 +243,7 @@ onMounted(async () => {
         variant="primary"
         size="sm"
         class="gap-1.5 text-xs shadow-glass-sm"
-        title="Exporter des fichiers ou des images"
+        title="Exporter le document ou des images"
         @click="emit('openExport')"
       >
         <Icon name="file_download" size="xs" />
@@ -254,7 +254,7 @@ onMounted(async () => {
     <AlertDialog
       v-model:open="isResetConfirmOpen"
       title="Réinitialiser complètement l’application ?"
-      description="Tous les projets, assets importés, groupes, keyframes et sauvegardes seront définitivement supprimés. L’application redémarrera ensuite dans son état de sortie d’usine."
+      description="Tous les projets, assets importés, groupes, compositions et sauvegardes seront définitivement supprimés. L’application redémarrera ensuite dans son état de sortie d’usine."
       variant="danger"
       confirm-text="Reset app"
       cancel-text="Conserver mes données"

@@ -3,7 +3,7 @@ import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 import type { RenderableLayer } from './useHierarchyResolver'
 import type { StageSettings } from '@core/types/project.types'
 import type { BoxBounds } from '../engine/transform-matrix'
-import type { CameraFrame } from '@core/types/timeline.types'
+import type { CameraFrame } from '@core/types/editor.types'
 
 const globalImageCache = new Map<string, HTMLImageElement>()
 
@@ -179,7 +179,7 @@ export function useCanvasRenderer(
   canvasRef: Ref<HTMLCanvasElement | null>,
   activeLayers: Ref<RenderableLayer[]>,
   stage: Ref<StageSettings>,
-  selectedTrackId?: Ref<string | null>,
+  selectedLayerId?: Ref<string | null>,
   selectedBounds?: Ref<BoxBounds | null>,
   targetLabel?: Ref<string | null>,
   isGroupScope?: Ref<boolean>,
@@ -240,8 +240,8 @@ export function useCanvasRenderer(
       const handles = [
         { x: bounds.x, y: bounds.y, size: handleSize },
         { x: bounds.x + bounds.width, y: bounds.y, size: handleSize },
-        { x: bounds.x, y: bounds.y + bounds.height, size: handleSize },
         { x: bounds.x + bounds.width, y: bounds.y + bounds.height, size: handleSize },
+        { x: bounds.x, y: bounds.y + bounds.height, size: handleSize },
         { x: centerX, y: bounds.y, size: 8 },
         { x: bounds.x + bounds.width, y: centerY, size: 8 },
         { x: centerX, y: bounds.y + bounds.height, size: 8 },
@@ -289,7 +289,7 @@ export function useCanvasRenderer(
     // Dépendances réactives
     void activeLayers.value
     void stage.value
-    void selectedTrackId?.value
+    void selectedLayerId?.value
     void selectedBounds?.value
     void targetLabel?.value
     void isGroupScope?.value

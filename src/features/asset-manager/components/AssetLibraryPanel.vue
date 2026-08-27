@@ -1,26 +1,41 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
-import { CATEGORY_LIST } from '@core/constants/categories'
+import { CATEGORY_LIST, ASSET_CATEGORIES } from '@core/constants/categories'
 import { useAssetStore } from '../stores/useAssetStore'
+import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import AssetCard from './AssetCard.vue'
 import AssetUploadModal from './AssetUploadModal.vue'
+import CharacterFittingModal from './CharacterFittingModal.vue'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
+import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Tabs, type TabItem, type TabTone } from '@/components/ui/tabs'
-
-import { useTimelineStore } from '@/features/timeline/stores/useTimelineStore'
-import { ASSET_CATEGORIES } from '@core/constants/categories'
+import { SelectableSurface } from '@/components/ui/selectable-surface'
 
 const assetStore = useAssetStore()
-const timelineStore = useTimelineStore()
+const editorStore = useEditorStore()
 const isUploadModalOpen = ref(false)
+const isFittingModalOpen = ref(false)
+const assetToFit = ref<Asset | null>(null)
 const open = defineModel<boolean>('open', { default: true })
 
+function onCalibrateAsset(asset: Asset) {
+  assetToFit.value = asset
+  isFittingModalOpen.value = true
+}
+
+function openFittingRoomWithDefault() {
+  const charAsset = assetStore.assets.find(
+    (a) => ASSET_CATEGORIES[a.category]?.placementMode === 'character-anchored'
+  )
+  assetToFit.value = charAsset ?? null
+  isFittingModalOpen.value = true
+}
+
 watch(
-  () => timelineStore.selectedTrack?.targetSlot ?? timelineStore.selectedTrack?.category,
+  () => editorStore.selectedLayer?.category,
   (category) => {
     if (category) {
       assetStore.selectedCategory = category
@@ -29,55 +44,49 @@ watch(
   { immediate: true }
 )
 
-// Identifiants des assets affichés à l’étape active.
+// Identifiants des assets affichés sur le document courant.
 const activeAssetIds = computed(() => {
-  const stepId = timelineStore.activeStep?.id
   const ids = new Set<string>()
-  if (!stepId) return ids
-  for (const track of timelineStore.currentSequence.tracks) {
-    if (track.muted) continue
-    const activeKf = timelineStore.getEffectiveKeyframeAtStep(track.id, stepId)
-    if (activeKf) {
-      for (const sprite of activeKf.sprites) ids.add(sprite.assetId)
-    }
+  for (const layer of editorStore.currentDocument.layers) {
+    if (!layer.muted) ids.add(layer.assetId)
   }
   return ids
 })
 
 function onSelectAsset(asset: Asset) {
   assetStore.selectAsset(asset.id)
-  const activeGroupId = timelineStore.editScope === 'group'
-    ? timelineStore.selectedGroupId
+  const activeGroupId = editorStore.editScope === 'group'
+    ? editorStore.selectedGroupId
     : null
-  timelineStore.assignAssetToGroup(asset.id, asset.category, activeGroupId, asset.name)
+  editorStore.assignAssetToGroup(asset.id, asset.category, activeGroupId, asset.name)
 }
 
-interface CategoryTab extends TabItem {
-  key: AssetCategory | 'all'
-  icon: string
-  tone: TabTone
-}
-
-const CATEGORY_TAB_TONES: Record<AssetCategory, TabTone> = {
-  background: 'sky', torso: 'amber', head: 'rose', mouth: 'red', eyes: 'cyan',
-  props_host: 'purple', arms_left: 'emerald', arms_right: 'lime', props_set: 'yellow',
-  desk: 'neutral', props_desk: 'indigo', foreground: 'red'
-}
-
-const CATEGORY_TABS: CategoryTab[] = [
-  {
-    key: 'all',
-    label: 'Tous les sprites',
-    icon: 'apps',
-    tone: 'indigo'
-  },
-  ...CATEGORY_LIST.map((category) => ({
-    key: category.id,
-    label: category.label,
-    icon: category.icon,
-    tone: CATEGORY_TAB_TONES[category.id]
-  }))
+// Catégories regroupées et ordonnées par domaine
+const CHARACTER_ORDER: AssetCategory[] = [
+  'torso',
+  'head',
+  'eyes',
+  'mouth',
+  'arms_left',
+  'arms_right',
+  'props_host'
 ]
+
+const STAGE_ORDER: AssetCategory[] = [
+  'background',
+  'desk',
+  'props_desk',
+  'props_set',
+  'foreground'
+]
+
+const characterCategories = computed(() => {
+  return CHARACTER_ORDER.map((id) => ASSET_CATEGORIES[id]).filter(Boolean)
+})
+
+const stageCategories = computed(() => {
+  return STAGE_ORDER.map((id) => ASSET_CATEGORIES[id]).filter(Boolean)
+})
 
 const categoryCounts = computed(() => {
   const counts: Record<string, number> = { all: assetStore.assets.length }
@@ -90,30 +99,9 @@ const categoryCounts = computed(() => {
   return counts
 })
 
-const categoryTabs = computed<CategoryTab[]>(() =>
-  CATEGORY_TABS
-    .filter((tab) => tab.key === 'all' || categoryCounts.value[String(tab.key)] > 0)
-    .map((tab) => ({
-      ...tab,
-      badge: categoryCounts.value[String(tab.key)] || undefined
-    }))
-)
-
-watch([categoryTabs, () => assetStore.selectedCategory], ([tabs, selectedCategory]) => {
-  if (!tabs.some((tab) => tab.key === selectedCategory)) {
-    assetStore.selectedCategory = 'all'
-  }
-})
-
-const selectedCategoryTab = computed<string | number>({
-  get: () => assetStore.selectedCategory,
-  set: (value) => {
-    assetStore.selectedCategory = String(value) as AssetCategory | 'all'
-  }
-})
-
-const currentTab = computed(() => {
-  return categoryTabs.value.find((tab) => tab.key === assetStore.selectedCategory) || CATEGORY_TABS[0]
+const currentCategoryDef = computed(() => {
+  if (assetStore.selectedCategory === 'all') return null
+  return ASSET_CATEGORIES[assetStore.selectedCategory] ?? null
 })
 
 onMounted(async () => {
@@ -129,16 +117,110 @@ function onDeleteAsset(asset: Asset) {
 
 <template>
   <div data-tour="asset-library" class="w-full h-full border-r border-border-subtle bg-bg-surface/30 backdrop-blur-md flex flex-row select-none overflow-hidden">
-    <!-- 1. Rail vertical des catégories (à gauche) -->
-    <Tabs
-      v-model="selectedCategoryTab"
-      :tabs="categoryTabs"
-      variant="rail"
-      orientation="vertical"
-      size="sm"
-      aria-label="Catégories de sprites"
-      class="custom-scrollbar shrink-0"
-    />
+    <!-- 1. Rail vertical des catégories structuré par domaine (à gauche) -->
+    <div class="w-48 shrink-0 border-r border-border-subtle bg-bg-surface/40 flex flex-col p-2 gap-3 overflow-y-auto custom-scrollbar">
+      <!-- Bouton Tous les Sprites -->
+      <SelectableSurface
+        as="button"
+        role="tab"
+        :selected="assetStore.selectedCategory === 'all'"
+        class="w-full px-2.5 py-2 rounded-xl flex items-center justify-between gap-2 text-xs font-semibold cursor-pointer text-left"
+        :class="[
+          assetStore.selectedCategory === 'all'
+            ? 'bg-primary/15 text-primary border border-primary/40 shadow-glow-xs'
+            : 'text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover/50 border border-transparent'
+        ]"
+        @click="assetStore.selectedCategory = 'all'"
+      >
+        <div class="flex items-center gap-2 min-w-0">
+          <Icon name="apps" size="xs" class="text-primary shrink-0" />
+          <span class="truncate">Tous les sprites</span>
+        </div>
+        <Badge variant="neutral" size="sm" class="text-[9px] font-mono shrink-0">
+          {{ categoryCounts['all'] || 0 }}
+        </Badge>
+      </SelectableSurface>
+
+      <!-- Section A : Personnage (Berlu) -->
+      <div class="space-y-1">
+        <div class="px-2 py-1 flex items-center justify-between text-[10px] font-bold text-text-muted uppercase tracking-wider">
+          <div class="flex items-center gap-1.5 text-primary">
+            <Icon name="accessibility_new" size="xs" />
+            <span>Personnage (Berlu)</span>
+          </div>
+        </div>
+
+        <div class="space-y-0.5">
+          <SelectableSurface
+            v-for="cat in characterCategories"
+            :key="cat.id"
+            as="button"
+            role="tab"
+            :selected="assetStore.selectedCategory === cat.id"
+            class="w-full px-2.5 py-1.5 rounded-lg flex items-center justify-between gap-2 text-xs cursor-pointer text-left"
+            :class="[
+              assetStore.selectedCategory === cat.id
+                ? 'bg-primary/15 text-text-primary font-semibold border border-primary/40 shadow-xs'
+                : 'text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover/40 border border-transparent'
+            ]"
+            @click="assetStore.selectedCategory = cat.id"
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <Icon :name="cat.icon" size="xs" :style="{ color: cat.color }" class="shrink-0" />
+              <span class="truncate text-[11px]">{{ cat.label }}</span>
+            </div>
+            <Badge
+              v-if="categoryCounts[cat.id] > 0"
+              variant="neutral"
+              size="sm"
+              class="text-[9px] font-mono shrink-0 px-1 py-0"
+            >
+              {{ categoryCounts[cat.id] }}
+            </Badge>
+          </SelectableSurface>
+        </div>
+      </div>
+
+      <!-- Section B : Plateau & Décor -->
+      <div class="space-y-1">
+        <div class="px-2 py-1 flex items-center justify-between text-[10px] font-bold text-text-muted uppercase tracking-wider">
+          <div class="flex items-center gap-1.5 text-text-muted">
+            <Icon name="tv_gen" size="xs" />
+            <span>Plateau & Décor</span>
+          </div>
+        </div>
+
+        <div class="space-y-0.5">
+          <SelectableSurface
+            v-for="cat in stageCategories"
+            :key="cat.id"
+            as="button"
+            role="tab"
+            :selected="assetStore.selectedCategory === cat.id"
+            class="w-full px-2.5 py-1.5 rounded-lg flex items-center justify-between gap-2 text-xs cursor-pointer text-left"
+            :class="[
+              assetStore.selectedCategory === cat.id
+                ? 'bg-primary/15 text-text-primary font-semibold border border-primary/40 shadow-xs'
+                : 'text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover/40 border border-transparent'
+            ]"
+            @click="assetStore.selectedCategory = cat.id"
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <Icon :name="cat.icon" size="xs" :style="{ color: cat.color }" class="shrink-0" />
+              <span class="truncate text-[11px]">{{ cat.label }}</span>
+            </div>
+            <Badge
+              v-if="categoryCounts[cat.id] > 0"
+              variant="neutral"
+              size="sm"
+              class="text-[9px] font-mono shrink-0 px-1 py-0"
+            >
+              {{ categoryCounts[cat.id] }}
+            </Badge>
+          </SelectableSurface>
+        </div>
+      </div>
+    </div>
 
     <!-- 2. Zone principale des assets (à droite) -->
     <div class="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
@@ -156,16 +238,28 @@ function onDeleteAsset(asset: Asset) {
             <Icon name="left_panel_close" size="xs" />
           </Button>
           <Icon
-            :name="currentTab.icon"
+            :name="currentCategoryDef?.icon || 'apps'"
             size="xs"
-            :style="{ color: currentTab.key === 'all' ? '#818cf8' : ASSET_CATEGORIES[currentTab.key as AssetCategory].color }"
+            :style="{ color: currentCategoryDef?.color || '#818cf8' }"
           />
           <span class="font-semibold text-xs text-text-primary truncate">
-            {{ currentTab.label }}
+            {{ currentCategoryDef?.label || 'Tous les sprites' }}
           </span>
         </div>
 
         <div class="flex items-center gap-1.5 shrink-0">
+          <!-- Bouton d'accès direct Fitting Room Berlu -->
+          <Button
+            variant="ghost"
+            size="xs"
+            class="h-7 px-2 text-xs gap-1 font-medium text-text-secondary hover:text-primary bg-bg-surface/60 border border-border-subtle/80"
+            title="Ouvrir le Calibrateur d'ancrage sur Berlu (Fitting Room)"
+            @click="openFittingRoomWithDefault"
+          >
+            <Icon name="accessibility_new" size="xs" />
+            <span>Calibrer</span>
+          </Button>
+
           <Button
             variant="primary"
             size="sm"
@@ -198,6 +292,7 @@ function onDeleteAsset(asset: Asset) {
             :selected="activeAssetIds.has(asset.id) || assetStore.selectedAssetId === asset.id"
             @select="onSelectAsset"
             @delete="onDeleteAsset"
+            @calibrate="onCalibrateAsset"
           />
         </div>
 
@@ -224,6 +319,12 @@ function onDeleteAsset(asset: Asset) {
 
     <!-- Modale d'Import Dédiée -->
     <AssetUploadModal v-model:open="isUploadModalOpen" />
+
+    <!-- Modale de Calibrage sur Mannequin Berlu (Fitting Room) -->
+    <CharacterFittingModal
+      v-model:open="isFittingModalOpen"
+      :asset="assetToFit"
+    />
   </div>
 </template>
 

@@ -13,8 +13,7 @@
     "lint": "eslint . --fix",
     "format": "prettier --write .",
     "story:dev": "histoire dev",
-    "story:build": "histoire build",
-    "assets:trim": "node scripts/trim-transparent-sprites.mjs"
+    "story:build": "histoire build"
   },
   "dependencies": {
     "@tanstack/vue-table": "9.1.2",
@@ -23,7 +22,6 @@
     "clsx": "^2.1.1",
     "dexie": "^4.0.11",
     "driver.js": "^1.8.0",
-    "fflate": "^0.8.3",
     "pinia": "^3.0.1",
     "reka-ui": "^2.1.0",
     "tailwind-merge": "^3.0.2",

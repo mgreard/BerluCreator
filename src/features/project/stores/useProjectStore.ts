@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Project, StageSettings } from '@core/types/project.types'
-import { DEFAULT_STAGE_RESOLUTION } from '@core/constants/timeline'
+import { DEFAULT_STAGE_RESOLUTION } from '@core/constants/editor'
 import { projectRepository } from '@infrastructure/db/repositories/project.repository'
 
 export const useProjectStore = defineStore('project', () => {
@@ -12,18 +12,22 @@ export const useProjectStore = defineStore('project', () => {
       height: DEFAULT_STAGE_RESOLUTION.height,
       backgroundColor: '#0c0d14'
     },
-    activeSequenceId: 'seq_default',
+    editorDocumentId: 'doc_default',
     createdAt: Date.now(),
     updatedAt: Date.now()
   })
 
   const isSaving = ref(false)
 
-  /** Charge l'unique espace de travail. Les anciens enregistrements restent compatibles. */
+  /** Charge l'unique espace de travail. */
   async function loadInitialProject(): Promise<Project> {
     const projects = await projectRepository.getAll()
     if (projects.length > 0) {
       currentProject.value = projects[0]
+      if (!currentProject.value.editorDocumentId) {
+        currentProject.value.editorDocumentId =
+          currentProject.value.activeSequenceId || 'doc_default'
+      }
     } else {
       await projectRepository.create(currentProject.value)
     }
