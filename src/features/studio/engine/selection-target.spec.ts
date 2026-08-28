@@ -3,9 +3,10 @@ import { shouldTargetWholeGroup } from './selection-target'
 
 describe('canvas selection target', () => {
   it('always targets the whole group for character-anchored categories', () => {
-    expect(shouldTargetWholeGroup('grp_berlu', 'head', 'layer', false)).toBe(true)
-    expect(shouldTargetWholeGroup('grp_berlu', 'torso', 'layer', false)).toBe(true)
-    expect(shouldTargetWholeGroup('grp_berlu', 'arms_left', 'layer', false)).toBe(true)
+    expect(shouldTargetWholeGroup('character-1', 'head', 'layer', false)).toBe(true)
+    expect(shouldTargetWholeGroup('character-1', 'body', 'layer', false)).toBe(true)
+    expect(shouldTargetWholeGroup('character-1', 'character_full', 'layer', false)).toBe(true)
+    expect(shouldTargetWholeGroup('character-1', 'arms_left', 'layer', false)).toBe(true)
   })
 
   it('keeps the parent group as target while whole-group mode is active', () => {

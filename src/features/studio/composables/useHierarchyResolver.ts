@@ -3,8 +3,7 @@ import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
-import type { EditorGroup, EditorLayer, CharacterRigTransform } from '@core/types/editor.types'
-import { ASSET_CATEGORIES } from '@core/constants/categories'
+import type { CharacterGroup, EditorGroup, EditorLayer } from '@core/types/editor.types'
 import { clampBackgroundCover } from '../engine/background-cover.engine'
 
 export interface RenderableLayer {
@@ -12,8 +11,8 @@ export interface RenderableLayer {
   layerId: string
   name: string
   category: AssetCategory
-  groupId?: string
-  groupName?: string
+  groupId: string
+  groupName: string
   groupZIndex: number
   layerZIndex: number
   order: number
@@ -33,6 +32,8 @@ export interface RenderableLayer {
   rotation: number
   zIndex: number
   opacity: number
+  muted: boolean
+  locked: boolean
   isMovable: boolean
 }
 
@@ -43,16 +44,6 @@ interface CharacterGeometry {
   height: number
 }
 
-const DEFAULT_CHARACTER_RIG: CharacterRigTransform = {
-  x: 0,
-  y: 0,
-  scaleX: 1,
-  scaleY: 1,
-  rotation: 0,
-  visible: true,
-  zIndex: 10
-}
-
 export function useHierarchyResolver() {
   const editorStore = useEditorStore()
   const assetStore = useAssetStore()
@@ -60,10 +51,6 @@ export function useHierarchyResolver() {
 
   const activeLayers = computed<RenderableLayer[]>(() => {
     const stage = projectStore.currentProject.stage
-    const groups = editorStore.currentDocument.groups || []
-    const characterRig: CharacterRigTransform = editorStore.currentDocument.character ?? DEFAULT_CHARACTER_RIG
-    const layers: RenderableLayer[] = []
-
     const characterHeight = Math.round(stage.height * 0.7)
     const characterWidth = Math.round(characterHeight * (840 / 908))
     const characterBase: CharacterGeometry = {
@@ -72,65 +59,68 @@ export function useHierarchyResolver() {
       width: characterWidth,
       height: characterHeight
     }
+    const assets = new Map(assetStore.assets.map((asset) => [asset.id, asset]))
+    const groups = new Map(editorStore.currentDocument.groups.map((group) => [group.id, group]))
+    const result: RenderableLayer[] = []
 
     for (const layer of editorStore.currentDocument.layers) {
-      if (layer.muted) continue
-
-      const isCharacterSlot = ASSET_CATEGORIES[layer.category]?.placementMode === 'character-anchored'
-
-      // Si c'est une pièce de corps et que le personnage est masqué, ne pas afficher
-      if (isCharacterSlot && !characterRig.visible) continue
-
-      // Rétrocompatibilité : vérification du groupe parent éventuel
-      if (layer.groupId) {
-        const group = groups.find((candidate) => candidate.id === layer.groupId)
-        if (group?.muted) continue
-      }
-
-      const asset = assetStore.assets.find((candidate) => candidate.id === layer.assetId)
-      if (!asset) continue
-
-      const group = groups.find((candidate) => candidate.id === layer.groupId)
-
-      layers.push(
-        resolveLayer(
-          layer,
-          asset,
-          group,
-          stage,
-          characterBase,
-          characterRig
-        )
-      )
+      const group = groups.get(layer.groupId)
+      const asset = assets.get(layer.assetId)
+      if (!group || !asset || layer.muted || group.muted) continue
+      if (group.kind === 'character' && !isLayerActiveForCharacter(layer, group)) continue
+      result.push(resolveLayer(layer, asset, group, stage, characterBase))
     }
 
-    return layers.sort((left, right) => {
-      if (left.groupZIndex !== right.groupZIndex) {
-        return left.groupZIndex - right.groupZIndex
-      }
-      if (left.layerZIndex !== right.layerZIndex) {
-        return left.layerZIndex - right.layerZIndex
-      }
-      return left.order - right.order
-    })
+    return result.sort((left, right) =>
+      left.groupZIndex - right.groupZIndex ||
+      left.layerZIndex - right.layerZIndex ||
+      left.order - right.order
+    )
   })
 
   return { activeLayers }
 }
 
+function isLayerActiveForCharacter(layer: EditorLayer, group: CharacterGroup): boolean {
+  return group.activeMode === 'full'
+    ? layer.category === 'character_full'
+    : layer.category !== 'character_full'
+}
+
+function commonLayer(
+  layer: EditorLayer,
+  asset: Asset,
+  group: EditorGroup
+): Pick<RenderableLayer,
+  'id' | 'layerId' | 'name' | 'category' | 'groupId' | 'groupName' |
+  'groupZIndex' | 'layerZIndex' | 'order' | 'asset' | 'zIndex' | 'muted' | 'locked' | 'isMovable'> {
+  return {
+    id: layer.id,
+    layerId: layer.id,
+    name: layer.name,
+    category: layer.category,
+    groupId: group.id,
+    groupName: group.name,
+    groupZIndex: group.zIndex,
+    layerZIndex: layer.zIndex,
+    order: layer.order,
+    asset,
+    zIndex: layer.zIndex,
+    muted: layer.muted,
+    locked: layer.locked || group.locked,
+    isMovable: asset.isMovable
+  }
+}
+
 function resolveLayer(
   layer: EditorLayer,
   asset: Asset,
-  group: EditorGroup | undefined,
+  group: EditorGroup,
   stage: { width: number; height: number },
-  characterBase: CharacterGeometry,
-  characterRig: CharacterRigTransform
+  characterBase: CharacterGeometry
 ): RenderableLayer {
-  const placementMode = ASSET_CATEGORIES[layer.category]?.placementMode ?? 'free-transform'
-  const isCharacterSlot = placementMode === 'character-anchored'
-  const transform = layer.transform ?? {}
+  const transform = layer.transform
 
-  // 1. Contrainte Cover pour l'Arrière-plan
   if (layer.category === 'background') {
     const clamped = clampBackgroundCover(transform, {
       assetWidth: asset.width || stage.width,
@@ -138,21 +128,11 @@ function resolveLayer(
       stageWidth: stage.width,
       stageHeight: stage.height
     })
-
     const width = asset.width || stage.width
     const height = asset.height || stage.height
-
     return {
-      id: layer.id,
-      layerId: layer.id,
-      name: layer.name,
-      category: layer.category,
-      groupId: group?.id,
-      groupName: group?.name ?? 'Arrière-plan',
+      ...commonLayer(layer, asset, group),
       groupZIndex: 0,
-      layerZIndex: layer.zIndex,
-      order: layer.order ?? 0,
-      asset,
       x: clamped.x,
       y: clamped.y,
       width,
@@ -166,164 +146,54 @@ function resolveLayer(
       localScaleX: clamped.scaleX,
       localScaleY: clamped.scaleY,
       rotation: 0,
-      zIndex: layer.zIndex,
-      opacity: Math.max(0, Math.min(1, transform.opacity ?? 1)),
-      isMovable: true
+      opacity: transform.opacity
     }
   }
 
-  // 2. Pièces du corps ancrées au Personnage (Rig)
-  if (isCharacterSlot) {
-    const baseBounds = applyTrimFrame(asset, {
-      x: characterBase.x + (transform.x ?? 0),
-      y: characterBase.y + (transform.y ?? 0),
+  if (group.kind === 'character') {
+    const rig = group.transform
+    const x = characterBase.x + transform.x + rig.x
+    const y = characterBase.y + transform.y + rig.y
+    return {
+      ...commonLayer(layer, asset, group),
+      x: Math.round(x),
+      y: Math.round(y),
       width: characterBase.width,
       height: characterBase.height,
-      localX: transform.x ?? 0,
-      localY: transform.y ?? 0
-    })
-
-    const groupTransform = group?.transform ?? {}
-    const isBerluGroup = !group || group.id === 'grp_berlu'
-
-    const rigX = isBerluGroup ? characterRig.x : (groupTransform.x ?? 0)
-    const rigY = isBerluGroup ? characterRig.y : (groupTransform.y ?? 0)
-    const rigScaleX = isBerluGroup ? characterRig.scaleX : (groupTransform.scaleX ?? 1)
-    const rigScaleY = isBerluGroup ? characterRig.scaleY : (groupTransform.scaleY ?? 1)
-    const rigRotation = isBerluGroup ? characterRig.rotation : (groupTransform.rotation ?? 0)
-    const rigZ = isBerluGroup ? characterRig.zIndex : (group?.zIndex ?? 20)
-
-    const localScaleX = transform.scaleX ?? 1
-    const localScaleY = transform.scaleY ?? 1
-
-    const finalX = Math.round(baseBounds.x + rigX)
-    const finalY = Math.round(baseBounds.y + rigY)
-
-    return {
-      id: layer.id,
-      layerId: layer.id,
-      name: layer.name,
-      category: layer.category,
-      groupId: group?.id ?? 'grp_berlu',
-      groupName: group?.name ?? 'Personnage',
-      groupZIndex: rigZ,
-      layerZIndex: layer.zIndex,
-      order: layer.order ?? 0,
-      asset,
-      x: finalX,
-      y: finalY,
-      width: baseBounds.width,
-      height: baseBounds.height,
-      transformOriginX: baseBounds.transformOriginX + rigX,
-      transformOriginY: baseBounds.transformOriginY + rigY,
-      scaleX: localScaleX * rigScaleX,
-      scaleY: localScaleY * rigScaleY,
-      localX: baseBounds.localX,
-      localY: baseBounds.localY,
-      localScaleX,
-      localScaleY,
-      rotation: (transform.rotation ?? 0) + rigRotation,
-      zIndex: layer.zIndex,
-      opacity: Math.max(0, Math.min(1, (transform.opacity ?? 1) * (groupTransform.opacity ?? 1))),
-      isMovable: asset.isMovable
+      transformOriginX: x + characterBase.width / 2,
+      transformOriginY: y + characterBase.height / 2,
+      scaleX: transform.scaleX * rig.scaleX,
+      scaleY: transform.scaleY * rig.scaleY,
+      localX: transform.x,
+      localY: transform.y,
+      localScaleX: transform.scaleX,
+      localScaleY: transform.scaleY,
+      rotation: transform.rotation + rig.rotation,
+      opacity: Math.max(0, Math.min(1, transform.opacity * rig.opacity))
     }
   }
 
-  // 3. Décor, Mobilier & Props libres sur le plateau
-  const hasLogicalSize =
-    Number.isFinite(asset.displayWidth) &&
-    Number.isFinite(asset.displayHeight) &&
-    (asset.displayWidth ?? 0) > 0 &&
-    (asset.displayHeight ?? 0) > 0
-  const isLegacyFullStage = !hasLogicalSize && asset.width >= 1200
-  const width = hasLogicalSize
-    ? (asset.displayWidth as number)
-    : isLegacyFullStage
-      ? stage.width
-      : asset.width || characterBase.width
-  const height = hasLogicalSize
-    ? (asset.displayHeight as number)
-    : isLegacyFullStage
-      ? stage.height
-      : asset.height || characterBase.height
-
-  const x = transform.x ?? Math.round((stage.width - width) / 2)
-  const y = transform.y ?? Math.round((stage.height - height) / 2)
-
-  const baseBounds = applyTrimFrame(asset, {
-    x,
-    y,
+  const width = asset.width || characterBase.width
+  const height = asset.height || characterBase.height
+  const localX = transform.x
+  const localY = transform.y
+  const x = localX + group.transform.x
+  const y = localY + group.transform.y
+  return {
+    ...commonLayer(layer, asset, group),
+    x: Math.round(x),
+    y: Math.round(y),
     width,
     height,
-    localX: x,
-    localY: y
-  })
-
-  const groupTransform = group?.transform ?? {}
-  const localScaleX = transform.scaleX ?? 1
-  const localScaleY = transform.scaleY ?? 1
-  const groupScaleX = groupTransform.scaleX ?? 1
-  const groupScaleY = groupTransform.scaleY ?? 1
-
-  return {
-    id: layer.id,
-    layerId: layer.id,
-    name: layer.name,
-    category: layer.category,
-    groupId: group?.id,
-    groupName: group?.name,
-    groupZIndex: group?.zIndex ?? 0,
-    layerZIndex: layer.zIndex,
-    order: layer.order ?? 0,
-    asset,
-    x: Math.round(baseBounds.x + (groupTransform.x ?? 0)),
-    y: Math.round(baseBounds.y + (groupTransform.y ?? 0)),
-    width: baseBounds.width,
-    height: baseBounds.height,
-    transformOriginX: baseBounds.transformOriginX + (groupTransform.x ?? 0),
-    transformOriginY: baseBounds.transformOriginY + (groupTransform.y ?? 0),
-    scaleX: localScaleX * groupScaleX,
-    scaleY: localScaleY * groupScaleY,
-    localX: baseBounds.localX,
-    localY: baseBounds.localY,
-    localScaleX,
-    localScaleY,
-    rotation: (transform.rotation ?? 0) + (groupTransform.rotation ?? 0),
-    zIndex: layer.zIndex,
-    opacity: Math.max(
-      0,
-      Math.min(1, (transform.opacity ?? 1) * (groupTransform.opacity ?? 1))
-    ),
-    isMovable: asset.isMovable
-  }
-}
-
-interface LogicalAssetFrame {
-  x: number
-  y: number
-  width: number
-  height: number
-  localX: number
-  localY: number
-}
-
-function applyTrimFrame(asset: Asset, frame: LogicalAssetFrame) {
-  const transformOriginX = frame.x + frame.width / 2
-  const transformOriginY = frame.y + frame.height / 2
-  const trim = asset.trimFrame
-  if (!trim || trim.sourceWidth <= 0 || trim.sourceHeight <= 0) {
-    return { ...frame, transformOriginX, transformOriginY }
-  }
-
-  const ratioX = frame.width / trim.sourceWidth
-  const ratioY = frame.height / trim.sourceHeight
-  return {
-    ...frame,
-    x: frame.x + trim.offsetX * ratioX,
-    y: frame.y + trim.offsetY * ratioY,
-    width: asset.width * ratioX,
-    height: asset.height * ratioY,
-    transformOriginX,
-    transformOriginY
+    transformOriginX: x + width / 2,
+    transformOriginY: y + height / 2,
+    scaleX: transform.scaleX * group.transform.scaleX,
+    scaleY: transform.scaleY * group.transform.scaleY,
+    localX,
+    localY,
+    localScaleX: transform.scaleX,
+    localScaleY: transform.scaleY,
+    rotation: transform.rotation + group.transform.rotation,
+    opacity: Math.max(0, Math.min(1, transform.opacity * group.transform.opacity))
   }
 }

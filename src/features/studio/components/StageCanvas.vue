@@ -64,14 +64,14 @@ const activeSelectedLayer = computed(() => {
 const activeSelectedGroup = computed(() => {
   if (editorStore.selectedGroupId) {
     return (
-      editorStore.currentDocument.groups?.find(
+      editorStore.currentDocument.groups.find(
         (group) => group.id === editorStore.selectedGroupId
       ) ?? null
     )
   }
   if (activeSelectedLayer.value?.groupId) {
     return (
-      editorStore.currentDocument.groups?.find(
+      editorStore.currentDocument.groups.find(
         (group) => group.id === activeSelectedLayer.value?.groupId
       ) ?? null
     )
@@ -87,6 +87,12 @@ const isCharacterTarget = computed(() => {
 const isGroupTarget = computed(() => {
   return (editScope.value === 'group' || isCharacterTarget.value) && Boolean(activeSelectedGroup.value)
 })
+
+const isSelectionLocked = computed(() =>
+  isGroupTarget.value
+    ? Boolean(activeSelectedGroup.value?.locked)
+    : Boolean(activeSelectedLayer.value?.locked)
+)
 
 const activeCamera = computed<CameraFrame>({
   get: () => editorStore.currentDocument.camera,
@@ -249,13 +255,13 @@ const resizeCursorClass = computed(() => {
 
 function undoCanvasTransform() {
   if (!isDragging.value && !isResizing.value) {
-    editorStore.undoLastTransform()
+    editorStore.undo()
   }
 }
 
 function redoCanvasTransform() {
   if (!isDragging.value && !isResizing.value) {
-    editorStore.redoLastTransform()
+    editorStore.redo()
   }
 }
 
@@ -271,23 +277,23 @@ function onHistoryKeydown(event: KeyboardEvent) {
   }
   if (event.key === 'Escape') {
     event.preventDefault()
-    if (editorStore.hasActiveTransformSession) {
-      editorStore.cancelTransformSession()
+    if (editorStore.hasActiveGesture) {
+      editorStore.cancelGesture()
     } else {
-      editorStore.clearStudioSelection(false)
+      editorStore.clearStudioSelection()
     }
     return
   }
   if (!(event.ctrlKey || event.metaKey) || event.altKey) return
 
   const key = event.key.toLowerCase()
-  if (key === 'z' && event.shiftKey && editorStore.canRedoTransform) {
+  if (key === 'z' && event.shiftKey && editorStore.canRedo) {
     event.preventDefault()
     redoCanvasTransform()
-  } else if (key === 'z' && editorStore.canUndoTransform) {
+  } else if (key === 'z' && editorStore.canUndo) {
     event.preventDefault()
     undoCanvasTransform()
-  } else if (key === 'y' && editorStore.canRedoTransform) {
+  } else if (key === 'y' && editorStore.canRedo) {
     event.preventDefault()
     redoCanvasTransform()
   }
@@ -309,12 +315,6 @@ function applyScaleAxes(newScaleX: number, newScaleY: number) {
       scaleX: clampedX,
       scaleY: clampedY
     })
-    if (activeSelectedGroup.value.id === 'grp_berlu') {
-      editorStore.updateCharacterTransform({
-        scaleX: clampedX,
-        scaleY: clampedY
-      })
-    }
   } else if (activeSelectedLayer.value) {
     editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, {
       scaleX: clampedX,
@@ -324,15 +324,17 @@ function applyScaleAxes(newScaleX: number, newScaleY: number) {
 }
 
 function adjustScale(delta: number) {
-  editorStore.beginTransformGesture()
+  if (isSelectionLocked.value) return
+  editorStore.beginGesture('Redimensionner la sélection')
   applyScaleAxes(currentScaleX.value + delta, currentScaleY.value + delta)
-  editorStore.endTransformGesture()
+  editorStore.endGesture()
 }
 
 function setExactScale(value: number) {
-  editorStore.beginTransformGesture()
+  if (isSelectionLocked.value) return
+  editorStore.beginGesture('Redimensionner la sélection')
   applyScaleAxes(value, value)
-  editorStore.endTransformGesture()
+  editorStore.endGesture()
 }
 
 function onCanvasWheel(e: WheelEvent) {
@@ -420,10 +422,10 @@ function onCanvasPointerDown(e: PointerEvent) {
   if (!pos) return
 
   // 1. Clic sur l'une des 8 poignées de redimensionnement
-  if (selectedBounds.value) {
+  if (selectedBounds.value && !isSelectionLocked.value) {
     const hitHandle = hitTestResizeHandle(pos, selectedBounds.value)
     if (hitHandle) {
-      editorStore.beginTransformGesture()
+      editorStore.beginGesture('Redimensionner la sélection')
       isResizing.value = true
       activeHandle.value = hitHandle
       dragStartPointer.value = { ...pos }
@@ -440,21 +442,14 @@ function onCanvasPointerDown(e: PointerEvent) {
     const isInsideSelection =
       pos.x >= b.x && pos.x <= b.x + b.width && pos.y >= b.y && pos.y <= b.y + b.height
     if (isInsideSelection) {
-      editorStore.beginTransformGesture()
+      editorStore.beginGesture('Déplacer la sélection')
       isDragging.value = true
       dragStartPointer.value = { ...pos }
 
       if (isGroupTarget.value && activeSelectedGroup.value) {
-        if (activeSelectedGroup.value.id === 'grp_berlu') {
-          dragStartGroupPos.value = {
-            x: editorStore.currentDocument.character?.x ?? 0,
-            y: editorStore.currentDocument.character?.y ?? 0
-          }
-        } else {
-          dragStartGroupPos.value = {
-            x: activeSelectedGroup.value.transform?.x ?? 0,
-            y: activeSelectedGroup.value.transform?.y ?? 0
-          }
+        dragStartGroupPos.value = {
+          x: activeSelectedGroup.value.transform.x,
+          y: activeSelectedGroup.value.transform.y
         }
       } else if (activeSelectedLayer.value) {
         dragStartLayerPos.value = {
@@ -479,22 +474,17 @@ function onCanvasPointerDown(e: PointerEvent) {
     } else {
       editorStore.selectLayerForEditing(hit.layerId)
     }
-    editorStore.beginTransformGesture()
+    editorStore.beginGesture('Déplacer la sélection')
     assetStore.selectAsset(hit.asset.id)
+
+    if (hit.locked) return
 
     isDragging.value = true
     dragStartPointer.value = { ...pos }
 
     if (selectWholeGroup && hit.groupId) {
-      if (hit.groupId === 'grp_berlu') {
-        dragStartGroupPos.value = {
-          x: editorStore.currentDocument.character?.x ?? 0,
-          y: editorStore.currentDocument.character?.y ?? 0
-        }
-      } else {
-        const grp = editorStore.currentDocument.groups?.find((g) => g.id === hit.groupId)
-        dragStartGroupPos.value = { x: grp?.transform?.x ?? 0, y: grp?.transform?.y ?? 0 }
-      }
+      const group = editorStore.currentDocument.groups.find((candidate) => candidate.id === hit.groupId)
+      dragStartGroupPos.value = { x: group?.transform.x ?? 0, y: group?.transform.y ?? 0 }
     } else {
       dragStartLayerPos.value = { x: hit.localX ?? 0, y: hit.localY ?? 0 }
     }
@@ -502,7 +492,7 @@ function onCanvasPointerDown(e: PointerEvent) {
     const target = e.currentTarget as HTMLElement
     target?.setPointerCapture?.(e.pointerId)
   } else {
-    if (!editorStore.hasActiveTransformSession) editorStore.clearStudioSelection(false)
+    if (!editorStore.hasActiveGesture) editorStore.clearStudioSelection()
   }
 }
 
@@ -533,9 +523,6 @@ function onCanvasPointerMove(e: PointerEvent) {
       const newGroupX = Math.round(dragStartGroupPos.value.x + dx)
       const newGroupY = Math.round(dragStartGroupPos.value.y + dy)
       editorStore.updateGroupTransform(activeSelectedGroup.value.id, { x: newGroupX, y: newGroupY })
-      if (activeSelectedGroup.value.id === 'grp_berlu') {
-        editorStore.updateCharacterTransform({ x: newGroupX, y: newGroupY })
-      }
     } else if (activeSelectedLayer.value) {
       if (activeSelectedLayer.value.category === 'background') {
         const clamped = clampBackgroundCover(
@@ -578,7 +565,7 @@ function onCanvasPointerUp(e: PointerEvent) {
   isDragging.value = false
   isResizing.value = false
   activeHandle.value = null
-  editorStore.endTransformGesture()
+  editorStore.endGesture()
   if (restoreGroupId) editorStore.selectGroupForEditing(restoreGroupId)
 
   const target = e.currentTarget as HTMLElement
@@ -602,8 +589,8 @@ function onCanvasDoubleClick(e: MouseEvent) {
       editorStore.selectLayerForEditing(hit.layerId)
     }
     assetStore.selectAsset(hit.asset.id)
-  } else if (!hit && !editorStore.hasActiveTransformSession) {
-    editorStore.clearStudioSelection(false)
+  } else if (!hit && !editorStore.hasActiveGesture) {
+    editorStore.clearStudioSelection()
   }
 }
 </script>
@@ -669,7 +656,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
           aria-label="Annuler la dernière transformation"
           aria-keyshortcuts="Control+Z Meta+Z"
           title="Annuler (Ctrl/Cmd+Z)"
-          :disabled="!editorStore.canUndoTransform || isDragging || isResizing"
+          :disabled="!editorStore.canUndo || isDragging || isResizing"
           @click="undoCanvasTransform"
         />
         <IconButton
@@ -679,20 +666,9 @@ function onCanvasDoubleClick(e: MouseEvent) {
           aria-label="Rétablir la dernière transformation"
           aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y"
           title="Rétablir (Ctrl/Cmd+Shift+Z ou Ctrl+Y)"
-          :disabled="!editorStore.canRedoTransform || isDragging || isResizing"
+          :disabled="!editorStore.canRedo || isDragging || isResizing"
           @click="redoCanvasTransform"
         />
-        <Button
-          v-if="editorStore.hasActiveTransformSession"
-          size="xs"
-          variant="primary"
-          class="ml-1 gap-1 font-bold"
-          title="Valider toutes les modifications"
-          @click="editorStore.commitTransformSession()"
-        >
-          <Icon name="check" size="xs" />
-          OK
-        </Button>
       </div>
 
       <!-- HUD contextuel d'Édition Directe (Bannière Inférieure) -->

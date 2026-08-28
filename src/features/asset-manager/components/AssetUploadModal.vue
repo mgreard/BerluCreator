@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch, useTemplateRef } from 'vue'
-import type { AssetCategory } from '@core/types/asset.types'
-import { ASSET_CATEGORIES, CATEGORY_LIST } from '@core/constants/categories'
+import { onUnmounted, ref, watch, useTemplateRef } from 'vue'
+import type { AssetCategory, CharacterAssetMetadata } from '@core/types/asset.types'
+import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { generateId } from '@/lib/utils'
 import { useAssetStore } from '../stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
@@ -12,7 +12,6 @@ import { Icon } from '@/components/ui/icon'
 import { Badge } from '@/components/ui/badge'
 import { Heading } from '@/components/ui/heading'
 import { Text } from '@/components/ui/text'
-import { Select } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { FormGroup } from '@/components/ui/form-group'
 import { SelectableSurface } from '@/components/ui/selectable-surface'
@@ -25,6 +24,7 @@ interface PreparedFile {
   name: string
   previewUrl: string
   category: AssetCategory
+  error: string | null
 }
 
 const open = defineModel<boolean>('open', { default: false })
@@ -54,7 +54,7 @@ const CHARACTER_SKELETON_SLOTS: { id: AssetCategory; label: string; icon: string
   { id: 'mouth', label: 'Bouche & Phonèmes', icon: 'lips', description: 'Expressions labiales et phonèmes' },
   { id: 'arms_left', label: 'Bras Gauche', icon: 'front_hand', description: 'Gestuelle et postures gauches' },
   { id: 'arms_right', label: 'Bras Droit', icon: 'waving_hand', description: 'Gestuelle et postures droites' },
-  { id: 'torso', label: 'Torse & Buste', icon: 'body_system', description: 'Tronc et vêtements de base' },
+  { id: 'body', label: 'Corps & Buste', icon: 'body_system', description: 'Tronc et vêtements de base' },
   { id: 'props_host', label: 'Accessoire Porté', icon: 'apparel', description: 'Chapeaux, objets tenus en main' }
 ]
 
@@ -73,12 +73,12 @@ const scopeOptions = [
 
 function selectFullCharacterMode() {
   characterMode.value = 'full'
-  selectedCategory.value = 'torso'
+  selectedCategory.value = 'character_full'
 }
 
 function selectSkeletonMode() {
   characterMode.value = 'skeleton'
-  if (selectedCategory.value === 'torso') {
+  if (selectedCategory.value === 'character_full') {
     selectedCategory.value = 'head'
   }
 }
@@ -86,7 +86,7 @@ function selectSkeletonMode() {
 watch(assetScope, (newScope) => {
   if (newScope === 'character') {
     if (characterMode.value === 'full') {
-      selectedCategory.value = 'torso'
+      selectedCategory.value = 'character_full'
     } else if (!CHARACTER_SKELETON_SLOTS.some((s) => s.id === selectedCategory.value)) {
       selectedCategory.value = 'head'
     }
@@ -104,7 +104,7 @@ watch(
       selectedCategory.value = category
       if (CHARACTER_SKELETON_SLOTS.some((s) => s.id === category)) {
         assetScope.value = 'character'
-        characterMode.value = category === 'torso' ? 'full' : 'skeleton'
+        characterMode.value = category === 'character_full' ? 'full' : 'skeleton'
       } else if (STAGE_SLOTS.some((s) => s.id === category)) {
         assetScope.value = 'stage'
       }
@@ -128,18 +128,18 @@ function clearPreparedFiles() {
   preparedFiles.value = []
 }
 
-function handleFiles(files: FileList | File[]) {
-  const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'))
-  if (imageFiles.length === 0) return
+onUnmounted(clearPreparedFiles)
 
-  for (const file of imageFiles) {
+function handleFiles(files: FileList | File[]) {
+  for (const file of Array.from(files)) {
     const previewUrl = URL.createObjectURL(file)
     preparedFiles.value.push({
       id: generateId('prep'),
       file,
       name: file.name.replace(/\.[^/.]+$/, ''),
       previewUrl,
-      category: selectedCategory.value
+      category: selectedCategory.value,
+      error: null
     })
   }
 }
@@ -172,34 +172,53 @@ async function performImport() {
   isImporting.value = true
 
   try {
-    let count = 0
-    const extraTags: string[] = []
-    if (assetScope.value === 'character') {
-      if (characterName.value.trim()) {
-        extraTags.push(characterName.value.trim())
-      }
-      if (characterMode.value === 'full') {
-        extraTags.push('full')
+    let successCount = 0
+    for (const item of [...preparedFiles.value]) {
+      item.error = null
+      let importedAssetId: string | null = null
+      try {
+        const isCharacter = ASSET_CATEGORIES[item.category].placementMode === 'character-anchored'
+        const character = isCharacter
+          ? buildCharacterMetadata(
+              characterName.value,
+              item.category === 'character_full' ? 'full' : 'skeleton'
+            )
+          : undefined
+        const asset = await assetStore.importAsset(item.file, item.category, item.name, [], character)
+        importedAssetId = asset.id
+        editorStore.assignAssetToGroup(asset.id, item.category, null, item.name)
+        removePreparedFile(item.id)
+        successCount += 1
+      } catch (error) {
+        let message = error instanceof Error ? error.message : 'Erreur inconnue.'
+        if (importedAssetId) {
+          try {
+            await assetStore.discardImportedAsset(importedAssetId)
+          } catch {
+            message += ' Le rollback de l’asset importé a échoué ; rechargez la bibliothèque avant de réessayer.'
+          }
+        }
+        item.error = message
       }
     }
 
-    for (const item of preparedFiles.value) {
-      const asset = await assetStore.importAsset(item.file, item.category, item.name, extraTags)
-      editorStore.assignAssetToGroup(asset.id, item.category, null, item.name)
-      count++
-    }
-
-    toast.success(
-      'Import réussi',
-      `${count} sprite(s) importé(s) avec succès.`
-    )
-    open.value = false
-  } catch (error) {
-    console.error('Erreur lors de l’importation :', error)
-    toast.error('Échec de l’importation', error instanceof Error ? error.message : 'Erreur inconnue.')
+    if (successCount > 0) toast.success('Import terminé', `${successCount} sprite(s) importé(s).`)
+    if (preparedFiles.value.length === 0) open.value = false
+    else toast.error('Certains imports ont échoué', 'Corrigez les fichiers signalés puis relancez l’import.')
   } finally {
     isImporting.value = false
   }
+}
+
+function buildCharacterMetadata(name: string, mode: 'full' | 'skeleton'): CharacterAssetMetadata {
+  const cleanName = name.trim()
+  const key = cleanName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+  return { key, name: cleanName, form: mode === 'full' ? 'full' : 'rig' }
 }
 </script>
 
@@ -394,13 +413,17 @@ async function performImport() {
           <div
             v-for="item in preparedFiles"
             :key="item.id"
-            class="flex items-center gap-3 p-2 rounded-lg border border-border-subtle bg-bg-surface/80 text-xs"
+            class="flex items-center gap-3 p-2 rounded-lg border bg-bg-surface/80 text-xs"
+            :class="item.error ? 'border-danger/60' : 'border-border-subtle'"
           >
             <img :src="item.previewUrl" :alt="item.name" class="w-10 h-10 object-contain rounded bg-bg-base border border-border-subtle shrink-0" />
             <div class="min-w-0 flex-1 space-y-1">
               <Input v-model="item.name" size="sm" class="h-7 text-xs font-semibold" />
               <div class="text-[10px] text-text-muted">
                 {{ (item.file.size / 1024).toFixed(0) }} Ko
+              </div>
+              <div v-if="item.error" class="text-[10px] text-danger">
+                {{ item.error }}
               </div>
             </div>
             <IconButton

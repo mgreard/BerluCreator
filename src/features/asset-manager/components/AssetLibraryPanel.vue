@@ -13,6 +13,7 @@ import { Icon } from '@/components/ui/icon'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SelectableSurface } from '@/components/ui/selectable-surface'
+import { toast } from '@/ui/shared/services/toast.service'
 
 interface CharacterSubCategoryDef {
   id: string
@@ -24,9 +25,9 @@ interface CharacterSubCategoryDef {
 }
 
 const CHARACTER_SUBCATEGORIES: CharacterSubCategoryDef[] = [
-  { id: 'complet', label: 'Complet', icon: 'person', category: 'torso', filterTag: 'full', color: '#f59e0b' },
+  { id: 'complet', label: 'Complet', icon: 'person', category: 'character_full', color: '#f59e0b' },
   { id: 'head', label: 'Tête', icon: 'face', category: 'head', color: '#ec4899' },
-  { id: 'torso', label: 'Torse', icon: 'body_system', category: 'torso', color: '#f59e0b' },
+  { id: 'body', label: 'Corps', icon: 'body_system', category: 'body', color: '#f59e0b' },
   { id: 'arms_right', label: 'Bras droit', icon: 'waving_hand', category: 'arms_right', color: '#84cc16' },
   { id: 'arms_left', label: 'Bras gauche', icon: 'front_hand', category: 'arms_left', color: '#22c55e' },
   { id: 'eyes', label: 'Yeux', icon: 'visibility', category: 'eyes', color: '#06b6d4' },
@@ -63,51 +64,11 @@ const expandedCharacters = ref<Record<string, boolean>>({
   Berlu: true
 })
 
-// Liste exhaustive de tous les tags et identifiants techniques du système à exclure des noms de personnages
-const SYSTEM_TAGS = new Set([
-  'arms', 'arms_left', 'arms_right', 'bras', 'left', 'right',
-  'head', 'visage', 'expression', 'face',
-  'mouth', 'bouche', 'phoneme', 'lips',
-  'torso', 'corps', 'body', 'buste',
-  'eyes', 'regard', 'lunettes', 'oeil', 'yeux',
-  'props-host', 'props_host', 'presentateur', 'accessoire', 'apparel',
-  'props-set', 'props_set', 'plateau', 'objet',
-  'props-desk', 'props_desk', 'table',
-  'background', 'fond', 'decor', 'arriere-plan',
-  'desk', 'bureau',
-  'foreground', 'premier-plan', 'ambiance',
-  'tenue', 'outfit', 'costume', 'complet', 'full', 'all', 'sprite'
-])
-
-function isCharacterNameTag(tag: string): boolean {
-  const clean = tag.trim().toLowerCase()
-  if (!clean) return false
-  if (SYSTEM_TAGS.has(clean)) return false
-  if (clean.includes('_') || clean.includes('-')) {
-    return false
-  }
-  return true
-}
-
-// Détection de tous les personnages réels (Berlu par défaut + personnages personnalisés importés)
 const availableCharacters = computed(() => {
   const characters = new Set<string>()
   characters.add('Berlu')
-
   for (const asset of assetStore.assets) {
-    const isChar = ASSET_CATEGORIES[asset.category]?.placementMode === 'character-anchored'
-    if (isChar) {
-      for (const tag of asset.tags) {
-        if (isCharacterNameTag(tag)) {
-          if (tag.toLowerCase() === 'berlu') {
-            characters.add('Berlu')
-          } else {
-            const formatted = tag.charAt(0).toUpperCase() + tag.slice(1)
-            characters.add(formatted)
-          }
-        }
-      }
-    }
+    if (asset.character?.name) characters.add(asset.character.name)
   }
   return Array.from(characters)
 })
@@ -154,45 +115,23 @@ function selectStageCategory(catId: AssetCategory) {
 
 // Helpers de correspondance
 function isAssetMatchingCharacter(asset: Asset, charName: string): boolean {
-  const isCharSlot = ASSET_CATEGORIES[asset.category]?.placementMode === 'character-anchored'
-  if (!isCharSlot) return false
-
-  const charLower = charName.toLowerCase()
-  if (charLower === 'berlu') {
-    // Si l'asset a un tag explicite "berlu" OU n'a aucun tag d'un autre personnage connu
-    const hasOtherCustomChar = asset.tags.some((t) => {
-      if (!isCharacterNameTag(t)) return false
-      const lower = t.toLowerCase()
-      return lower !== 'berlu' && availableCharacters.value.some((c) => c.toLowerCase() === lower)
-    })
-    return !hasOtherCustomChar || asset.tags.some((t) => t.toLowerCase() === 'berlu')
-  }
-
-  return (
-    asset.tags.some((t) => t.toLowerCase() === charLower) ||
-    asset.name.toLowerCase().includes(charLower)
-  )
+  return asset.character?.name.toLowerCase() === charName.toLowerCase()
 }
 
 function isAssetMatchingSubCategory(asset: Asset, sub: CharacterSubCategoryDef): boolean {
-  const hasFullTag =
-    asset.tags.some((t) => t.toLowerCase() === 'full' || t.toLowerCase() === 'complet') ||
-    asset.name.toLowerCase().includes('complet') ||
-    asset.name.toLowerCase().includes('full')
-
   const hasOutfitTag =
     asset.tags.some((t) => t.toLowerCase() === 'tenue' || t.toLowerCase() === 'outfit') ||
     asset.name.toLowerCase().includes('tenue') ||
     asset.name.toLowerCase().includes('outfit')
 
   if (sub.id === 'complet') {
-    return asset.category === 'torso' && hasFullTag
+    return asset.category === 'character_full'
   }
   if (sub.id === 'outfit') {
     return hasOutfitTag
   }
-  if (sub.id === 'torso') {
-    return asset.category === 'torso' && !hasFullTag
+  if (sub.id === 'body') {
+    return asset.category === 'body'
   }
   if (sub.id === 'props_host') {
     return asset.category === 'props_host' && !hasOutfitTag
@@ -217,9 +156,10 @@ function getStageCount(catId: AssetCategory): number {
 // Filtrage des assets affichés
 const displayedAssets = computed(() => {
   let list = assetStore.assets
+  const selection = activeSelection.value
 
-  if (activeSelection.value.type === 'character') {
-    const { character, subCategory } = activeSelection.value
+  if (selection.type === 'character') {
+    const { character, subCategory } = selection
     list = list.filter((a) => isAssetMatchingCharacter(a, character))
     if (subCategory) {
       const subDef = CHARACTER_SUBCATEGORIES.find((s) => s.id === subCategory)
@@ -227,8 +167,8 @@ const displayedAssets = computed(() => {
         list = list.filter((a) => isAssetMatchingSubCategory(a, subDef))
       }
     }
-  } else if (activeSelection.value.type === 'stage') {
-    list = list.filter((a) => a.category === activeSelection.value.category)
+  } else if (selection.type === 'stage') {
+    list = list.filter((a) => a.category === selection.category)
   }
 
   if (assetStore.searchQuery.trim()) {
@@ -244,11 +184,12 @@ const displayedAssets = computed(() => {
 })
 
 const currentHeaderInfo = computed(() => {
-  if (activeSelection.value.type === 'all') {
+  const selection = activeSelection.value
+  if (selection.type === 'all') {
     return { title: 'Tous les sprites', icon: 'apps', color: '#818cf8', sub: null }
   }
-  if (activeSelection.value.type === 'character') {
-    const { character, subCategory } = activeSelection.value
+  if (selection.type === 'character') {
+    const { character, subCategory } = selection
     const subDef = subCategory ? CHARACTER_SUBCATEGORIES.find((s) => s.id === subCategory) : null
     return {
       title: character,
@@ -257,7 +198,7 @@ const currentHeaderInfo = computed(() => {
       sub: subDef?.label || 'Tous les membres'
     }
   }
-  const stageDef = STAGE_CATEGORIES.find((s) => s.id === activeSelection.value.category)
+  const stageDef = STAGE_CATEGORIES.find((s) => s.id === selection.category)
   return {
     title: stageDef?.label || 'Plateau & Décor',
     icon: stageDef?.icon || 'tv_gen',
@@ -300,9 +241,25 @@ function openFittingRoomWithDefault() {
   isFittingModalOpen.value = true
 }
 
-function onDeleteAsset(asset: Asset) {
-  if (confirm(`Voulez-vous vraiment supprimer l'asset "${asset.name}" ?`)) {
-    assetStore.deleteAsset(asset.id)
+async function onDeleteAsset(asset: Asset) {
+  try {
+    const impact = await assetStore.inspectAssetDeletion(asset.id)
+    if (impact.snapshotNames.length > 0) {
+      alert(`Suppression impossible : cet asset est utilisé par ${impact.snapshotNames.length} vue(s) sauvegardée(s) : ${impact.snapshotNames.join(', ')}.`)
+      return
+    }
+    const message = impact.layerCount > 0
+      ? `Supprimer définitivement « ${asset.name} » et ses ${impact.layerCount} calque(s) ?`
+      : `Supprimer définitivement « ${asset.name} » ?`
+    if (!confirm(message)) return
+    await assetStore.deleteAssetCascade(asset.id)
+    editorStore.syncAfterAssetDeletion(asset.id)
+    toast.success('Asset supprimé', `${impact.layerCount} calque(s) nettoyé(s).`)
+  } catch (error) {
+    toast.error(
+      'Suppression annulée',
+      error instanceof Error ? error.message : 'Une erreur de stockage est survenue.'
+    )
   }
 }
 
@@ -363,17 +320,14 @@ onMounted(async () => {
             @click="selectCharacterRoot(charName)"
           >
             <div class="flex items-center gap-1.5 min-w-0">
-              <button
-                type="button"
-                class="size-4 flex items-center justify-center text-text-muted hover:text-text-primary rounded"
+              <IconButton
+                :icon="expandedCharacters[charName] ? 'expand_more' : 'chevron_right'"
+                size="xs"
+                variant="ghost"
+                class="size-4 text-text-muted hover:text-text-primary"
                 :title="expandedCharacters[charName] ? 'Replier' : 'Déplier'"
                 @click="toggleCharacterExpanded(charName, $event)"
-              >
-                <Icon
-                  :name="expandedCharacters[charName] ? 'expand_more' : 'chevron_right'"
-                  size="xs"
-                />
-              </button>
+              />
               <Icon name="person" size="xs" class="text-primary shrink-0" />
               <span class="truncate text-xs font-semibold">{{ charName }}</span>
             </div>

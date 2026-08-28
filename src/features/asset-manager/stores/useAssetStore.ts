@@ -1,24 +1,65 @@
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { Asset, AssetCategory } from '@core/types/asset.types'
+import type {
+  Asset,
+  AssetCategory,
+  CharacterAssetMetadata
+} from '@core/types/asset.types'
+import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { assetRepository } from '@infrastructure/db/repositories/asset.repository'
+import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 import { generateId } from '@/lib/utils'
-import { resolveSpriteConfig } from '@core/constants/sprites-config'
+
+const ALLOWED_IMAGE_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/svg+xml'
+])
 
 async function getImageDimensions(blob: Blob): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
+  return await new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob)
-    const img = new Image()
-    img.onload = () => {
-      URL.revokeObjectURL(url)
-      resolve({ width: img.naturalWidth, height: img.naturalHeight })
+    const image = new Image()
+    const cleanup = () => URL.revokeObjectURL(url)
+    image.onload = () => {
+      cleanup()
+      if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+        reject(new Error('L’image ne possède pas de dimensions valides.'))
+        return
+      }
+      resolve({ width: image.naturalWidth, height: image.naturalHeight })
     }
-    img.onerror = () => {
-      URL.revokeObjectURL(url)
-      reject(new Error("Impossible de lire les dimensions de l'image."))
+    image.onerror = () => {
+      cleanup()
+      reject(new Error('Impossible de décoder cette image.'))
     }
-    img.src = url
+    image.src = url
   })
+}
+
+export async function validateAssetImage(file: File | Blob): Promise<{ width: number; height: number }> {
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+    throw new Error('Format non pris en charge. Utilisez PNG, JPEG, WebP ou SVG.')
+  }
+  return await getImageDimensions(file)
+}
+
+function validateCharacterMetadata(
+  category: AssetCategory,
+  character?: CharacterAssetMetadata
+): void {
+  const isCharacter = ASSET_CATEGORIES[category].placementMode === 'character-anchored'
+  if (!isCharacter) return
+  if (!character?.key.trim() || !character.name.trim()) {
+    throw new Error('Le nom du personnage est obligatoire.')
+  }
+  if (category === 'character_full' && character.form !== 'full') {
+    throw new Error('Un sprite complet doit utiliser la forme « full ».')
+  }
+  if (category !== 'character_full' && character.form !== 'rig') {
+    throw new Error('Un élément de rig doit utiliser la forme « rig ».')
+  }
 }
 
 export const useAssetStore = defineStore('asset', () => {
@@ -26,44 +67,13 @@ export const useAssetStore = defineStore('asset', () => {
   const selectedAssetId = ref<string | null>(null)
   const selectedCategory = ref<AssetCategory | 'all'>('all')
   const searchQuery = ref('')
-  const selectedTags = ref<string[]>([])
   const isLoading = ref(false)
 
-  const selectedAsset = computed(() => {
-    return assets.value.find((a) => a.id === selectedAssetId.value) ?? null
-  })
+  const selectedAsset = computed(() =>
+    assets.value.find((asset) => asset.id === selectedAssetId.value) ?? null
+  )
 
-  const filteredAssets = computed(() => {
-    return assets.value.filter((asset) => {
-      if (selectedCategory.value !== 'all' && asset.category !== selectedCategory.value) {
-        return false
-      }
-      if (
-        searchQuery.value.trim() &&
-        !asset.name.toLowerCase().includes(searchQuery.value.toLowerCase()) &&
-        !asset.tags.some((t) => t.toLowerCase().includes(searchQuery.value.toLowerCase()))
-      ) {
-        return false
-      }
-      if (
-        selectedTags.value.length > 0 &&
-        !selectedTags.value.every((t) => asset.tags.includes(t))
-      ) {
-        return false
-      }
-      return true
-    })
-  })
-
-  const allTags = computed(() => {
-    const set = new Set<string>()
-    for (const a of assets.value) {
-      for (const t of a.tags) set.add(t)
-    }
-    return Array.from(set)
-  })
-
-  async function loadAssets() {
+  async function loadAssets(): Promise<void> {
     isLoading.value = true
     try {
       assets.value = await assetRepository.getAll()
@@ -76,65 +86,64 @@ export const useAssetStore = defineStore('asset', () => {
     file: File | Blob,
     category: AssetCategory,
     name?: string,
-    tags?: string[]
+    tags: string[] = [],
+    character?: CharacterAssetMetadata
   ): Promise<Asset> {
-    const id = generateId('asset')
-    const blobId = generateId('blob')
+    validateCharacterMetadata(category, character)
+    const dimensions = await validateAssetImage(file)
+    const now = Date.now()
+    const defaultName = file instanceof File
+      ? file.name.replace(/\.[^/.]+$/, '')
+      : `sprite_${category}_${now.toString().slice(-4)}`
+    const assetName = name?.trim() || defaultName
+    if (!assetName) throw new Error('Le nom du sprite est obligatoire.')
 
-    const dimensions = await getImageDimensions(file)
-
-    const defaultName =
-      file instanceof File
-        ? file.name.replace(/\.[^/.]+$/, '')
-        : `sprite_${category}_${Date.now().toString().slice(-4)}`
-    const assetName = name || defaultName
-    const spriteConfig = resolveSpriteConfig(assetName, category)
-
-    const initialTags = Array.from(new Set([category, ...(tags ?? [])]))
-
-    const newAsset: Asset = {
-      id,
+    const asset: Asset = {
+      id: generateId('asset'),
       name: assetName,
       category,
-      tags: initialTags,
-      blobId,
+      tags: Array.from(new Set([category, ...tags.map((tag) => tag.trim()).filter(Boolean)])),
+      blobId: generateId('blob'),
       width: dimensions.width,
       height: dimensions.height,
-      displayWidth: dimensions.width,
-      displayHeight: dimensions.height,
-      isMovable: spriteConfig.isMovable,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
+      character: character ? { ...character } : undefined,
+      isMovable: ASSET_CATEGORIES[category].placementMode === 'free-transform',
+      createdAt: now,
+      updatedAt: now
     }
 
-    await assetRepository.create(newAsset, file)
-    assets.value.push(newAsset)
-    selectedAssetId.value = newAsset.id
-
-    return newAsset
+    await assetRepository.create(asset, file)
+    assets.value.push(asset)
+    selectedAssetId.value = asset.id
+    return asset
   }
 
-  async function updateAsset(id: string, changes: Partial<Asset>) {
+  async function updateAsset(id: string, changes: Partial<Asset>): Promise<void> {
     await assetRepository.update(id, changes)
-    const idx = assets.value.findIndex((a) => a.id === id)
-    if (idx !== -1) {
-      assets.value[idx] = {
-        ...assets.value[idx],
-        ...changes,
-        updatedAt: Date.now()
-      }
-    }
+    const index = assets.value.findIndex((asset) => asset.id === id)
+    if (index !== -1) assets.value[index] = { ...assets.value[index], ...changes, updatedAt: Date.now() }
   }
 
-  async function deleteAsset(id: string) {
+  async function inspectAssetDeletion(id: string): Promise<{ layerCount: number; snapshotNames: string[] }> {
+    return await assetRepository.inspectDeletion(id)
+  }
+
+  async function deleteAssetCascade(id: string): Promise<number> {
+    const removed = await assetRepository.deleteCascade(id)
+    assets.value = assets.value.filter((asset) => asset.id !== id)
+    if (selectedAssetId.value === id) selectedAssetId.value = null
+    blobCacheService.clear()
+    return removed
+  }
+
+  async function discardImportedAsset(id: string): Promise<void> {
     await assetRepository.delete(id)
-    assets.value = assets.value.filter((a) => a.id !== id)
-    if (selectedAssetId.value === id) {
-      selectedAssetId.value = null
-    }
+    assets.value = assets.value.filter((asset) => asset.id !== id)
+    if (selectedAssetId.value === id) selectedAssetId.value = null
+    blobCacheService.clear()
   }
 
-  function selectAsset(id: string | null) {
+  function selectAsset(id: string | null): void {
     selectedAssetId.value = id
   }
 
@@ -143,15 +152,14 @@ export const useAssetStore = defineStore('asset', () => {
     selectedAssetId,
     selectedCategory,
     searchQuery,
-    selectedTags,
     isLoading,
     selectedAsset,
-    filteredAssets,
-    allTags,
     loadAssets,
     importAsset,
     updateAsset,
-    deleteAsset,
+    inspectAssetDeletion,
+    deleteAssetCascade,
+    discardImportedAsset,
     selectAsset
   }
 })

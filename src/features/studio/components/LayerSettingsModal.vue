@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, useId, watch } from 'vue'
-import type { EditorGroup } from '@core/types/editor.types'
-import { ASSET_CATEGORIES } from '@core/constants/categories'
-import type { RenderableLayer } from '../composables/useHierarchyResolver'
+import type { EditorGroup, EditorLayer } from '@core/types/editor.types'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { Modal } from '@/components/ui/modal'
@@ -14,28 +12,24 @@ import { Text } from '@/components/ui/text'
 
 const { group = null, layer = null } = defineProps<{
   group?: EditorGroup | null
-  layer?: RenderableLayer | null
+  layer?: EditorLayer | null
 }>()
 
 const open = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{ (event: 'saved'): void }>()
 const editorStore = useEditorStore()
 const assetStore = useAssetStore()
-
 const fieldId = useId()
 const x = ref<string | number>(0)
 const y = ref<string | number>(0)
 const scaleX = ref<string | number>(1)
 const scaleY = ref<string | number>(1)
 const ratioLocked = ref(true)
-const logicalWidth = ref<string | number>(1)
-const logicalHeight = ref<string | number>(1)
 const zIndex = ref<string | number>(0)
 
-const canEditLogicalSize = computed(
-  () => Boolean(layer) && ASSET_CATEGORIES[layer!.category]?.placementMode === 'free-transform'
+const layerAsset = computed(() =>
+  layer ? assetStore.assets.find((asset) => asset.id === layer.assetId) ?? null : null
 )
-
 const scaleXModel = computed<string | number>({
   get: () => scaleX.value,
   set: (value) => {
@@ -43,7 +37,6 @@ const scaleXModel = computed<string | number>({
     if (ratioLocked.value && value !== '') scaleY.value = value
   }
 })
-
 const scaleYModel = computed<string | number>({
   get: () => scaleY.value,
   set: (value) => {
@@ -56,62 +49,31 @@ watch(
   () => [open.value, group, layer] as const,
   ([isOpen]) => {
     if (!isOpen) return
-    if (group) {
-      x.value = group.transform?.x ?? 0
-      y.value = group.transform?.y ?? 0
-      scaleX.value = group.transform?.scaleX ?? 1
-      scaleY.value = group.transform?.scaleY ?? 1
-      zIndex.value = group.zIndex
-    } else if (layer) {
-      x.value = layer.localX
-      y.value = layer.localY
-      scaleX.value = layer.localScaleX
-      scaleY.value = layer.localScaleY
-      logicalWidth.value = layer.asset.displayWidth ?? layer.width
-      logicalHeight.value = layer.asset.displayHeight ?? layer.height
-      zIndex.value = layer.layerZIndex
-    }
-    ratioLocked.value = Math.abs(Number(scaleX.value) - Number(scaleY.value)) < 0.001
+    const target = group ?? layer
+    if (!target) return
+    x.value = target.transform.x
+    y.value = target.transform.y
+    scaleX.value = target.transform.scaleX
+    scaleY.value = target.transform.scaleY
+    zIndex.value = target.zIndex
+    ratioLocked.value = Math.abs(target.transform.scaleX - target.transform.scaleY) < 0.001
   },
   { immediate: true }
 )
 
-function clampScale(value: string | number) {
+function clampScale(value: string | number): number {
   return Number(Math.max(0.05, Math.min(5, Number(value) || 1)).toFixed(2))
 }
 
-function normalizeDimension(value: string | number, fallback: number) {
-  return Math.max(1, Math.round(Number(value) || fallback))
-}
-
-async function save() {
-  const safeScaleX = clampScale(scaleX.value)
-  const safeScaleY = clampScale(scaleY.value)
-
-  if (group) {
-    editorStore.updateGroupTransform(group.id, {
-      x: Number(x.value),
-      y: Number(y.value),
-      scaleX: safeScaleX,
-      scaleY: safeScaleY
-    })
-    editorStore.updateGroupZIndex(group.id, Number(zIndex.value))
-  } else if (layer) {
-    if (canEditLogicalSize.value) {
-      await assetStore.updateAsset(layer.asset.id, {
-        displayWidth: normalizeDimension(logicalWidth.value, layer.width),
-        displayHeight: normalizeDimension(logicalHeight.value, layer.height)
-      })
-    }
-    editorStore.updateLayerTransform(layer.layerId, {
-      x: Number(x.value),
-      y: Number(y.value),
-      scaleX: safeScaleX,
-      scaleY: safeScaleY
-    })
-    editorStore.updateLayerZIndex(layer.layerId, Number(zIndex.value))
+function save(): void {
+  const transform = {
+    x: Number(x.value),
+    y: Number(y.value),
+    scaleX: clampScale(scaleX.value),
+    scaleY: clampScale(scaleY.value)
   }
-
+  if (group) editorStore.updateGroupSettings(group.id, transform, Number(zIndex.value))
+  else if (layer) editorStore.updateLayerSettings(layer.id, transform, Number(zIndex.value))
   open.value = false
   emit('saved')
 }
@@ -119,8 +81,8 @@ async function save() {
 
 <template>
   <Modal
-    v-model="open"
-    :title="group ? `Réglages — ${group.name}` : `Réglages — ${layer?.asset.name ?? 'Calque'}`"
+    v-model:open="open"
+    :title="group ? `Réglages — ${group.name}` : `Réglages — ${layerAsset?.name ?? layer?.name ?? 'Calque'}`"
     subtitle="Ajustez précisément la transformation et la profondeur."
     size="sm"
     :close-on-backdrop="false"
@@ -133,12 +95,10 @@ async function save() {
         <Input :id="`${fieldId}-y`" v-model="y" type="number" />
       </FormGroup>
       <FormGroup label="Z-index" :label-for="`${fieldId}-z`" class="mb-0">
-        <Input :id="`${fieldId}-z`" v-model="zIndex" type="number" min="0" max="100" />
+        <Input :id="`${fieldId}-z`" v-model="zIndex" type="number" />
       </FormGroup>
 
-      <div
-        class="col-span-2 rounded-xl border border-border-subtle/80 bg-bg-surface/25 p-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]"
-      >
+      <div class="col-span-2 rounded-xl border border-border-subtle/80 bg-bg-surface/25 p-3">
         <div class="mb-3 flex items-center justify-between gap-3">
           <div>
             <Text variant="caption" class="text-xs font-semibold text-text-primary">Échelle par axe</Text>
@@ -150,60 +110,15 @@ async function save() {
             size="xs"
             variant="ghost"
             :aria-label="ratioLocked ? 'Déverrouiller le ratio' : 'Verrouiller le ratio'"
-            :title="ratioLocked ? 'Ratio verrouillé' : 'Ratio libre'"
             @click="ratioLocked = !ratioLocked"
           />
         </div>
         <div class="grid grid-cols-2 gap-3">
           <FormGroup label="Échelle X" :label-for="`${fieldId}-scale-x`" class="mb-0">
-            <Input
-              :id="`${fieldId}-scale-x`"
-              v-model="scaleXModel"
-              type="number"
-              min="0.05"
-              max="5"
-              step="0.05"
-            />
+            <Input :id="`${fieldId}-scale-x`" v-model="scaleXModel" type="number" min="0.05" max="5" step="0.05" />
           </FormGroup>
           <FormGroup label="Échelle Y" :label-for="`${fieldId}-scale-y`" class="mb-0">
-            <Input
-              :id="`${fieldId}-scale-y`"
-              v-model="scaleYModel"
-              type="number"
-              min="0.05"
-              max="5"
-              step="0.05"
-            />
-          </FormGroup>
-        </div>
-      </div>
-
-      <div
-        v-if="canEditLogicalSize"
-        class="col-span-2 rounded-xl border border-border-subtle/80 bg-bg-surface/25 p-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.15)]"
-      >
-        <div class="mb-3">
-          <Text variant="caption" class="text-xs font-semibold text-text-primary">Taille logique de l’asset</Text>
-          <Text variant="caption" color="muted" class="text-[10px]">Appliquée à toutes les occurrences de ce sprite.</Text>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <FormGroup label="Largeur (px)" :label-for="`${fieldId}-logical-width`" class="mb-0">
-            <Input
-              :id="`${fieldId}-logical-width`"
-              v-model="logicalWidth"
-              type="number"
-              min="1"
-              step="1"
-            />
-          </FormGroup>
-          <FormGroup label="Hauteur (px)" :label-for="`${fieldId}-logical-height`" class="mb-0">
-            <Input
-              :id="`${fieldId}-logical-height`"
-              v-model="logicalHeight"
-              type="number"
-              min="1"
-              step="1"
-            />
+            <Input :id="`${fieldId}-scale-y`" v-model="scaleYModel" type="number" min="0.05" max="5" step="0.05" />
           </FormGroup>
         </div>
       </div>

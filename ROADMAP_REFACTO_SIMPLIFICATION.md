@@ -1,10 +1,10 @@
 # Roadmap — éditeur unique, sans keyframes
 
-Statut : **planifiée, non implémentée**
+Statut : **archivée — implémentée puis remplacée par l’architecture décrite dans `ROADMAP.md`**
 
 Périmètre audité : `src/core`, `src/features`, `src/infrastructure`, `src/App.vue`, scripts, dépendances et tests.
 
-Contrainte de cette phase : **documentation uniquement, aucune modification du code applicatif**.
+Ce document conserve l’audit et le plan d’origine. Le statut réel de l’application et les validations sont consignés dans `ROADMAP.md` et `walkthrough.md`.
 
 ## 1. Résultat cible
 

@@ -74,7 +74,7 @@ watchEffect(async () => {
       <!-- Badge indicateur calibré sur Berlu -->
       <Badge
         v-if="asset.calibration"
-        variant="primary"
+        variant="accent"
         size="sm"
         class="absolute top-1.5 left-1.5 text-[9px] font-semibold gap-1 shadow-glass-xs border-primary/40 backdrop-blur-md"
         title="Cet asset est calibré sur le mannequin de Berlu"

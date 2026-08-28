@@ -29,8 +29,7 @@ export const useViewportSnapshotStore = defineStore('viewportSnapshots', () => {
       name: name.trim() || `Vue ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`,
       thumbnailDataUrl,
       camera: { ...document.camera },
-      character: { ...(document.character || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, visible: true, zIndex: 10 }) },
-      groups: JSON.parse(JSON.stringify(document.groups || [])),
+      groups: JSON.parse(JSON.stringify(document.groups)),
       layers: JSON.parse(JSON.stringify(document.layers)),
       createdAt: now,
       updatedAt: now

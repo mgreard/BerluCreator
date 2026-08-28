@@ -4,7 +4,7 @@ import { parseSpriteMetadata } from './demo-asset-seeder'
 describe('default sprite metadata', () => {
   it.each([
     ['background/background1.png', 'background'],
-    ['torso/Torse.png', 'torso'],
+    ['torso/Torse.png', 'body'],
     ['head/smile_head.png', 'head'],
     ['mouth/mouth_smile1.png', 'mouth'],
     ['eyes/hearts_eyes.png', 'eyes'],

@@ -1,138 +1,32 @@
 import type { AssetCategoryDefinition, AssetCategory } from '../types/asset.types'
 
+function category(
+  id: AssetCategory,
+  label: string,
+  icon: string,
+  description: string,
+  defaultZIndex: number,
+  layerCardinality: AssetCategoryDefinition['layerCardinality'],
+  placementMode: AssetCategoryDefinition['placementMode'],
+  color: string
+): AssetCategoryDefinition {
+  return { id, label, icon, description, defaultZIndex, layerCardinality, placementMode, color }
+}
+
 export const ASSET_CATEGORIES: Record<AssetCategory, AssetCategoryDefinition> = {
-  background: {
-    id: 'background',
-    label: 'Arrière-plans',
-    icon: 'tv_gen',
-    description: 'Arrière-plans et environnements du plateau télévisé',
-    defaultZIndex: 0,
-    layerCardinality: 'singleton',
-    placementMode: 'free-transform',
-    color: '#38bdf8',
-    filenamePrefix: 'arriere-plan'
-  },
-  torso: {
-    id: 'torso',
-    label: 'Torses & Bustes',
-    icon: 'body_system',
-    description: 'Corps du présentateur (racine de la cinématique)',
-    defaultZIndex: 10,
-    layerCardinality: 'singleton',
-    placementMode: 'character-anchored',
-    color: '#fbbf24',
-    filenamePrefix: 'torse'
-  },
-  head: {
-    id: 'head',
-    label: 'Têtes & Visages',
-    icon: 'face',
-    description: 'Tête recevant les expressions et les accessoires',
-    defaultZIndex: 20,
-    layerCardinality: 'singleton',
-    placementMode: 'character-anchored',
-    color: '#fb7185',
-    filenamePrefix: 'tete'
-  },
-  mouth: {
-    id: 'mouth',
-    label: 'Bouches & Phonèmes',
-    icon: 'lips',
-    description: 'Expressions labiales et formes de bouche pour le dialogue',
-    defaultZIndex: 25,
-    layerCardinality: 'singleton',
-    placementMode: 'character-anchored',
-    color: '#f87171',
-    filenamePrefix: 'bouche'
-  },
-  eyes: {
-    id: 'eyes',
-    label: 'Yeux & Lunettes',
-    icon: 'visibility',
-    description: 'Regard, clignements et émotions / Lunettes',
-    defaultZIndex: 26,
-    layerCardinality: 'singleton',
-    placementMode: 'character-anchored',
-    color: '#22d3ee',
-    filenamePrefix: 'yeux'
-  },
-  props_host: {
-    id: 'props_host',
-    label: 'Accessoires Présentateur',
-    icon: 'apparel',
-    description: 'Objets portés par le présentateur : chapeaux, lunettes et accessoires de visage',
-    defaultZIndex: 27,
-    layerCardinality: 'singleton',
-    placementMode: 'character-anchored',
-    color: '#c084fc',
-    filenamePrefix: 'accessoire-presentateur'
-  },
-  arms_left: {
-    id: 'arms_left',
-    label: 'Bras Gauche',
-    icon: 'front_hand',
-    description: 'Bras gauche, postures et gestuelle',
-    defaultZIndex: 12,
-    layerCardinality: 'singleton',
-    placementMode: 'character-anchored',
-    color: '#34d399',
-    filenamePrefix: 'bras-gauche'
-  },
-  arms_right: {
-    id: 'arms_right',
-    label: 'Bras Droit',
-    icon: 'waving_hand',
-    description: 'Bras droit, postures et gestuelle',
-    defaultZIndex: 15,
-    layerCardinality: 'singleton',
-    placementMode: 'character-anchored',
-    color: '#a3e635',
-    filenamePrefix: 'bras-droit'
-  },
-  props_set: {
-    id: 'props_set',
-    label: 'Accessoires Plateau',
-    icon: 'category',
-    description: 'Objets et éléments de décor positionnés sur le plateau',
-    defaultZIndex: 30,
-    layerCardinality: 'multi',
-    placementMode: 'free-transform',
-    color: '#facc15',
-    filenamePrefix: 'accessoire-plateau'
-  },
-  desk: {
-    id: 'desk',
-    label: 'Bureau',
-    icon: 'desk',
-    description: 'Bureau du présentateur',
-    defaultZIndex: 28,
-    layerCardinality: 'singleton',
-    placementMode: 'free-transform',
-    color: '#a3a3a3',
-    filenamePrefix: 'bureau'
-  },
-  props_desk: {
-    id: 'props_desk',
-    label: 'Objets du Bureau',
-    icon: 'inventory_2',
-    description: 'Objets posés sur le bureau du présentateur',
-    defaultZIndex: 35,
-    layerCardinality: 'multi',
-    placementMode: 'free-transform',
-    color: '#818cf8',
-    filenamePrefix: 'objet-bureau'
-  },
-  foreground: {
-    id: 'foreground',
-    label: 'Premier Plan',
-    icon: 'filter_frames',
-    description: 'Ambiances et effets couvrant le premier plan de la scène',
-    defaultZIndex: 50,
-    layerCardinality: 'multi',
-    placementMode: 'free-transform',
-    color: '#f87171',
-    filenamePrefix: 'premier-plan'
-  }
+  background: category('background', 'Arrière-plans', 'tv_gen', 'Environnements du plateau', 0, 'singleton', 'free-transform', '#38bdf8'),
+  character_full: category('character_full', 'Personnages complets', 'person', 'Sprite complet d’un personnage', 10, 'singleton', 'character-anchored', '#f59e0b'),
+  body: category('body', 'Corps & Bustes', 'body_system', 'Corps racine du rig', 10, 'singleton', 'character-anchored', '#fbbf24'),
+  head: category('head', 'Têtes & Visages', 'face', 'Tête et expressions', 20, 'singleton', 'character-anchored', '#fb7185'),
+  mouth: category('mouth', 'Bouches & Phonèmes', 'lips', 'Expressions labiales', 25, 'singleton', 'character-anchored', '#f87171'),
+  eyes: category('eyes', 'Yeux & Lunettes', 'visibility', 'Regards et émotions', 26, 'singleton', 'character-anchored', '#22d3ee'),
+  props_host: category('props_host', 'Accessoires du personnage', 'apparel', 'Accessoires visibles en mode rig', 27, 'singleton', 'character-anchored', '#c084fc'),
+  arms_left: category('arms_left', 'Bras gauche', 'front_hand', 'Postures du bras gauche', 12, 'singleton', 'character-anchored', '#34d399'),
+  arms_right: category('arms_right', 'Bras droit', 'waving_hand', 'Postures du bras droit', 15, 'singleton', 'character-anchored', '#a3e635'),
+  props_set: category('props_set', 'Accessoires plateau', 'category', 'Objets libres du plateau', 30, 'multi', 'free-transform', '#facc15'),
+  desk: category('desk', 'Bureau', 'desk', 'Mobilier du présentateur', 28, 'singleton', 'free-transform', '#a3a3a3'),
+  props_desk: category('props_desk', 'Objets du bureau', 'inventory_2', 'Objets posés sur le bureau', 35, 'multi', 'free-transform', '#818cf8'),
+  foreground: category('foreground', 'Premier plan', 'filter_frames', 'Effets au premier plan', 50, 'multi', 'free-transform', '#f87171')
 }
 
 export const CATEGORY_LIST = Object.values(ASSET_CATEGORIES)

@@ -47,7 +47,7 @@ async function saveCurrentViewport() {
   if (isSaving.value) return
   isSaving.value = true
   try {
-    editorStore.commitTransformSession(false)
+    editorStore.endGesture()
     const thumbnail = await captureCleanFrame(
       activeLayers.value,
       projectStore.currentProject.stage,

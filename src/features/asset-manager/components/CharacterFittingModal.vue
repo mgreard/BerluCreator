@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, watchEffect, onWatcherCleanup } from 'vue'
+import { computed, onUnmounted, ref, watch, watchEffect, onWatcherCleanup } from 'vue'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
@@ -176,6 +176,8 @@ function stopDrag() {
   window.removeEventListener('mouseup', stopDrag)
 }
 
+onUnmounted(stopDrag)
+
 function resetPosition() {
   offsetX.value = 0
   offsetY.value = 0
@@ -193,15 +195,13 @@ async function clearCalibration() {
     resetPosition()
     const activeLayer = editorStore.currentDocument.layers.find((l) => l.assetId === currentSprite.value!.id)
     if (activeLayer) {
-      editorStore.updateLayerTransform(activeLayer.id, {
+      editorStore.updateLayerSettings(activeLayer.id, {
         x: 0,
         y: 0,
         scaleX: 1,
         scaleY: 1,
         rotation: 0
-      })
-      const defaultZ = ASSET_CATEGORIES[currentSprite.value.category]?.defaultZIndex ?? 20
-      editorStore.updateLayerZIndex(activeLayer.id, defaultZ)
+      }, ASSET_CATEGORIES[currentSprite.value.category].defaultZIndex)
     }
     emit('saved', { ...currentSprite.value, calibration: undefined })
   } finally {
@@ -227,14 +227,13 @@ async function saveCurrentCalibration() {
     // Répercuter immédiatement sur le plateau si ce sprite est actif dans le studio
     const activeLayer = editorStore.currentDocument.layers.find((l) => l.assetId === currentSprite.value!.id)
     if (activeLayer) {
-      editorStore.updateLayerTransform(activeLayer.id, {
+      editorStore.updateLayerSettings(activeLayer.id, {
         x: calibration.x,
         y: calibration.y,
         scaleX: calibration.scaleX,
         scaleY: calibration.scaleY,
         rotation: calibration.rotation
-      })
-      editorStore.updateLayerZIndex(activeLayer.id, calibration.zIndex)
+      }, calibration.zIndex)
     }
 
     emit('saved', { ...currentSprite.value, calibration })
@@ -451,7 +450,7 @@ async function saveCurrentCalibration() {
                 :min="-180"
                 :max="180"
                 :step="5"
-                variant="neutral"
+                variant="primary"
                 size="sm"
               />
             </div>
@@ -487,7 +486,7 @@ async function saveCurrentCalibration() {
             </div>
             <Button
               v-if="currentSprite?.calibration"
-              variant="outline"
+              variant="secondary"
               size="xs"
               class="w-full text-text-muted hover:text-red-400 hover:border-red-400/50"
               :loading="isSaving"

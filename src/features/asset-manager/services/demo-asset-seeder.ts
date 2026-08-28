@@ -5,6 +5,7 @@ import {
   type AssetCategory
 } from '@core/types/asset.types'
 import { resolveSpriteConfig } from '@core/constants/sprites-config'
+import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { generateId } from '@/lib/utils'
 
 // Import eager de tous les sprites PNG du dossier assets
@@ -71,8 +72,9 @@ export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
         blobId,
         width: dimensions.width,
         height: dimensions.height,
-        displayWidth: dimensions.width,
-        displayHeight: dimensions.height,
+        character: ASSET_CATEGORIES[category].placementMode === 'character-anchored'
+          ? { key: 'berlu', name: 'Berlu', form: 'rig' }
+          : undefined,
         isMovable: spriteConfig.isMovable,
         createdAt: Date.now(),
         updatedAt: Date.now()
@@ -124,8 +126,8 @@ export function parseSpriteMetadata(filePath: string): {
     category = 'mouth'
     tags.push('mouth', 'bouche', 'phoneme', 'berlu')
   } else if (folder === 'torso') {
-    category = 'torso'
-    tags.push('torso', 'corps', 'berlu')
+    category = 'body'
+    tags.push('body', 'corps', 'berlu')
   } else if (folder === 'background') {
     category = 'background'
     tags.push('background', 'fond')

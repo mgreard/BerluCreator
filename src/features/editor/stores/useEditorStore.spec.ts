@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import type { Asset } from '@core/types/asset.types'
+import type { CharacterGroup, ViewportSnapshot } from '@core/types/editor.types'
+import { DEFAULT_TRANSFORM } from '@core/constants/editor'
+import { editorDocumentRepository } from '@infrastructure/db/repositories/editor-document.repository'
+import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useEditorStore } from './useEditorStore'
-import type { ViewportSnapshot } from '@core/types/editor.types'
 
 vi.mock('@infrastructure/db/repositories/editor-document.repository', () => ({
   editorDocumentRepository: {
@@ -12,124 +16,158 @@ vi.mock('@infrastructure/db/repositories/editor-document.repository', () => ({
   }
 }))
 
+function characterAsset(id: string, name: string, key: string, category: Asset['category']): Asset {
+  return {
+    id,
+    name,
+    category,
+    tags: [],
+    blobId: `blob-${id}`,
+    width: 840,
+    height: 908,
+    character: { key, name: key === 'berlu' ? 'Berlu' : 'Pedro', form: category === 'character_full' ? 'full' : 'rig' },
+    isMovable: false,
+    createdAt: 1,
+    updatedAt: 1
+  }
+}
+
 describe('useEditorStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.clearAllMocks()
   })
 
-  it('initialise un document d’édition par défaut avec rig personnage, groupes et caméra', () => {
+  it('initialise Berlu comme groupe personnage et unique source de transform', () => {
     const store = useEditorStore()
-    expect(store.currentDocument.id).toBe('doc_default')
-    expect(store.currentDocument.character).toBeDefined()
-    expect(store.currentDocument.character.visible).toBe(true)
-    expect(store.currentDocument.character.scaleX).toBe(1)
-    expect(store.currentDocument.groups?.length).toBeGreaterThan(0)
-    expect(store.currentDocument.layers).toHaveLength(0)
-    expect(store.currentDocument.camera.enabled).toBe(false)
+    const berlu = store.currentDocument.groups.find((group) => group.id === 'grp_berlu')
+    expect(berlu).toMatchObject({ kind: 'character', activeMode: 'rig', muted: false })
+    expect(berlu?.transform).toEqual(DEFAULT_TRANSFORM)
+    expect(store.currentDocument).not.toHaveProperty('character')
   })
 
-  it('assignAssetToGroup gère la cardinalité singleton en remplaçant le calque existant', () => {
+  it('conserve le sprite complet et le rig tout en basculant le mode actif', () => {
     const store = useEditorStore()
-    const firstLayer = store.assignAssetToGroup('asset-head-1', 'head', null, 'Tête 1')
-    expect(store.currentDocument.layers).toHaveLength(1)
-    expect(firstLayer.assetId).toBe('asset-head-1')
+    const assets = useAssetStore()
+    assets.assets = [
+      characterAsset('full', 'Berlu complet', 'berlu', 'character_full'),
+      characterAsset('head', 'Tête Berlu', 'berlu', 'head')
+    ]
 
-    const secondLayer = store.assignAssetToGroup('asset-head-2', 'head', null, 'Tête 2')
-    expect(store.currentDocument.layers).toHaveLength(1)
-    expect(secondLayer.id).toBe(firstLayer.id)
-    expect(secondLayer.assetId).toBe('asset-head-2')
+    const full = store.assignAssetToGroup('full', 'character_full')
+    const head = store.assignAssetToGroup('head', 'head')
+    const berlu = store.currentDocument.groups.find((group): group is CharacterGroup => group.id === full.groupId && group.kind === 'character')
+
+    expect(store.currentDocument.layers.map((layer) => layer.id)).toEqual([full.id, head.id])
+    expect(berlu?.activeMode).toBe('rig')
+    store.setCharacterMode(berlu!.id, 'full')
+    expect(berlu?.activeMode).toBe('full')
+    expect(store.currentDocument.layers).toHaveLength(2)
   })
 
-  it('assignAssetToGroup gère la cardinalité multi en ajoutant des calques distincts', () => {
+  it('applique la cardinalité des slots par personnage', () => {
     const store = useEditorStore()
-    const item1 = store.assignAssetToGroup('prop-1', 'props_set', null, 'Accessoire 1')
-    const item2 = store.assignAssetToGroup('prop-2', 'props_set', null, 'Accessoire 2')
+    const assets = useAssetStore()
+    assets.assets = [
+      characterAsset('berlu-head', 'Tête Berlu', 'berlu', 'head'),
+      characterAsset('pedro-head', 'Tête Pedro', 'pedro', 'head')
+    ]
+
+    const berluHead = store.assignAssetToGroup('berlu-head', 'head')
+    const pedroHead = store.assignAssetToGroup('pedro-head', 'head')
 
     expect(store.currentDocument.layers).toHaveLength(2)
-    expect(item1.id).not.toBe(item2.id)
-    expect(item2.order!).toBeGreaterThan(item1.order!)
+    expect(berluHead.groupId).not.toBe(pedroHead.groupId)
+    expect(store.currentDocument.groups.filter((group) => group.kind === 'character')).toHaveLength(2)
   })
 
-  it('permet de déplacer, masquer et verrouiller un calque', () => {
+  it('annule et rétablit une mutation structurelle et une gesture', async () => {
     const store = useEditorStore()
-    const layer = store.assignAssetToGroup('asset-torso', 'torso')
-
-    store.updateLayerTransform(layer.id, { x: 50, y: 100, scaleX: 1.2 })
-    expect(store.currentDocument.layers[0].transform).toEqual({ x: 50, y: 100, scaleX: 1.2 })
-
-    store.setLayerMuted(layer.id, true)
-    expect(store.currentDocument.layers[0].muted).toBe(true)
-
-    store.setLayerLocked(layer.id, true)
-    expect(store.currentDocument.layers[0].locked).toBe(true)
-
-    store.removeLayer(layer.id)
-    expect(store.currentDocument.layers).toHaveLength(0)
-  })
-
-  it('permet de manipuler le Rig global du personnage', () => {
-    const store = useEditorStore()
-    store.updateCharacterTransform({ x: 120, y: -40, scaleX: 1.15, scaleY: 1.15 })
-
-    expect(store.currentDocument.character.x).toBe(120)
-    expect(store.currentDocument.character.y).toBe(-40)
-    expect(store.currentDocument.character.scaleX).toBe(1.15)
-
-    store.toggleCharacterMuted()
-    expect(store.currentDocument.character.visible).toBe(false)
-  })
-
-  it('gère l’historique undo/redo sur les transformations de calque', () => {
-    const store = useEditorStore()
-    const layer = store.assignAssetToGroup('asset-1', 'props_set')
-
-    store.selectLayerForEditing(layer.id)
-    store.beginTransformGesture()
+    const layer = store.assignAssetToGroup('prop', 'props_set')
+    store.beginGesture('Déplacer')
     store.updateLayerTransform(layer.id, { x: 100, y: 200 })
-    store.endTransformGesture()
+    store.endGesture()
+    expect(store.currentDocument.layers[0].transform.x).toBe(100)
 
-    expect(store.currentDocument.layers[0].transform?.x).toBe(100)
-    expect(store.canUndoTransform).toBe(true)
-
-    store.undoLastTransform()
-    expect(store.currentDocument.layers[0].transform?.x).toBeUndefined()
-    expect(store.canRedoTransform).toBe(true)
-
-    store.redoLastTransform()
-    expect(store.currentDocument.layers[0].transform?.x).toBe(100)
+    store.undo()
+    expect(store.currentDocument.layers[0].transform.x).toBe(0)
+    store.undo()
+    expect(store.currentDocument.layers).toHaveLength(0)
+    store.redo()
+    expect(store.currentDocument.layers).toHaveLength(1)
+    await store.flushPersistence()
+    expect(editorDocumentRepository.save).toHaveBeenCalled()
   })
 
-  it('applique atomiquement un ViewportSnapshot en remplaçant la scène courante', () => {
+  it('ne remet pas la caméra en arrière lors d’un undo studio', () => {
     const store = useEditorStore()
-    store.assignAssetToGroup('old-asset', 'background')
+    store.assignAssetToGroup('prop', 'props_set')
+    store.updateCamera({ enabled: true, x: 12, y: 18, width: 800, height: 600, aspectRatio: 'custom' })
+    store.undo()
+    expect(store.currentDocument.layers).toHaveLength(0)
+    expect(store.currentDocument.camera).toMatchObject({ enabled: true, x: 12, y: 18 })
+  })
 
+  it('historise le mode, le verrouillage et l’ordre des calques', () => {
+    const store = useEditorStore()
+    const first = store.assignAssetToGroup('prop-1', 'props_set')
+    const second = store.assignAssetToGroup('prop-2', 'props_set')
+
+    store.moveLayer(first.id, 1)
+    expect(first.order).toBeGreaterThan(second.order)
+    store.setLayerLocked(first.id, true)
+    expect(first.locked).toBe(true)
+    store.undo()
+    expect(store.currentDocument.layers.find((layer) => layer.id === first.id)?.locked).toBe(false)
+    store.undo()
+    expect(store.currentDocument.layers.find((layer) => layer.id === first.id)?.order).toBeLessThan(
+      store.currentDocument.layers.find((layer) => layer.id === second.id)!.order
+    )
+
+    const group = store.currentDocument.groups.find((candidate) => candidate.kind === 'character')!
+    store.setCharacterMode(group.id, 'full')
+    store.undo()
+    expect((store.currentDocument.groups.find((candidate) => candidate.id === group.id) as CharacterGroup).activeMode).toBe('rig')
+    store.redo()
+    expect((store.currentDocument.groups.find((candidate) => candidate.id === group.id) as CharacterGroup).activeMode).toBe('full')
+  })
+
+  it('rebascule vers le rig après suppression du sprite complet actif et vide l’historique', () => {
+    const store = useEditorStore()
+    const assets = useAssetStore()
+    assets.assets = [
+      characterAsset('full', 'Berlu complet', 'berlu', 'character_full'),
+      characterAsset('head', 'Tête Berlu', 'berlu', 'head')
+    ]
+    const full = store.assignAssetToGroup('full', 'character_full')
+    store.assignAssetToGroup('head', 'head')
+    const group = store.currentDocument.groups.find(
+      (candidate): candidate is CharacterGroup => candidate.id === full.groupId && candidate.kind === 'character'
+    )!
+    store.setCharacterMode(group.id, 'full')
+
+    store.syncAfterAssetDeletion('full')
+
+    expect(group.activeMode).toBe('rig')
+    expect(store.currentDocument.layers.map((layer) => layer.assetId)).toEqual(['head'])
+    expect(store.canUndo).toBe(false)
+  })
+
+  it('applique un snapshot et vide l’historique', () => {
+    const store = useEditorStore()
+    store.assignAssetToGroup('old', 'background')
     const snapshot: ViewportSnapshot = {
-      id: 'snap-1',
-      name: 'Vue Test',
+      id: 'snap',
+      name: 'Vue',
       thumbnailDataUrl: '',
-      camera: { enabled: true, x: 10, y: 20, width: 800, height: 600, aspectRatio: '16:9' },
-      character: { x: 50, y: 25, scaleX: 1.1, scaleY: 1.1, rotation: 0, visible: true, zIndex: 10 },
-      groups: [{ id: 'grp-test', name: 'Groupe Snap', zIndex: 10, allowedCategories: [] }],
-      layers: [{
-        id: 'layer-snap',
-        assetId: 'asset-new',
-        name: 'Nouveau',
-        category: 'torso',
-        groupId: 'grp-test',
-        zIndex: 10,
-        order: 0,
-        muted: false,
-        locked: false
-      }],
+      camera: { enabled: true, x: 10, y: 20, width: 800, height: 600, aspectRatio: 'custom' },
+      groups: store.currentDocument.groups,
+      layers: [],
       createdAt: 1,
       updatedAt: 1
     }
-
-    const count = store.applyViewportSnapshot(snapshot)
-    expect(count).toBe(1)
+    expect(store.applyViewportSnapshot(snapshot)).toBe(0)
+    expect(store.canUndo).toBe(false)
     expect(store.currentDocument.camera.enabled).toBe(true)
-    expect(store.currentDocument.character.x).toBe(50)
-    expect(store.currentDocument.layers[0].assetId).toBe('asset-new')
-    expect(store.currentDocument.groups?.[0]?.name).toBe('Groupe Snap')
   })
 })

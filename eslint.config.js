@@ -80,6 +80,7 @@ export default tseslint.config(
       'node_modules/**',
       'coverage/**',
       '.vite/**',
+      '.histoire/**',
       '*.d.ts',
       '**/*.d.ts',
       '.agents/**',

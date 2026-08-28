@@ -8,7 +8,8 @@ import type { SpritesConfigFile, AssetCategory, SpriteConfigRule } from '../type
 export const SPRITES_CONFIG: SpritesConfigFile = {
   categoryDefaults: {
     background: { isMovable: false, defaultZIndex: 0 },
-    torso: { isMovable: false, defaultZIndex: 10 },
+    character_full: { isMovable: false, defaultZIndex: 10 },
+    body: { isMovable: false, defaultZIndex: 10 },
     head: { isMovable: false, defaultZIndex: 20 },
     mouth: { isMovable: false, defaultZIndex: 25 },
     eyes: { isMovable: false, defaultZIndex: 24 },

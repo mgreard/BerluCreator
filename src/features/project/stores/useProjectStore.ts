@@ -25,8 +25,7 @@ export const useProjectStore = defineStore('project', () => {
     if (projects.length > 0) {
       currentProject.value = projects[0]
       if (!currentProject.value.editorDocumentId) {
-        currentProject.value.editorDocumentId =
-          currentProject.value.activeSequenceId || 'doc_default'
+        currentProject.value.editorDocumentId = 'doc_default'
       }
     } else {
       await projectRepository.create(currentProject.value)

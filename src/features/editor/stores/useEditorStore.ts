@@ -1,7 +1,9 @@
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
 import type {
   CameraFrame,
+  CharacterGroup,
+  CharacterMode,
   EditorDocument,
   EditorGroup,
   EditorGroupColor,
@@ -9,52 +11,57 @@ import type {
   Transform2D,
   ViewportSnapshot
 } from '@core/types/editor.types'
-import { type AssetCategory } from '@core/types/asset.types'
-import { DEFAULT_STAGE_RESOLUTION, DEFAULT_EDITOR_GROUPS } from '@core/constants/editor'
+import type { Asset, AssetCategory } from '@core/types/asset.types'
+import {
+  CHARACTER_CATEGORIES,
+  DEFAULT_EDITOR_GROUPS,
+  DEFAULT_STAGE_RESOLUTION,
+  DEFAULT_TRANSFORM
+} from '@core/constants/editor'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { editorDocumentRepository } from '@infrastructure/db/repositories/editor-document.repository'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
+import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { generateId } from '@/lib/utils'
 
-export type TransformHistoryTarget =
-  | { kind: 'group'; groupId: string }
-  | { kind: 'layer'; layerId: string }
-
-interface TransformHistoryEntry {
-  kind: 'transform'
-  target: TransformHistoryTarget
-  before: Partial<Transform2D> | undefined
-  after: Partial<Transform2D> | undefined
+interface StudioState {
+  groups: EditorGroup[]
+  layers: EditorLayer[]
 }
 
-interface StructureHistoryEntry {
-  kind: 'structure'
-  documentBefore: EditorDocument
-  documentAfter: EditorDocument
+interface StudioHistoryEntry {
+  label: string
+  before: StudioState
+  after: StudioState
 }
 
-interface BatchHistoryEntry {
-  kind: 'batch'
-  entries: StudioHistoryEntry[]
-}
-
-type StudioHistoryEntry =
-  | TransformHistoryEntry
-  | StructureHistoryEntry
-  | BatchHistoryEntry
-
-interface TransformEditSession {
-  target: TransformHistoryTarget
-  before: Partial<Transform2D> | undefined
-  gestureBefore?: Partial<Transform2D>
-  gestureActive: boolean
-  undo: StudioHistoryEntry[]
-  redo: StudioHistoryEntry[]
+interface StudioGesture {
+  label: string
+  before: StudioState
 }
 
 const MAX_HISTORY = 50
 
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value))
+}
+
+function normalizeTransform(transform?: Partial<Transform2D>): Transform2D {
+  return { ...DEFAULT_TRANSFORM, ...(transform ?? {}) }
+}
+
+function slugifyCharacter(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || 'berlu'
+}
+
 function createDefaultDocument(projectId = 'proj_default'): EditorDocument {
+  const now = Date.now()
   return {
     id: 'doc_default',
     projectId,
@@ -67,88 +74,40 @@ function createDefaultDocument(projectId = 'proj_default'): EditorDocument {
       height: DEFAULT_STAGE_RESOLUTION.height,
       aspectRatio: '16:9'
     },
-    character: {
-      x: 0,
-      y: 0,
-      scaleX: 1,
-      scaleY: 1,
-      rotation: 0,
-      visible: true,
-      zIndex: 10
-    },
-    groups: JSON.parse(JSON.stringify(DEFAULT_EDITOR_GROUPS)),
+    groups: clone(DEFAULT_EDITOR_GROUPS),
     layers: [],
-    createdAt: Date.now(),
-    updatedAt: Date.now()
+    createdAt: now,
+    updatedAt: now
   }
 }
 
-function cloneTransform(transform?: Partial<Transform2D>): Partial<Transform2D> | undefined {
-  return transform ? { ...transform } : undefined
+function stateOf(document: EditorDocument): StudioState {
+  return clone({ groups: document.groups, layers: document.layers })
 }
 
-function transformsAreEqual(
-  left?: Partial<Transform2D>,
-  right?: Partial<Transform2D>
-): boolean {
-  if (!left && !right) return true
-  if (!left || !right) return false
-  return (
-    (left.x ?? 0) === (right.x ?? 0) &&
-    (left.y ?? 0) === (right.y ?? 0) &&
-    (left.scaleX ?? 1) === (right.scaleX ?? 1) &&
-    (left.scaleY ?? 1) === (right.scaleY ?? 1) &&
-    (left.rotation ?? 0) === (right.rotation ?? 0) &&
-    (left.opacity ?? 1) === (right.opacity ?? 1)
-  )
+function statesAreEqual(left: StudioState, right: StudioState): boolean {
+  return JSON.stringify(left) === JSON.stringify(right)
 }
 
-function cloneDocument(doc: EditorDocument): EditorDocument {
-  return JSON.parse(JSON.stringify(doc))
+function isCharacterCategory(category: AssetCategory): boolean {
+  return ASSET_CATEGORIES[category].placementMode === 'character-anchored'
 }
 
-const SYSTEM_TAGS_SET = new Set([
-  'arms', 'arms_left', 'arms_right', 'bras', 'left', 'right',
-  'head', 'visage', 'expression', 'face',
-  'mouth', 'bouche', 'phoneme', 'lips',
-  'torso', 'corps', 'body', 'buste',
-  'eyes', 'regard', 'lunettes', 'oeil', 'yeux',
-  'props-host', 'props_host', 'presentateur', 'accessoire', 'apparel',
-  'props-set', 'props_set', 'plateau', 'objet',
-  'props-desk', 'props_desk', 'table',
-  'background', 'fond', 'decor', 'arriere-plan',
-  'desk', 'bureau',
-  'foreground', 'premier-plan', 'ambiance',
-  'tenue', 'outfit', 'costume', 'complet', 'full', 'all', 'sprite'
-])
-
-function isCustomCharacterTag(tag: string): boolean {
-  const clean = tag.trim().toLowerCase()
-  if (!clean) return false
-  if (SYSTEM_TAGS_SET.has(clean)) return false
-  if (clean.includes('_') || clean.includes('-')) return false
-  return clean !== 'berlu'
-}
-
-function sanitizeDocumentGroups(doc: EditorDocument): void {
-  const invalidGroupIds = new Set<string>()
-  for (const g of doc.groups ?? []) {
-    if (!g.isDefault && SYSTEM_TAGS_SET.has(g.name.toLowerCase().trim())) {
-      invalidGroupIds.add(g.id)
-    }
-  }
-
-  for (const layer of doc.layers) {
-    const isChar = ASSET_CATEGORIES[layer.category]?.placementMode === 'character-anchored'
-    if (isChar) {
-      if (!layer.groupId || invalidGroupIds.has(layer.groupId)) {
-        layer.groupId = 'grp_berlu'
-      }
-    }
-  }
-
-  if (invalidGroupIds.size > 0) {
-    doc.groups = doc.groups.filter((g) => !invalidGroupIds.has(g.id))
+function createCharacterGroup(name: string, key: string, zIndex: number): CharacterGroup {
+  return {
+    id: generateId('grp_char'),
+    name,
+    kind: 'character',
+    characterKey: key,
+    activeMode: 'rig',
+    zIndex,
+    transform: { ...DEFAULT_TRANSFORM },
+    muted: false,
+    locked: false,
+    collapsed: false,
+    color: 'indigo',
+    allowedCategories: [...CHARACTER_CATEGORIES],
+    isDefault: false
   }
 }
 
@@ -157,83 +116,136 @@ export const useEditorStore = defineStore('editor', () => {
   const selectedLayerId = ref<string | null>(null)
   const selectedGroupId = ref<string | null>(null)
   const editScope = ref<'group' | 'layer'>('layer')
-
   const undoStack = ref<StudioHistoryEntry[]>([])
   const redoStack = ref<StudioHistoryEntry[]>([])
-  const activeTransformSession = ref<TransformEditSession | null>(null)
-
+  const activeGesture = ref<StudioGesture | null>(null)
   const isLoading = ref(false)
   const isSaving = ref(false)
 
-  const selectedLayer = computed(() => {
-    return currentDocument.value.layers.find((l) => l.id === selectedLayerId.value) ?? null
-  })
+  let saveQueue: Promise<void> = Promise.resolve()
+  let queuedSaves = 0
 
-  const selectedGroup = computed(() => {
-    return currentDocument.value.groups?.find((g) => g.id === selectedGroupId.value) ?? null
-  })
+  const selectedLayer = computed(() =>
+    currentDocument.value.layers.find((layer) => layer.id === selectedLayerId.value) ?? null
+  )
+  const selectedGroup = computed(() =>
+    currentDocument.value.groups.find((group) => group.id === selectedGroupId.value) ?? null
+  )
+  const canUndo = computed(() => undoStack.value.length > 0)
+  const canRedo = computed(() => redoStack.value.length > 0)
+  const hasActiveGesture = computed(() => activeGesture.value !== null)
 
-  const sortedLayers = computed(() => {
-    return [...currentDocument.value.layers].sort((left, right) => {
-      const isLeftChar = ASSET_CATEGORIES[left.category]?.placementMode === 'character-anchored'
-      const isRightChar = ASSET_CATEGORIES[right.category]?.placementMode === 'character-anchored'
-      const charZ = currentDocument.value.character?.zIndex ?? 10
+  function persistCurrentDocument(): Promise<void> {
+    const snapshot = clone(currentDocument.value)
+    snapshot.updatedAt = Date.now()
+    queuedSaves += 1
+    isSaving.value = true
+    saveQueue = saveQueue
+      .catch(() => undefined)
+      .then(() => editorDocumentRepository.save(snapshot))
+      .finally(() => {
+        queuedSaves -= 1
+        isSaving.value = queuedSaves > 0
+      })
+    return saveQueue
+  }
 
-      const leftZ = isLeftChar ? charZ * 100 + left.zIndex : left.zIndex
-      const rightZ = isRightChar ? charZ * 100 + right.zIndex : right.zIndex
-
-      if (leftZ !== rightZ) return leftZ - rightZ
-      return (left.order ?? 0) - (right.order ?? 0)
+  function persistInBackground(): void {
+    void persistCurrentDocument().catch((error) => {
+      console.error('Échec de sauvegarde du document :', error)
     })
-  })
+  }
 
-  const hasActiveTransformSession = computed(() => activeTransformSession.value !== null)
-  const canUndoTransform = computed(() =>
-    activeTransformSession.value
-      ? activeTransformSession.value.undo.length > 0
-      : undoStack.value.length > 0
-  )
-  const canRedoTransform = computed(() =>
-    activeTransformSession.value
-      ? activeTransformSession.value.redo.length > 0
-      : redoStack.value.length > 0
-  )
+  async function flushPersistence(): Promise<void> {
+    await saveQueue
+  }
 
-  // ==================== CHARGEMENT ET SAUVEGARDE ====================
+  function pushHistory(label: string, before: StudioState, after: StudioState): void {
+    if (statesAreEqual(before, after)) return
+    undoStack.value.push({ label, before, after })
+    if (undoStack.value.length > MAX_HISTORY) undoStack.value.shift()
+    redoStack.value = []
+  }
+
+  function mutateStudio<T>(label: string, mutation: () => T): T {
+    const before = activeGesture.value ? null : stateOf(currentDocument.value)
+    const result = mutation()
+    if (before) pushHistory(label, before, stateOf(currentDocument.value))
+    if (!activeGesture.value) persistInBackground()
+    return result
+  }
+
+  function beginGesture(label = 'Transformer le studio'): void {
+    if (activeGesture.value) return
+    activeGesture.value = { label, before: stateOf(currentDocument.value) }
+  }
+
+  function endGesture(): void {
+    const gesture = activeGesture.value
+    if (!gesture) return
+    activeGesture.value = null
+    const after = stateOf(currentDocument.value)
+    pushHistory(gesture.label, gesture.before, after)
+    if (!statesAreEqual(gesture.before, after)) persistInBackground()
+  }
+
+  function cancelGesture(): void {
+    const gesture = activeGesture.value
+    if (!gesture) return
+    currentDocument.value.groups = clone(gesture.before.groups)
+    currentDocument.value.layers = clone(gesture.before.layers)
+    activeGesture.value = null
+  }
+
+  function clearHistory(): void {
+    activeGesture.value = null
+    undoStack.value = []
+    redoStack.value = []
+  }
+
+  function restoreState(state: StudioState): void {
+    currentDocument.value.groups = clone(state.groups)
+    currentDocument.value.layers = clone(state.layers)
+    if (selectedLayerId.value && !currentDocument.value.layers.some((l) => l.id === selectedLayerId.value)) {
+      selectedLayerId.value = null
+    }
+    if (selectedGroupId.value && !currentDocument.value.groups.some((g) => g.id === selectedGroupId.value)) {
+      selectedGroupId.value = null
+    }
+  }
+
+  function undo(): void {
+    endGesture()
+    const entry = undoStack.value.pop()
+    if (!entry) return
+    restoreState(entry.before)
+    redoStack.value.push(entry)
+    persistInBackground()
+  }
+
+  function redo(): void {
+    endGesture()
+    const entry = redoStack.value.pop()
+    if (!entry) return
+    restoreState(entry.after)
+    undoStack.value.push(entry)
+    persistInBackground()
+  }
 
   async function loadDocument(documentId: string, projectId = 'proj_default'): Promise<EditorDocument> {
     isLoading.value = true
     try {
       const existing = await editorDocumentRepository.getById(documentId)
       if (existing) {
-        if (!existing.character) {
-          const berluGroup = existing.groups?.find((g) => g.id === 'grp_berlu')
-          existing.character = {
-            x: berluGroup?.transform?.x ?? 0,
-            y: berluGroup?.transform?.y ?? 0,
-            scaleX: berluGroup?.transform?.scaleX ?? 1,
-            scaleY: berluGroup?.transform?.scaleY ?? 1,
-            rotation: berluGroup?.transform?.rotation ?? 0,
-            visible: !(berluGroup?.muted ?? false),
-            zIndex: berluGroup?.zIndex ?? 10
-          }
-        }
-        sanitizeDocumentGroups(existing)
         currentDocument.value = existing
       } else {
-        const byProject = await editorDocumentRepository.getByProjectId(projectId)
-        if (byProject.length > 0) {
-          sanitizeDocumentGroups(byProject[0])
-          currentDocument.value = byProject[0]
-        } else {
-          currentDocument.value = createDefaultDocument(projectId)
-          currentDocument.value.id = documentId || 'doc_default'
-          await editorDocumentRepository.save(currentDocument.value)
-        }
+        const projectDocuments = await editorDocumentRepository.getByProjectId(projectId)
+        currentDocument.value = projectDocuments[0] ?? createDefaultDocument(projectId)
+        currentDocument.value.id = documentId || 'doc_default'
+        if (projectDocuments.length === 0) await editorDocumentRepository.save(currentDocument.value)
       }
-      clearStudioSelection(false)
-      undoStack.value = []
-      redoStack.value = []
+      clearStudioSelection()
+      clearHistory()
       return currentDocument.value
     } finally {
       isLoading.value = false
@@ -241,589 +253,321 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   async function saveDocument(): Promise<void> {
-    isSaving.value = true
+    endGesture()
+    await persistCurrentDocument()
+  }
+
+  function resolveAsset(assetId: string): Asset | undefined {
     try {
-      commitTransformSession(false)
-      sanitizeDocumentGroups(currentDocument.value)
-      await editorDocumentRepository.save(currentDocument.value)
-    } finally {
-      isSaving.value = false
+      return useAssetStore().assets.find((asset) => asset.id === assetId)
+    } catch {
+      return undefined
     }
   }
 
-  // ==================== GESTION DES CALQUES ====================
+  function findOrCreateCharacterGroup(asset?: Asset, targetGroupId?: string | null): CharacterGroup {
+    const targeted = targetGroupId
+      ? currentDocument.value.groups.find((group): group is CharacterGroup => group.id === targetGroupId && group.kind === 'character')
+      : undefined
+    if (targeted) return targeted
+
+    const name = asset?.character?.name?.trim() || 'Berlu'
+    const key = asset?.character?.key || slugifyCharacter(name)
+    const existing = currentDocument.value.groups.find(
+      (group): group is CharacterGroup => group.kind === 'character' && group.characterKey === key
+    )
+    if (existing) return existing
+
+    const maxZ = currentDocument.value.groups.reduce((max, group) => Math.max(max, group.zIndex), 0)
+    const created = createCharacterGroup(name, key, Math.max(20, maxZ + 1))
+    currentDocument.value.groups.push(created)
+    return created
+  }
+
+  function findStageGroup(category: AssetCategory, targetGroupId?: string | null): EditorGroup {
+    const targeted = targetGroupId
+      ? currentDocument.value.groups.find((group) => group.id === targetGroupId && group.kind === 'stage')
+      : undefined
+    if (targeted) return targeted
+    const matching = currentDocument.value.groups.find(
+      (group) => group.kind === 'stage' && group.allowedCategories.includes(category)
+    )
+    if (matching) return matching
+    return currentDocument.value.groups.find((group) => group.kind === 'stage') ?? currentDocument.value.groups[0]
+  }
 
   function assignAssetToGroup(
     assetId: string,
     category: AssetCategory,
     targetGroupId?: string | null,
     name?: string
-  ): EditorLayer | null {
-    commitTransformSession(false)
-    const categoryDef = ASSET_CATEGORIES[category]
-    const cardinality = categoryDef?.layerCardinality ?? 'multi'
+  ): EditorLayer {
+    return mutateStudio('Assigner un asset', () => {
+      const asset = resolveAsset(assetId)
+      const group = isCharacterCategory(category)
+        ? findOrCreateCharacterGroup(asset, targetGroupId)
+        : findStageGroup(category, targetGroupId)
+      const singleton = ASSET_CATEGORIES[category].layerCardinality === 'singleton' || isCharacterCategory(category)
+      const existing = singleton
+        ? currentDocument.value.layers.find((layer) => layer.groupId === group.id && layer.category === category)
+        : undefined
+      const calibration = asset?.calibration
 
-    const isCharacter = categoryDef?.placementMode === 'character-anchored'
-    let foundAsset: any = undefined
-    let calibration = undefined
-    try {
-      const assetStore = useAssetStore()
-      foundAsset = assetStore.assets.find((a) => a.id === assetId)
-      if (foundAsset?.calibration) {
-        calibration = foundAsset.calibration
-      }
-    } catch {
-      // Ignorer si appelé hors contexte Pinia actif
-    }
-
-    // 1. Si un groupe cible valide est spécifié par l'utilisateur (ex: groupe actif/sélectionné)
-    let group = targetGroupId
-      ? currentDocument.value.groups.find(
-          (g) =>
-            g.id === targetGroupId &&
-            (g.allowedCategories.length === 0 || g.allowedCategories.includes(category))
-        )
-      : null
-
-    // 2. Si c'est un élément de personnage et qu'aucun groupe spécifique n'est spécifié :
-    if (!group && isCharacter) {
-      // Rechercher un tag de personnage personnalisé sur l'asset (ex: "Pedro", "Invité"...)
-      const charTag = foundAsset?.tags?.find((t: string) => isCustomCharacterTag(t))
-
-      if (charTag) {
-        const formattedName = charTag.charAt(0).toUpperCase() + charTag.slice(1)
-        let charGroup = currentDocument.value.groups.find(
-          (g) =>
-            g.name.toLowerCase() === formattedName.toLowerCase() ||
-            g.customCategory?.toLowerCase() === formattedName.toLowerCase()
-        )
-
-        // Si le groupe pour ce personnage n'existe pas encore sur le canvas, le créer automatiquement
-        if (!charGroup) {
-          const maxZ = currentDocument.value.groups.reduce((max, g) => Math.max(max, g.zIndex), 0)
-          charGroup = {
-            id: generateId('grp_char'),
-            name: formattedName,
-            zIndex: Math.max(20, maxZ + 1),
-            color: 'indigo',
-            allowedCategories: [
-              'torso',
-              'head',
-              'mouth',
-              'eyes',
-              'arms_left',
-              'arms_right',
-              'props_host'
-            ],
-            isDefault: false
-          }
-          currentDocument.value.groups.push(charGroup)
-        }
-        group = charGroup
-      } else {
-        // Personnage par défaut : toutes les pièces de Berlu vont solidairement dans grp_berlu
-        group = currentDocument.value.groups.find((g) => g.id === 'grp_berlu')
-      }
-    }
-
-    // 3. Fallback : groupe par défaut autorisant cette catégorie
-    if (!group) {
-      group = currentDocument.value.groups.find(
-        (g) => g.allowedCategories.includes(category)
-      ) ?? currentDocument.value.groups.find(
-        (g) => g.isDefault && g.allowedCategories.length === 0
-      ) ?? currentDocument.value.groups[0]
-    }
-
-    if (!group) {
-      // Création automatique de groupe de secours
-      const newGroup: EditorGroup = {
-        id: generateId('grp'),
-        name: 'Groupe Principal',
-        zIndex: categoryDef?.defaultZIndex ?? 0,
-        allowedCategories: [category],
-        isDefault: false
-      }
-      currentDocument.value.groups.push(newGroup)
-      group = newGroup
-    }
-
-    // Gestion de la cardinalité (singleton ou catégorie de personnage) :
-    // Un personnage ne peut avoir qu'un seul asset par catégorie à la fois sur le viewport.
-    const isSingleSlot = cardinality === 'singleton' || isCharacter
-
-    if (isSingleSlot) {
-      const existingLayer = currentDocument.value.layers.find(
-        (l) => l.category === category && l.groupId === group!.id
-      ) ?? (isCharacter ? currentDocument.value.layers.find((l) => l.category === category) : undefined)
-
-      if (existingLayer) {
-        // Toggle OFF : Si cet asset est déjà sur le calque actif et visible, on le retire du viewport !
-        if (existingLayer.assetId === assetId && !existingLayer.muted) {
-          removeLayer(existingLayer.id)
-          return null
-        }
-
-        // Sinon, on remplace l'asset du calque
-        existingLayer.assetId = assetId
-        existingLayer.name = name || existingLayer.name
-        existingLayer.groupId = group!.id
-        existingLayer.muted = false
+      if (existing) {
+        existing.assetId = assetId
+        existing.name = name || asset?.name || existing.name
+        existing.muted = false
         if (calibration) {
-          existingLayer.transform = {
-            x: calibration.x,
-            y: calibration.y,
-            scaleX: calibration.scaleX,
-            scaleY: calibration.scaleY,
-            rotation: calibration.rotation ?? 0
-          }
-          if (calibration.zIndex !== undefined) {
-            existingLayer.zIndex = calibration.zIndex
-          }
+          existing.transform = normalizeTransform(calibration)
+          existing.zIndex = calibration.zIndex ?? existing.zIndex
         }
-        selectLayerForEditing(existingLayer.id)
-        void saveDocument()
-        return existingLayer
+        if (group.kind === 'character') group.activeMode = category === 'character_full' ? 'full' : 'rig'
+        selectedLayerId.value = existing.id
+        selectedGroupId.value = group.id
+        return existing
       }
-    } else {
-      // Pour les catégories multi (ex: décor plateau) : si l'asset exact existe déjà dans ce groupe, le retirer au clic (toggle off)
-      const duplicateLayer = currentDocument.value.layers.find(
-        (l) => l.assetId === assetId && l.groupId === group!.id && !l.muted
-      )
-      if (duplicateLayer) {
-        removeLayer(duplicateLayer.id)
-        return null
+
+      const nextOrder = currentDocument.value.layers.reduce((max, layer) => Math.max(max, layer.order), -1) + 1
+      const layer: EditorLayer = {
+        id: generateId('layer'),
+        assetId,
+        name: name || asset?.name || ASSET_CATEGORIES[category].label,
+        category,
+        groupId: group.id,
+        zIndex: calibration?.zIndex ?? ASSET_CATEGORIES[category].defaultZIndex,
+        order: nextOrder,
+        muted: false,
+        locked: false,
+        transform: normalizeTransform(calibration)
       }
-    }
-
-    // Sinon, créer un nouveau calque
-    const maxOrder = currentDocument.value.layers
-      .filter((l) => l.groupId === group!.id)
-      .reduce((max, l) => Math.max(max, l.order ?? -1), -1)
-
-    const newLayer: EditorLayer = {
-      id: generateId('layer'),
-      assetId,
-      name: name || `Calque ${category}`,
-      category,
-      groupId: group.id,
-      zIndex: calibration?.zIndex ?? categoryDef?.defaultZIndex ?? 0,
-      order: maxOrder + 1,
-      transform: calibration
-        ? {
-            x: calibration.x,
-            y: calibration.y,
-            scaleX: calibration.scaleX,
-            scaleY: calibration.scaleY,
-            rotation: calibration.rotation ?? 0
-          }
-        : undefined,
-      muted: false,
-      locked: false
-    }
-
-    currentDocument.value.layers.push(newLayer)
-    selectLayerForEditing(newLayer.id)
-    void saveDocument()
-    return newLayer
+      if (!calibration && group.kind === 'stage' && category !== 'background' && asset) {
+        const stage = useProjectStore().currentProject.stage
+        layer.transform.x = Math.round((stage.width - asset.width) / 2)
+        layer.transform.y = Math.round((stage.height - asset.height) / 2)
+      }
+      currentDocument.value.layers.push(layer)
+      if (group.kind === 'character') group.activeMode = category === 'character_full' ? 'full' : 'rig'
+      selectedLayerId.value = layer.id
+      selectedGroupId.value = group.id
+      return layer
+    })
   }
 
   function addLayer(layer: Omit<EditorLayer, 'id'> & { id?: string }): EditorLayer {
-    const created: EditorLayer = {
-      ...layer,
-      id: layer.id || generateId('layer')
-    }
-    currentDocument.value.layers.push(created)
-    void saveDocument()
-    return created
+    return mutateStudio('Ajouter un calque', () => {
+      const created = { ...layer, id: layer.id || generateId('layer') } as EditorLayer
+      currentDocument.value.layers.push(created)
+      return created
+    })
   }
 
   function removeLayer(layerId: string): void {
-    commitTransformSession(false)
-    currentDocument.value.layers = currentDocument.value.layers.filter((l) => l.id !== layerId)
-    if (selectedLayerId.value === layerId) {
-      selectedLayerId.value = null
-    }
-    void saveDocument()
+    mutateStudio('Retirer un calque', () => {
+      currentDocument.value.layers = currentDocument.value.layers.filter((layer) => layer.id !== layerId)
+      if (selectedLayerId.value === layerId) selectedLayerId.value = null
+    })
   }
 
-  function updateLayer(layerId: string, changes: Partial<EditorLayer>): void {
-    const layer = currentDocument.value.layers.find((l) => l.id === layerId)
-    if (layer) {
-      Object.assign(layer, changes)
-      void saveDocument()
-    }
+  function updateLayer(layerId: string, changes: Partial<EditorLayer>, label = 'Modifier un calque'): void {
+    mutateStudio(label, () => {
+      const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
+      if (layer) Object.assign(layer, changes)
+    })
   }
 
   function updateLayerTransform(layerId: string, transform: Partial<Transform2D>): void {
-    const layer = currentDocument.value.layers.find((l) => l.id === layerId)
-    if (layer) {
-      layer.transform = {
-        ...(layer.transform ?? {}),
-        ...transform
-      }
+    const apply = () => {
+      const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
+      if (layer) layer.transform = normalizeTransform({ ...layer.transform, ...transform })
     }
+    if (activeGesture.value) apply()
+    else mutateStudio('Transformer un calque', apply)
+  }
+
+  function updateLayerSettings(layerId: string, transform: Partial<Transform2D>, zIndex: number): void {
+    mutateStudio('Régler un calque', () => {
+      const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
+      if (!layer) return
+      layer.transform = normalizeTransform({ ...layer.transform, ...transform })
+      layer.zIndex = zIndex
+    })
   }
 
   function updateLayerZIndex(layerId: string, zIndex: number): void {
-    updateLayer(layerId, { zIndex })
-  }
-
-  function updateLayerOrder(layerId: string, order: number): void {
-    updateLayer(layerId, { order })
+    updateLayer(layerId, { zIndex }, 'Changer la profondeur d’un calque')
   }
 
   function setLayerMuted(layerId: string, muted: boolean): void {
-    updateLayer(layerId, { muted })
+    updateLayer(layerId, { muted }, muted ? 'Masquer un calque' : 'Afficher un calque')
   }
 
   function setLayerLocked(layerId: string, locked: boolean): void {
-    updateLayer(layerId, { locked })
+    updateLayer(layerId, { locked }, locked ? 'Verrouiller un calque' : 'Déverrouiller un calque')
   }
 
-  // ==================== GESTION DES GROUPES ====================
-
-  function createGroup(
-    name: string,
-    customCategory?: string,
-    color?: EditorGroupColor
-  ): EditorGroup {
-    const maxZ = currentDocument.value.groups.reduce((max, g) => Math.max(max, g.zIndex), 0)
-    const newGroup: EditorGroup = {
-      id: generateId('grp'),
-      name: name.trim() || 'Nouveau Groupe',
-      zIndex: maxZ + 5,
-      color: color || 'indigo',
-      allowedCategories: [],
-      isDefault: false,
-      customCategory: customCategory?.trim() || undefined
-    }
-
-    currentDocument.value.groups.push(newGroup)
-    selectGroupForEditing(newGroup.id)
-    void saveDocument()
-    return newGroup
+  function moveLayer(layerId: string, direction: -1 | 1): void {
+    mutateStudio(direction > 0 ? 'Monter un calque' : 'Descendre un calque', () => {
+      const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
+      if (!layer) return
+      const siblings = currentDocument.value.layers
+        .filter((candidate) => candidate.groupId === layer.groupId)
+        .sort((left, right) => left.order - right.order)
+      const index = siblings.findIndex((candidate) => candidate.id === layerId)
+      const target = siblings[index + direction]
+      if (!target) return
+      const order = layer.order
+      layer.order = target.order
+      target.order = order
+    })
   }
 
-  function updateGroup(groupId: string, changes: Partial<EditorGroup>): void {
-    const group = currentDocument.value.groups.find((g) => g.id === groupId)
-    if (group) {
-      Object.assign(group, changes)
-      void saveDocument()
-    }
+  function createGroup(name: string, _customCategory?: string, color: EditorGroupColor = 'indigo'): EditorGroup {
+    return mutateStudio('Créer un groupe', () => {
+      const maxZ = currentDocument.value.groups.reduce((max, group) => Math.max(max, group.zIndex), 0)
+      const group: EditorGroup = {
+        id: generateId('grp'),
+        name: name.trim() || 'Nouveau groupe',
+        kind: 'stage',
+        zIndex: maxZ + 5,
+        transform: { ...DEFAULT_TRANSFORM },
+        muted: false,
+        locked: false,
+        collapsed: false,
+        color,
+        allowedCategories: [],
+        isDefault: false
+      }
+      currentDocument.value.groups.push(group)
+      selectGroupForEditing(group.id)
+      return group
+    })
+  }
+
+  function updateGroup(groupId: string, changes: Partial<EditorGroup>, label = 'Modifier un groupe'): void {
+    mutateStudio(label, () => {
+      const group = currentDocument.value.groups.find((candidate) => candidate.id === groupId)
+      if (group) Object.assign(group, changes)
+    })
   }
 
   function updateGroupTransform(groupId: string, transform: Partial<Transform2D>): void {
-    const group = currentDocument.value.groups.find((g) => g.id === groupId)
-    if (group) {
-      group.transform = {
-        ...(group.transform ?? {}),
-        ...transform
-      }
+    const apply = () => {
+      const group = currentDocument.value.groups.find((candidate) => candidate.id === groupId)
+      if (group) group.transform = normalizeTransform({ ...group.transform, ...transform })
     }
+    if (activeGesture.value) apply()
+    else mutateStudio('Transformer un groupe', apply)
+  }
+
+  function updateGroupSettings(groupId: string, transform: Partial<Transform2D>, zIndex: number): void {
+    mutateStudio('Régler un groupe', () => {
+      const group = currentDocument.value.groups.find((candidate) => candidate.id === groupId)
+      if (!group) return
+      group.transform = normalizeTransform({ ...group.transform, ...transform })
+      group.zIndex = zIndex
+    })
   }
 
   function updateGroupZIndex(groupId: string, zIndex: number): void {
-    updateGroup(groupId, { zIndex })
+    updateGroup(groupId, { zIndex }, 'Changer la profondeur d’un groupe')
   }
 
   function deleteGroup(groupId: string, deleteLayers = true): void {
-    commitTransformSession(false)
-    if (deleteLayers) {
-      currentDocument.value.layers = currentDocument.value.layers.filter((l) => l.groupId !== groupId)
-    } else {
-      // Déplacer les calques orphelins vers le premier groupe restant
-      const fallbackGroup = currentDocument.value.groups.find((g) => g.id !== groupId)
-      if (fallbackGroup) {
+    mutateStudio('Supprimer un groupe', () => {
+      const fallback = currentDocument.value.groups.find((group) => group.id !== groupId && group.kind === 'stage')
+      if (deleteLayers || !fallback) {
+        currentDocument.value.layers = currentDocument.value.layers.filter((layer) => layer.groupId !== groupId)
+      } else {
         for (const layer of currentDocument.value.layers) {
-          if (layer.groupId === groupId) layer.groupId = fallbackGroup.id
+          if (layer.groupId === groupId) layer.groupId = fallback.id
         }
       }
-    }
-
-    currentDocument.value.groups = currentDocument.value.groups.filter((g) => g.id !== groupId)
-    if (selectedGroupId.value === groupId) {
-      selectedGroupId.value = null
-      selectedLayerId.value = null
-    }
-    void saveDocument()
+      currentDocument.value.groups = currentDocument.value.groups.filter((group) => group.id !== groupId)
+      if (selectedGroupId.value === groupId) clearStudioSelection()
+    })
   }
 
   function setGroupMuted(groupId: string, muted: boolean): void {
-    updateGroup(groupId, { muted })
+    updateGroup(groupId, { muted }, muted ? 'Masquer un groupe' : 'Afficher un groupe')
   }
 
   function toggleGroupMuted(groupId: string): void {
-    const group = currentDocument.value.groups.find((g) => g.id === groupId)
-    if (group) {
-      updateGroup(groupId, { muted: !group.muted })
-    }
+    const group = currentDocument.value.groups.find((candidate) => candidate.id === groupId)
+    if (group) setGroupMuted(groupId, !group.muted)
   }
 
   function setGroupLocked(groupId: string, locked: boolean): void {
-    updateGroup(groupId, { locked })
+    updateGroup(groupId, { locked }, locked ? 'Verrouiller un groupe' : 'Déverrouiller un groupe')
   }
 
   function setGroupCollapsed(groupId: string, collapsed: boolean): void {
-    updateGroup(groupId, { collapsed })
+    updateGroup(groupId, { collapsed }, collapsed ? 'Replier un groupe' : 'Déplier un groupe')
   }
 
-  // ==================== CAMÉRA ====================
+  function setCharacterMode(groupId: string, activeMode: CharacterMode): void {
+    mutateStudio(activeMode === 'full' ? 'Afficher le personnage complet' : 'Afficher le rig', () => {
+      const group = currentDocument.value.groups.find(
+        (candidate): candidate is CharacterGroup => candidate.id === groupId && candidate.kind === 'character'
+      )
+      if (group) group.activeMode = activeMode
+    })
+  }
 
   function updateCamera(camera: CameraFrame): void {
     currentDocument.value.camera = { ...camera }
-    void saveDocument()
+    persistInBackground()
   }
 
-  // ==================== SÉLECTION ====================
-
   function selectLayerForEditing(layerId: string): void {
-    const layer = currentDocument.value.layers.find((l) => l.id === layerId)
+    const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
     if (!layer) return
-
     selectedLayerId.value = layerId
     selectedGroupId.value = layer.groupId
     editScope.value = 'layer'
-    startTransformSession({ kind: 'layer', layerId })
   }
 
   function selectGroupForEditing(groupId: string): void {
-    const group = currentDocument.value.groups.find((g) => g.id === groupId)
-    if (!group) return
-
+    if (!currentDocument.value.groups.some((group) => group.id === groupId)) return
     selectedGroupId.value = groupId
     selectedLayerId.value = null
     editScope.value = 'group'
-    startTransformSession({ kind: 'group', groupId })
   }
 
-  function clearStudioSelection(commitSession = true): void {
-    if (commitSession) commitTransformSession(false)
-    else cancelTransformSession()
-
+  function clearStudioSelection(): void {
     selectedLayerId.value = null
     selectedGroupId.value = null
   }
 
-  // ==================== HISTORIQUE / UNDO-REDO ====================
-
-  function getTransformForTarget(target: TransformHistoryTarget): Partial<Transform2D> | undefined {
-    if (target.kind === 'group') {
-      const group = currentDocument.value.groups.find((g) => g.id === target.groupId)
-      return cloneTransform(group?.transform)
-    }
-    const layer = currentDocument.value.layers.find((l) => l.id === target.layerId)
-    return cloneTransform(layer?.transform)
-  }
-
-  function applyTransformToTarget(
-    target: TransformHistoryTarget,
-    transform: Partial<Transform2D> | undefined
-  ): boolean {
-    const cloned = cloneTransform(transform)
-    if (target.kind === 'group') {
-      const group = currentDocument.value.groups.find((g) => g.id === target.groupId)
-      if (!group) return false
-      group.transform = cloned
-      return true
-    }
-    const layer = currentDocument.value.layers.find((l) => l.id === target.layerId)
-    if (!layer) return false
-    layer.transform = cloned
-    return true
-  }
-
-  function startTransformSession(target: TransformHistoryTarget): void {
-    if (
-      activeTransformSession.value &&
-      activeTransformSession.value.target.kind === target.kind &&
-      (target.kind === 'group'
-        ? (activeTransformSession.value.target as { kind: 'group'; groupId: string }).groupId === target.groupId
-        : (activeTransformSession.value.target as { kind: 'layer'; layerId: string }).layerId === target.layerId)
-    ) {
-      return
-    }
-
-    commitTransformSession(false)
-    activeTransformSession.value = {
-      target: { ...target },
-      before: getTransformForTarget(target),
-      gestureActive: false,
-      undo: [],
-      redo: []
-    }
-  }
-
-  function beginTransformGesture(): void {
-    const session = activeTransformSession.value
-    if (!session) return
-    session.gestureBefore = getTransformForTarget(session.target)
-    session.gestureActive = true
-  }
-
-  function endTransformGesture(): void {
-    const session = activeTransformSession.value
-    if (!session || !session.gestureActive) return
-    session.gestureActive = false
-
-    const after = getTransformForTarget(session.target)
-    if (transformsAreEqual(session.gestureBefore, after)) return
-
-    session.undo.push({
-      kind: 'transform',
-      target: { ...session.target },
-      before: session.gestureBefore,
-      after
-    })
-    session.redo = []
-    session.gestureBefore = undefined
-  }
-
-  function recordTransformAction(
-    target: TransformHistoryTarget,
-    before: Partial<Transform2D> | undefined,
-    after: Partial<Transform2D> | undefined
-  ): void {
-    const beforeSnapshot = cloneTransform(before)
-    const afterSnapshot = cloneTransform(after)
-    if (transformsAreEqual(beforeSnapshot, afterSnapshot)) return
-
-    undoStack.value.push({
-      kind: 'transform',
-      target: { ...target },
-      before: beforeSnapshot,
-      after: afterSnapshot
-    })
-    if (undoStack.value.length > MAX_HISTORY) undoStack.value.shift()
-    redoStack.value = []
-  }
-
-  function applyHistoryEntry(
-    entry: StudioHistoryEntry,
-    direction: 'before' | 'after'
-  ): boolean {
-    if (entry.kind === 'transform') {
-      return applyTransformToTarget(entry.target, entry[direction])
-    }
-    if (entry.kind === 'structure') {
-      currentDocument.value = cloneDocument(
-        direction === 'before' ? entry.documentBefore : entry.documentAfter
-      )
-      return true
-    }
-    if (entry.kind === 'batch') {
-      const list = direction === 'before' ? [...entry.entries].reverse() : entry.entries
-      let ok = true
-      for (const item of list) {
-        if (!applyHistoryEntry(item, direction)) ok = false
-      }
-      return ok
-    }
-    return false
-  }
-
-  function undoLastTransform(): void {
-    const session = activeTransformSession.value
-    if (session && session.undo.length > 0) {
-      const entry = session.undo.pop()
-      if (entry && applyHistoryEntry(entry, 'before')) {
-        session.redo.push(entry)
-      }
-      return
-    }
-
-    const entry = undoStack.value.pop()
-    if (entry && applyHistoryEntry(entry, 'before')) {
-      redoStack.value.push(entry)
-    }
-  }
-
-  function redoLastTransform(): void {
-    const session = activeTransformSession.value
-    if (session && session.redo.length > 0) {
-      const entry = session.redo.pop()
-      if (entry && applyHistoryEntry(entry, 'after')) {
-        session.undo.push(entry)
-      }
-      return
-    }
-
-    const entry = redoStack.value.pop()
-    if (entry && applyHistoryEntry(entry, 'after')) {
-      undoStack.value.push(entry)
-    }
-  }
-
-  function commitTransformSession(persist = true): void {
-    const session = activeTransformSession.value
-    if (!session) return
-
-    if (session.undo.length > 0) {
-      if (session.undo.length === 1) {
-        undoStack.value.push(session.undo[0])
-      } else {
-        undoStack.value.push({
-          kind: 'batch',
-          entries: [...session.undo]
-        })
-      }
-      if (undoStack.value.length > MAX_HISTORY) undoStack.value.shift()
-      redoStack.value = []
-    }
-
-    activeTransformSession.value = null
-    if (persist) void saveDocument()
-  }
-
-  function cancelTransformSession(): void {
-    const session = activeTransformSession.value
-    if (!session) return
-    applyTransformToTarget(session.target, session.before)
-    activeTransformSession.value = null
-  }
-
-  function updateCharacterTransform(transform: Partial<CharacterRigTransform>): void {
-    currentDocument.value.character = {
-      ...currentDocument.value.character,
-      ...transform
-    }
-  }
-
-  function setCharacterVisibility(visible: boolean): void {
-    currentDocument.value.character.visible = visible
-  }
-
-  function toggleCharacterMuted(): void {
-    currentDocument.value.character.visible = !currentDocument.value.character.visible
-  }
-
-  // ==================== APPLICATION DE VIEWPORT SNAPSHOT ====================
-
   function applyViewportSnapshot(snapshot: ViewportSnapshot): number {
-    commitTransformSession(false)
-
-    // Remplacement atomique de la scène
-    currentDocument.value.camera = { ...snapshot.camera }
-    currentDocument.value.character = {
-      ...(snapshot.character || {
-        x: 0,
-        y: 0,
-        scaleX: 1,
-        scaleY: 1,
-        rotation: 0,
-        visible: true,
-        zIndex: 10
-      })
-    }
-    currentDocument.value.groups = JSON.parse(JSON.stringify(snapshot.groups || []))
-    currentDocument.value.layers = JSON.parse(JSON.stringify(snapshot.layers))
-
-    clearStudioSelection(false)
-    undoStack.value = []
-    redoStack.value = []
-
-    void saveDocument()
+    currentDocument.value.camera = clone(snapshot.camera)
+    currentDocument.value.groups = clone(snapshot.groups)
+    currentDocument.value.layers = clone(snapshot.layers)
+    clearStudioSelection()
+    clearHistory()
+    persistInBackground()
     return currentDocument.value.layers.length
+  }
+
+  function syncAfterAssetDeletion(assetId: string): void {
+    const affectedGroupIds = new Set(
+      currentDocument.value.layers.filter((layer) => layer.assetId === assetId).map((layer) => layer.groupId)
+    )
+    currentDocument.value.layers = currentDocument.value.layers.filter((layer) => layer.assetId !== assetId)
+    for (const groupId of affectedGroupIds) {
+      const group = currentDocument.value.groups.find(
+        (candidate): candidate is CharacterGroup => candidate.id === groupId && candidate.kind === 'character'
+      )
+      if (!group || group.activeMode !== 'full') continue
+      const hasFull = currentDocument.value.layers.some(
+        (layer) => layer.groupId === group.id && layer.category === 'character_full'
+      )
+      const hasRig = currentDocument.value.layers.some(
+        (layer) => layer.groupId === group.id && layer.category !== 'character_full'
+      )
+      if (!hasFull && hasRig) group.activeMode = 'rig'
+    }
+    clearStudioSelection()
+    clearHistory()
   }
 
   return {
@@ -835,44 +579,44 @@ export const useEditorStore = defineStore('editor', () => {
     isSaving,
     selectedLayer,
     selectedGroup,
-    sortedLayers,
-    hasActiveTransformSession,
-    canUndoTransform,
-    canRedoTransform,
+    canUndo,
+    canRedo,
+    hasActiveGesture,
     loadDocument,
     saveDocument,
+    flushPersistence,
     assignAssetToGroup,
     addLayer,
     removeLayer,
     updateLayer,
     updateLayerTransform,
+    updateLayerSettings,
     updateLayerZIndex,
-    updateLayerOrder,
     setLayerMuted,
     setLayerLocked,
+    moveLayer,
     createGroup,
     updateGroup,
     updateGroupTransform,
+    updateGroupSettings,
     updateGroupZIndex,
     deleteGroup,
     setGroupMuted,
     toggleGroupMuted,
     setGroupLocked,
     setGroupCollapsed,
-    updateCharacterTransform,
-    setCharacterVisibility,
-    toggleCharacterMuted,
+    setCharacterMode,
     updateCamera,
     selectLayerForEditing,
     selectGroupForEditing,
     clearStudioSelection,
-    beginTransformGesture,
-    endTransformGesture,
-    recordTransformAction,
-    undoLastTransform,
-    redoLastTransform,
-    commitTransformSession,
-    cancelTransformSession,
-    applyViewportSnapshot
+    beginGesture,
+    endGesture,
+    cancelGesture,
+    undo,
+    redo,
+    clearHistory,
+    applyViewportSnapshot,
+    syncAfterAssetDeletion
   }
 })

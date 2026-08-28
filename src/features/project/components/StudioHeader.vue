@@ -101,7 +101,7 @@ async function saveSnapshot() {
   isSnapshotBusy.value = true
   workspaceBackupStore.beginSaving()
   try {
-    editorStore.commitTransformSession(false)
+    editorStore.endGesture()
     await Promise.all([projectStore.saveProject(), editorStore.saveDocument()])
     snapshotSummary.value = await createManualWorkspaceSnapshot(projectStore.currentProject.id)
     await workspaceBackupStore.finishSaving()
@@ -130,12 +130,12 @@ async function restoreSnapshot() {
   isSnapshotBusy.value = true
   workspaceBackupStore.beginSaving()
   try {
-    editorStore.commitTransformSession(false)
+    editorStore.endGesture()
     const snapshot = await restoreManualWorkspaceSnapshot()
     const workspace = await projectStore.loadInitialProject()
     await Promise.all([assetStore.loadAssets(), snapshotStore.loadSnapshots()])
     await editorStore.loadDocument(workspace.editorDocumentId, workspace.id)
-    editorStore.clearStudioSelection(false)
+    editorStore.clearStudioSelection()
     await workspaceBackupStore.finishSaving()
     toast.success(
       'Application restaurée',

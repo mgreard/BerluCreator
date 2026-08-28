@@ -1,6 +1,7 @@
 export const ASSET_CATEGORY_IDS = [
   'background',
-  'torso',
+  'character_full',
+  'body',
   'head',
   'mouth',
   'eyes',
@@ -14,11 +15,19 @@ export const ASSET_CATEGORY_IDS = [
 ] as const
 
 export type AssetCategory = (typeof ASSET_CATEGORY_IDS)[number]
+export type CharacterAssetForm = 'full' | 'rig'
 
-const LEGACY_ASSET_CATEGORY_MAP: Record<string, AssetCategory> = {
+export interface CharacterAssetMetadata {
+  key: string
+  name: string
+  form: CharacterAssetForm
+}
+
+const IMPORT_CATEGORY_MAP: Record<string, AssetCategory> = {
   backdrop: 'background',
   props: 'props_host',
-  overlay: 'foreground'
+  overlay: 'foreground',
+  torso: 'body'
 }
 
 export function isAssetCategory(value: unknown): value is AssetCategory {
@@ -27,7 +36,7 @@ export function isAssetCategory(value: unknown): value is AssetCategory {
 
 export function normalizeAssetCategory(value: unknown): AssetCategory | undefined {
   if (isAssetCategory(value)) return value
-  return typeof value === 'string' ? LEGACY_ASSET_CATEGORY_MAP[value] : undefined
+  return typeof value === 'string' ? IMPORT_CATEGORY_MAP[value] : undefined
 }
 
 export type CategoryCardinality = 'singleton' | 'multi'
@@ -41,59 +50,30 @@ export interface AssetCategoryDefinition {
   defaultZIndex: number
   layerCardinality: CategoryCardinality
   placementMode: CategoryPlacementMode
-  /** Couleur CSS stable partagée par toutes les surfaces de catégorie. */
   color: string
-  /** Préfixe lisible utilisé pour les noms automatiques de découpes. */
-  filenamePrefix: string
 }
 
 export interface SpriteConfigRule {
-  /** Nom du sprite ou motif RegExp (ex: 'Desk_*', 'Micro_*') */
   pattern?: string
-  /** Catégorie ciblée */
   category?: AssetCategory
-  /** Définition de la déplaçabilité sur le canvas */
   isMovable?: boolean
-  /** Z-Index par défaut pour ce sprite spécifique */
   defaultZIndex?: number
-  /** Décalage initial (X, Y) */
   defaultPosition?: { x: number; y: number }
-  /** Échelle initiale */
   defaultScale?: number
-  /** Tags additionnels */
   tags?: string[]
 }
 
 export interface SpritesConfigFile {
-  /** Règles globales par catégorie */
   categoryDefaults: Record<AssetCategory, { isMovable: boolean; defaultZIndex: number }>
-  /** Règles de surcharges spécifiques par sprite ou motif */
   rules: SpriteConfigRule[]
 }
 
-/**
- * Position du bitmap recadré dans son image source. Le canvas peut ainsi
- * conserver l'alignement historique tout en stockant un fichier plus petit.
- */
-export interface AssetTrimFrame {
-  sourceWidth: number
-  sourceHeight: number
-  offsetX: number
-  offsetY: number
-}
-
 export interface AssetCalibration {
-  /** Offset horizontal relatif au centre / point d'ancrage de l'avatar Berlu */
   x: number
-  /** Offset vertical relatif au centre / point d'ancrage de l'avatar Berlu */
   y: number
-  /** Échelle horizontale par défaut */
   scaleX: number
-  /** Échelle verticale par défaut */
   scaleY: number
-  /** Rotation par défaut en degrés */
   rotation?: number
-  /** Z-Index par défaut au sein du personnage */
   zIndex?: number
 }
 
@@ -105,13 +85,8 @@ export interface Asset {
   blobId: string
   width: number
   height: number
-  /** Logical size used on the canvas, independent from the source resolution. */
-  displayWidth?: number
-  displayHeight?: number
-  trimFrame?: AssetTrimFrame
-  /** Calibration d'ancrage et positionnement pré-étalonné sur l'avatar Berlu */
+  character?: CharacterAssetMetadata
   calibration?: AssetCalibration
-  /** Indique si le sprite peut être déplacé librement à la souris sur le canvas */
   isMovable: boolean
   createdAt: number
   updatedAt: number
@@ -123,15 +98,4 @@ export interface AssetBlobRecord {
   data: Blob
   size: number
   createdAt: number
-}
-
-export interface SpritesheetSlice {
-  id: string
-  name: string
-  category: AssetCategory
-  nameMode: 'auto' | 'custom'
-  x: number
-  y: number
-  width: number
-  height: number
 }

@@ -1,75 +1,50 @@
-# Walkthrough — Refonte Globale du Studio vers l'Éditeur Unique (Single-Scene Document Editor)
+# Walkthrough — stabilisation du studio
 
-La refonte complète de simplification du studio a été exécutée avec succès conformément aux directives de [ROADMAP_REFACTO_SIMPLIFICATION.md](file:///d:/Workspace/BerluCreator/ROADMAP_REFACTO_SIMPLIFICATION.md). L'application fonctionne désormais sur un modèle documentaire sans timeline, pistes ou keyframes.
+Le studio repose désormais sur un document unique dont les groupes et calques sont l’unique source de vérité. Un personnage peut mémoriser simultanément un sprite complet et un rig, puis basculer entre les deux sans détruire la configuration inactive.
 
----
+## Modèle et rendu
 
-## 1. Changements Majeurs Réalisés
+- `CharacterGroup` spécialise `EditorGroup` avec `characterKey` et `activeMode: 'full' | 'rig'`.
+- Le transform, la visibilité, le verrouillage et le z-index globaux appartiennent au groupe. Les calques ne conservent que leur transform local.
+- `character_full` est une catégorie explicite. Les anciens torses complets ne détournent plus `body`.
+- Les assets de personnage portent `{ key, name, form }`; un slot de rig est directement représenté par sa catégorie.
+- Le resolver affiche uniquement la configuration active. La hiérarchie conserve et expose les deux configurations, y compris les calques masqués, inactifs ou dont l’asset manque.
+- Plusieurs personnages peuvent posséder le même slot sans collision grâce à la cardinalité appliquée par groupe.
 
-### Phase 1 — Domaine d'Éditeur Unique & Persistance Dexie v4
-- **Types & Constantes du Domaine :**
-  - [src/core/types/editor.types.ts](file:///d:/Workspace/BerluCreator/src/core/types/editor.types.ts) : `EditorDocument`, `EditorGroup`, `EditorLayer`, `ViewportSnapshot`, `Transform2D`, `CameraFrame`, `EditorGroupColor`.
-  - [src/core/constants/editor.ts](file:///d:/Workspace/BerluCreator/src/core/constants/editor.ts) : Résolution par défaut (1792×1024) et groupes d'édition initiaux.
-  - [src/core/types/asset.types.ts](file:///d:/Workspace/BerluCreator/src/core/types/asset.types.ts) & [src/core/constants/categories.ts](file:///d:/Workspace/BerluCreator/src/core/constants/categories.ts) : `layerCardinality: 'singleton' | 'multi'`.
-- **Persistance & Repositories :**
-  - [src/infrastructure/db/repositories/editor-document.repository.ts](file:///d:/Workspace/BerluCreator/src/infrastructure/db/repositories/editor-document.repository.ts)
-  - [src/infrastructure/db/repositories/viewport-snapshot.repository.ts](file:///d:/Workspace/BerluCreator/src/infrastructure/db/repositories/viewport-snapshot.repository.ts)
-  - [src/infrastructure/db/legacy-migration.ts](file:///d:/Workspace/BerluCreator/src/infrastructure/db/legacy-migration.ts) : migration transactionnelle sans perte de `Sequence` et `SavedKeyframePreset` vers `EditorDocument` et `ViewportSnapshot`.
-  - [src/infrastructure/db/dexie.ts](file:///d:/Workspace/BerluCreator/src/infrastructure/db/dexie.ts) : montée de schéma Dexie `version(4)`.
-  - [src/features/project/services/workspace-snapshot.service.ts](file:///d:/Workspace/BerluCreator/src/features/project/services/workspace-snapshot.service.ts) : support du schéma v3 et rétrocompatibilité v1/v2.
+## Historique et persistance
 
----
+- Undo/redo stocke au maximum 50 mutations atomiques `{ label, before, after }` sur les groupes et calques.
+- Les gestes de déplacement et redimensionnement sont coalescés en une seule action.
+- Les changements de mode, assignations, retraits, transforms, réglages, visibilité, verrouillage, ordre et z-index sont annulables.
+- La caméra reste persistée mais hors historique.
+- Undo/redo et les mutations sont sauvegardés par une file IndexedDB séquentielle. Charger une vue sauvegardée restaure les deux configurations puis vide l’historique.
 
-### Phase 2 — Store Unique `useEditorStore`
-- [src/features/editor/stores/useEditorStore.ts](file:///d:/Workspace/BerluCreator/src/features/editor/stores/useEditorStore.ts) :
-  - Gestion directe et réactive de `currentDocument` (`layers`, `groups`, `camera`).
-  - Routage selon cardinalité de calque (`singleton` remplace l'élément de même catégorie, `multi` empile).
-  - Gestion des groupes (création, suppression, déplacement parent, visibilité, verrouillage, couleur).
-  - Gestuelle transactionnelle (`beginTransformGesture`, `endTransformGesture`, sessions avec `commitTransformSession` / `cancelTransformSession`).
-  - Undo/Redo granulaire et application atomique de `ViewportSnapshot`.
-  - Couverture complète dans [src/features/editor/stores/useEditorStore.spec.ts](file:///d:/Workspace/BerluCreator/src/features/editor/stores/useEditorStore.spec.ts).
+## Assets
 
----
+- L’import accepte uniquement PNG, JPEG, WebP et SVG décodables, avec dimensions valides et métadonnées de personnage cohérentes.
+- Chaque fichier est traité indépendamment. Les succès quittent immédiatement la file; les erreurs restent visibles et peuvent être retentées.
+- Si l’assignation échoue après la création d’un asset, son asset et son blob sont supprimés avant le retry.
+- Toutes les Object URLs de prévisualisation sont révoquées au retrait, à la fermeture et au démontage.
+- Une suppression est bloquée si une vue sauvegardée référence l’asset. Sinon, la confirmation annonce le nombre de calques et la transaction supprime atomiquement asset, blob et références documentaires.
+- La suppression d’un sprite complet actif rebascule sur le rig lorsqu’il contient au moins un slot; sélection et historique sont ensuite nettoyés.
 
-### Phase 3 — Canvas, Résolution Directe, Hiérarchie & Shell
-- [src/features/studio/composables/useHierarchyResolver.ts](file:///d:/Workspace/BerluCreator/src/features/studio/composables/useHierarchyResolver.ts) : résolution directe depuis `editorStore.currentDocument.layers` avec mapping `layerId`.
-- [src/features/studio/components/StageCanvas.vue](file:///d:/Workspace/BerluCreator/src/features/studio/components/StageCanvas.vue) : intégration directe avec `useEditorStore`, sélection de calque/groupe, cadrage caméra, boîtes englobantes et poignées de redimensionnement.
-- [src/features/studio/components/HierarchyInspector.vue](file:///d:/Workspace/BerluCreator/src/features/studio/components/HierarchyInspector.vue) & [src/features/studio/components/LayerSettingsModal.vue](file:///d:/Workspace/BerluCreator/src/features/studio/components/LayerSettingsModal.vue) : inspection, renommage, suppression et z-index des calques et groupes.
-- [src/features/editor/components/CreateGroupModal.vue](file:///d:/Workspace/BerluCreator/src/features/editor/components/CreateGroupModal.vue) & [src/features/editor/components/DeleteGroupDialog.vue](file:///d:/Workspace/BerluCreator/src/features/editor/components/DeleteGroupDialog.vue).
-- [src/features/asset-manager/components/AssetLibraryPanel.vue](file:///d:/Workspace/BerluCreator/src/features/asset-manager/components/AssetLibraryPanel.vue) : détection des calques actifs et ajout direct.
-- [src/App.vue](file:///d:/Workspace/BerluCreator/src/App.vue) : suppression de la timeline inférieure, redistribution de tout l'espace vertical au viewport central.
+## Migration et legacy
 
----
+- Dexie v5 migre les documents, vues sauvegardées et la sauvegarde manuelle v4.
+- L’ancien état global du personnage est transféré au groupe Berlu; les groupes personnalisés deviennent des groupes personnage.
+- Les anciens assets `torso` marqués complet deviennent `character_full`; les autres deviennent `body`.
+- Sprite complet et slots sont conservés ensemble, avec sélection du mode d’après la représentation visible.
+- Les types, repositories, dépendances et composants sans consommateur liés aux anciens personnages, découpes et formats ont été retirés. `sharp` n’est plus installé.
+- Les formats de sauvegarde antérieurs au schéma courant sont refusés; seuls les `@keyframes` CSS décoratifs subsistent.
 
-### Phase 4 — Vues Sauvegardées du Viewport (`ViewportSnapshot`)
-- [src/features/editor/stores/useViewportSnapshotStore.ts](file:///d:/Workspace/BerluCreator/src/features/editor/stores/useViewportSnapshotStore.ts) & [src/features/editor/stores/useViewportSnapshotStore.spec.ts](file:///d:/Workspace/BerluCreator/src/features/editor/stores/useViewportSnapshotStore.spec.ts).
-- [src/features/editor/components/ViewportSnapshotsModal.vue](file:///d:/Workspace/BerluCreator/src/features/editor/components/ViewportSnapshotsModal.vue) : capture de miniature, enregistrement, chargement atomique et suppression de compositions nommées.
-
----
-
-### Phase 5 — Export Simplifié
-- [src/features/project/components/ExportModal.vue](file:///d:/Workspace/BerluCreator/src/features/project/components/ExportModal.vue) :
-  - Capture PNG haute définition du viewport actif (résolution native de cadrage caméra ou option 1080p).
-  - Export structure de scène JSON (`EditorDocument` + métadonnées d'assets).
-  - Suppression de l'archive ZIP différentielle et retrait de `fflate`.
-
----
-
-### Phase 6 & 7 — Import Pass-Through Strict & Nettoyage Définitif
-- [src/features/asset-manager/stores/useAssetStore.ts](file:///d:/Workspace/BerluCreator/src/features/asset-manager/stores/useAssetStore.ts) : import pass-through pur (1 fichier = 1 asset avec dimensions et pixels d'origine conservés).
-- [src/features/asset-manager/components/AssetUploadModal.vue](file:///d:/Workspace/BerluCreator/src/features/asset-manager/components/AssetUploadModal.vue) : interface épurée de téléversement direct sans découpage ni suppression de fond.
-- [src/features/asset-manager/services/demo-asset-seeder.ts](file:///d:/Workspace/BerluCreator/src/features/asset-manager/services/demo-asset-seeder.ts) : chargement des sprites de base avec dimensions naturelles.
-- **Suppression intégrale des artefacts obsolètes :**
-  - Dossier `src/features/timeline/` intégralement supprimé.
-  - Outils de suppression de fond, spritesheet slicer et trimmer d'images transparentes supprimés.
-  - [ROADMAP.md](file:///d:/Workspace/BerluCreator/ROADMAP.md) et [ROADMAP_REFACTO_SIMPLIFICATION.md](file:///d:/Workspace/BerluCreator/ROADMAP_REFACTO_SIMPLIFICATION.md) mis à jour.
-
----
-
-## 2. Résultats des Portes de Qualité (Gates)
+## Gates validées
 
 | Contrôle | Commande | Résultat |
-| :--- | :--- | :--- |
-| **Typage strict** | `pnpm typecheck` | **0 erreur** (TypeScript strict validé) |
-| **Tests unitaires** | `pnpm test:unit` | **83 fichiers passés (344 tests à 100%)** |
-| **Build de production** | `pnpm build` | **Succès Vite (0 erreur de compilation)** |
+| --- | --- | --- |
+| TypeScript strict | `pnpm exec vue-tsc -p tsconfig.app.json --noEmit --incremental false` | Succès |
+| ESLint sans réécriture | `pnpm exec eslint . --max-warnings=0` | Succès, 0 avertissement |
+| Tests unitaires | `pnpm exec vitest run --reporter=dot` | 85 fichiers, 351 tests passés |
+| Build applicatif | `pnpm run build` | Succès avec Vite 5.4.21 |
+| Build Histoire | `pnpm run story:build` | 67 stories, 173 variantes |
+
+Le build applicatif signale encore un chunk principal supérieur à 500 kB. Histoire 0.17 émet aussi ses avertissements historiques de bundle/CJS, sans faire échouer le build.

@@ -12,6 +12,7 @@ node_modules
 dist
 dist-ssr
 dist-server
+.histoire/
 .trimmed-sprites/
 .sprite-trim-backup/
 *.local

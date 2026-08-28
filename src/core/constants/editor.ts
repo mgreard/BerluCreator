@@ -1,4 +1,4 @@
-import type { EditorGroup } from '../types/editor.types'
+import type { CharacterGroup, EditorGroup, Transform2D } from '../types/editor.types'
 
 export const DEFAULT_STAGE_RESOLUTION = {
   width: 1792,
@@ -6,43 +6,79 @@ export const DEFAULT_STAGE_RESOLUTION = {
   aspectRatio: '16:9'
 } as const
 
+export const DEFAULT_TRANSFORM: Transform2D = {
+  x: 0,
+  y: 0,
+  scaleX: 1,
+  scaleY: 1,
+  rotation: 0,
+  opacity: 1
+}
+
+export const CHARACTER_CATEGORIES = [
+  'character_full',
+  'body',
+  'head',
+  'mouth',
+  'eyes',
+  'arms_left',
+  'arms_right',
+  'props_host'
+] as const
+
+export const DEFAULT_CHARACTER_GROUP: CharacterGroup = {
+  id: 'grp_berlu',
+  name: 'Berlu',
+  kind: 'character',
+  characterKey: 'berlu',
+  activeMode: 'rig',
+  zIndex: 20,
+  transform: { ...DEFAULT_TRANSFORM },
+  muted: false,
+  locked: false,
+  collapsed: false,
+  color: 'indigo',
+  allowedCategories: [...CHARACTER_CATEGORIES],
+  isDefault: true
+}
+
 export const DEFAULT_EDITOR_GROUPS: EditorGroup[] = [
   {
     id: 'grp_background',
-    name: 'background',
+    name: 'Arrière-plan',
+    kind: 'stage',
     zIndex: 0,
+    transform: { ...DEFAULT_TRANSFORM },
+    muted: false,
+    locked: false,
+    collapsed: false,
     color: 'blue',
     allowedCategories: ['background'],
     isDefault: true
   },
-  {
-    id: 'grp_berlu',
-    name: 'Berlu',
-    zIndex: 20,
-    color: 'indigo',
-    allowedCategories: [
-      'torso',
-      'head',
-      'mouth',
-      'eyes',
-      'arms_left',
-      'arms_right',
-      'props_host'
-    ],
-    isDefault: true
-  },
+  DEFAULT_CHARACTER_GROUP,
   {
     id: 'grp_desk',
-    name: 'bureau',
+    name: 'Bureau',
+    kind: 'stage',
     zIndex: 28,
+    transform: { ...DEFAULT_TRANSFORM },
+    muted: false,
+    locked: false,
+    collapsed: false,
     color: 'cyan',
     allowedCategories: ['desk'],
     isDefault: true
   },
   {
     id: 'grp_desk_items',
-    name: 'items de bureau',
+    name: 'Objets du bureau',
+    kind: 'stage',
     zIndex: 35,
+    transform: { ...DEFAULT_TRANSFORM },
+    muted: false,
+    locked: false,
+    collapsed: false,
     color: 'amber',
     allowedCategories: ['props_desk'],
     isDefault: true
@@ -50,7 +86,12 @@ export const DEFAULT_EDITOR_GROUPS: EditorGroup[] = [
   {
     id: 'grp_set_props',
     name: 'Accessoires de plateau',
+    kind: 'stage',
     zIndex: 50,
+    transform: { ...DEFAULT_TRANSFORM },
+    muted: false,
+    locked: false,
+    collapsed: false,
     color: 'purple',
     allowedCategories: ['props_set', 'foreground'],
     isDefault: true
