@@ -24,15 +24,35 @@ import {
   DepthOfFieldOverlay,
   type DepthOfFieldOverlayValue
 } from '@/components/ui/depth-of-field-overlay'
-import type { CameraFrame } from '@core/types/editor.types'
+import type { CameraFrame, CharacterGroup } from '@core/types/editor.types'
+import { toast } from '@/ui/shared/services/toast.service'
+import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
+import { useRigRuntime } from '../rig-calibration/useRigRuntime'
 
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
 const assetStore = useAssetStore()
+const rigCatalog = useRigCatalogStore()
+const rigRuntime = useRigRuntime()
 
 const stage = computed(() => projectStore.currentProject.stage)
 const canvasRef = useTemplateRef<HTMLCanvasElement>('canvas')
 const { activeLayers } = useHierarchyResolver()
+const isRigCalibrationOpen = computed(() => rigCatalog.isCalibrationOpen)
+
+const activeCalibrationGroup = computed<CharacterGroup | null>(() => {
+  const selected = editorStore.currentDocument.groups.find(
+    (group): group is CharacterGroup =>
+      group.kind === 'character' && group.id === editorStore.selectedGroupId
+  )
+  return (
+    selected ??
+    editorStore.currentDocument.groups.find(
+      (group): group is CharacterGroup => group.kind === 'character' && group.activeMode === 'rig'
+    ) ??
+    null
+  )
+})
 
 // Mode d'édition : 'group' (déplace/scale tout le groupe) vs 'layer' (positionne/scale ce calque spécifique)
 const editScope = computed({
@@ -84,6 +104,65 @@ const activeSelectedGroup = computed(() => {
 const isGroupTarget = computed(() => {
   return editScope.value === 'group' && Boolean(activeSelectedGroup.value)
 })
+
+function openRigCalibration(): void {
+  const group = activeCalibrationGroup.value
+  if (!group) return
+  const rig = rigRuntime.activeRigForGroup(group) ?? rigCatalog.defaultRig(group.characterKey)
+  if (!rig) {
+    toast.warning('Rig indisponible', 'Aucune configuration de corps n’est disponible.')
+    return
+  }
+  let preferredLayer =
+    editorStore.currentDocument.layers.find(
+      (layer) => layer.groupId === group.id && !layer.muted && layer.category === 'body'
+    ) ??
+    editorStore.currentDocument.layers.find(
+      (layer) => layer.groupId === group.id && !layer.muted && layer.category !== 'character_full'
+    )
+  if (!preferredLayer || group.activeMode !== 'rig') {
+    preferredLayer = rigRuntime.activateRig(rig) ?? undefined
+  }
+  if (!preferredLayer) return
+  rigCatalog.selectedRigId = rig.id
+  rigCatalog.openCalibration(rig.id)
+  editorStore.selectRigLayerForCalibration(preferredLayer.id)
+  assetStore.selectAsset(preferredLayer.assetId)
+}
+
+function closeRigCalibration(): void {
+  rigCatalog.closeCalibration()
+  const group = activeCalibrationGroup.value
+  if (group) editorStore.selectGroupForEditing(group.id)
+}
+
+function toggleRigCalibration(): void {
+  if (isRigCalibrationOpen.value) closeRigCalibration()
+  else openRigCalibration()
+}
+
+async function persistLayerCalibration(layer: RenderableLayer): Promise<void> {
+  const sourceLayer = editorStore.currentDocument.layers.find(
+    (candidate) => candidate.id === layer.layerId
+  )
+  const group = editorStore.currentDocument.groups.find(
+    (candidate): candidate is CharacterGroup =>
+      candidate.id === layer.groupId && candidate.kind === 'character'
+  )
+  const rig = group
+    ? (rigCatalog.rigById(group.activeRigId) ?? rigRuntime.activeRigForGroup(group))
+    : undefined
+  if (!sourceLayer || !rig || !rigCatalog.partForAsset(rig, layer.asset)) return
+  const calibration = {
+    x: Math.round(sourceLayer.transform.x),
+    y: Math.round(sourceLayer.transform.y),
+    scaleX: sourceLayer.transform.scaleX,
+    scaleY: sourceLayer.transform.scaleY,
+    rotation: sourceLayer.transform.rotation,
+    zIndex: sourceLayer.zIndex
+  }
+  rigCatalog.savePartCalibration(rig.id, layer.asset, calibration)
+}
 
 const isSelectionLocked = computed(() =>
   isGroupTarget.value
@@ -354,9 +433,26 @@ function onHistoryKeydown(event: KeyboardEvent) {
     event.preventDefault()
     if (editorStore.hasActiveGesture) {
       editorStore.cancelGesture()
+    } else if (isRigCalibrationOpen.value) {
+      closeRigCalibration()
     } else {
       editorStore.clearStudioSelection()
     }
+    return
+  }
+  if (
+    isRigCalibrationOpen.value &&
+    editorStore.selectedLayer &&
+    ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
+  ) {
+    event.preventDefault()
+    const step = event.shiftKey ? 10 : 1
+    const transform = editorStore.selectedLayer.transform
+    editorStore.updateLayerTransform(editorStore.selectedLayer.id, {
+      x: transform.x + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0),
+      y: transform.y + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0)
+    })
+    if (activeSelectedLayer.value) void persistLayerCalibration(activeSelectedLayer.value)
     return
   }
   if (!(event.ctrlKey || event.metaKey) || event.altKey) return
@@ -542,14 +638,13 @@ function onCanvasPointerDown(e: PointerEvent) {
   // 3. Sélection au clic sur un calque
   const hit = hitTestLayer(pos)
   if (hit) {
-    const selectWholeGroup = shouldTargetWholeGroup(
-      hit.groupId,
-      hit.category,
-      editScope.value,
-      e.shiftKey
-    )
+    const selectWholeGroup =
+      !isRigCalibrationOpen.value &&
+      shouldTargetWholeGroup(hit.groupId, hit.category, editScope.value, e.shiftKey)
     if (hit.groupId && selectWholeGroup) {
       editorStore.selectGroupForEditing(hit.groupId)
+    } else if (isRigCalibrationOpen.value && hit.groupId === activeCalibrationGroup.value?.id) {
+      editorStore.selectRigLayerForCalibration(hit.layerId)
     } else {
       editorStore.selectLayerForEditing(hit.layerId)
     }
@@ -625,8 +720,13 @@ function onCanvasPointerMove(e: PointerEvent) {
           y: clamped.y
         })
       } else {
-        const newX = Math.round(dragStartLayerPos.value.x + dx)
-        const newY = Math.round(dragStartLayerPos.value.y + dy)
+        const rigUnitScale =
+          activeSelectedLayer.value.groupId === activeCalibrationGroup.value?.id &&
+          activeSelectedLayer.value.asset.width > 0
+            ? activeSelectedLayer.value.width / activeSelectedLayer.value.asset.width
+            : 1
+        const newX = Math.round(dragStartLayerPos.value.x + dx / rigUnitScale)
+        const newY = Math.round(dragStartLayerPos.value.y + dy / rigUnitScale)
         editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, { x: newX, y: newY })
       }
     }
@@ -647,6 +747,9 @@ function onCanvasPointerUp(e: PointerEvent) {
   isResizing.value = false
   activeHandle.value = null
   editorStore.endGesture()
+  if (isRigCalibrationOpen.value && activeSelectedLayer.value) {
+    void persistLayerCalibration(activeSelectedLayer.value)
+  }
 
   const target = e.currentTarget as HTMLElement
   if (target?.hasPointerCapture?.(e.pointerId)) {
@@ -676,7 +779,9 @@ function onCanvasDoubleClick(e: MouseEvent) {
   }
 
   if (hit && hit.groupId) {
-    if (e.shiftKey) {
+    if (isRigCalibrationOpen.value && hit.groupId === activeCalibrationGroup.value?.id) {
+      editorStore.selectRigLayerForCalibration(hit.layerId)
+    } else if (e.shiftKey) {
       editorStore.selectGroupForEditing(hit.groupId)
     } else {
       editorStore.selectLayerForEditing(hit.layerId)
@@ -739,9 +844,23 @@ function onCanvasDoubleClick(e: MouseEvent) {
         @pointerdown.stop
         @dblclick.stop
       >
-        <Badge variant="neutral" size="sm" class="mx-1 border-white/15 bg-black/30 font-mono text-[10px] text-white/90">
+        <Badge
+          variant="neutral"
+          size="sm"
+          class="mx-1 border-white/15 bg-black/30 font-mono text-[10px] text-white/90"
+        >
           {{ stage.width }} × {{ stage.height }}
         </Badge>
+        <IconButton
+          icon="construction"
+          size="xs"
+          variant="ghost"
+          class="viewport-action"
+          :active="isRigCalibrationOpen"
+          aria-label="Calibrer les sprites du rig"
+          title="Calibrer les sprites du rig"
+          @click="toggleRigCalibration"
+        />
         <IconButton
           icon="blur_on"
           size="xs"
@@ -813,7 +932,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
 
       <!-- HUD contextuel d'Édition Directe (Bannière Inférieure) -->
       <div
-        v-if="activeSelectedLayer"
+        v-if="activeSelectedLayer && !isRigCalibrationOpen"
         class="absolute bottom-3 left-3 z-30 flex items-center gap-2 pointer-events-auto animate-in fade-in duration-200"
         @pointerdown.stop
       >

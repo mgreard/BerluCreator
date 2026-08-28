@@ -63,6 +63,8 @@ export interface CharacterGroup extends EditorGroupBase {
   kind: 'character'
   characterKey: string
   activeMode: CharacterMode
+  /** Profil de corps actif dans le catalogue global de rigs. */
+  activeRigId?: string
   allowedCategories: AssetCategory[]
 }
 

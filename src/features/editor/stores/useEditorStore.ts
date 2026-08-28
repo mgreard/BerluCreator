@@ -13,7 +13,7 @@ import type {
   Transform2D,
   ViewportSnapshot
 } from '@core/types/editor.types'
-import type { Asset, AssetCategory } from '@core/types/asset.types'
+import type { Asset, AssetCalibration, AssetCategory } from '@core/types/asset.types'
 import {
   CHARACTER_CATEGORIES,
   DEFAULT_DEPTH_OF_FIELD_SETTINGS,
@@ -42,6 +42,13 @@ interface StudioHistoryEntry {
 interface StudioGesture {
   label: string
   before: StudioState
+}
+
+export interface CharacterRigLayerPreset {
+  assetId: string
+  category: AssetCategory
+  name: string
+  calibration: AssetCalibration
 }
 
 const MAX_HISTORY = 50
@@ -382,7 +389,8 @@ export const useEditorStore = defineStore('editor', () => {
     assetId: string,
     category: AssetCategory,
     targetGroupId?: string | null,
-    name?: string
+    name?: string,
+    calibrationOverride?: AssetCalibration
   ): EditorLayer {
     return mutateStudio('Assigner un asset', () => {
       const asset = resolveAsset(assetId)
@@ -396,13 +404,16 @@ export const useEditorStore = defineStore('editor', () => {
             (layer) => layer.groupId === group.id && layer.category === category
           )
         : undefined
-      const calibration = asset?.calibration
+      const calibration = calibrationOverride ?? asset?.calibration
 
       if (existing) {
         existing.assetId = assetId
         existing.name = name || asset?.name || existing.name
         existing.muted = false
-        if (calibration) {
+        if (group.kind === 'character') {
+          existing.transform = normalizeTransform(calibration)
+          existing.zIndex = calibration?.zIndex ?? ASSET_CATEGORIES[category].defaultZIndex
+        } else if (calibration) {
           existing.transform = normalizeTransform(calibration)
           existing.zIndex = calibration.zIndex ?? existing.zIndex
         }
@@ -445,6 +456,53 @@ export const useEditorStore = defineStore('editor', () => {
       selectedGroupId.value = group.id
       editScope.value = group.kind === 'character' ? 'group' : 'layer'
       return layer
+    })
+  }
+
+  function applyCharacterRig(
+    groupId: string,
+    rigId: string,
+    presets: CharacterRigLayerPreset[],
+    selectedAssetId?: string
+  ): EditorLayer | null {
+    return mutateStudio('Changer le rig du personnage', () => {
+      const group = currentDocument.value.groups.find(
+        (candidate): candidate is CharacterGroup =>
+          candidate.id === groupId && candidate.kind === 'character'
+      )
+      if (!group) return null
+
+      currentDocument.value.layers = currentDocument.value.layers.filter(
+        (layer) => layer.groupId !== group.id || layer.category === 'character_full'
+      )
+      let nextOrder =
+        currentDocument.value.layers.reduce((max, layer) => Math.max(max, layer.order), -1) + 1
+      const created: EditorLayer[] = presets.map((preset) => ({
+        id: generateId('layer'),
+        assetId: preset.assetId,
+        name: preset.name,
+        category: preset.category,
+        groupId: group.id,
+        zIndex: preset.calibration.zIndex ?? ASSET_CATEGORIES[preset.category].defaultZIndex,
+        order: nextOrder++,
+        muted: false,
+        locked: false,
+        depthRole: 'auto',
+        transform: normalizeTransform(preset.calibration)
+      }))
+      currentDocument.value.layers.push(...created)
+      group.activeMode = 'rig'
+      group.activeRigId = rigId
+      group.muted = false
+      selectedLayerId.value = null
+      selectedGroupId.value = group.id
+      editScope.value = 'group'
+      return (
+        created.find((layer) => layer.assetId === selectedAssetId) ??
+        created.find((layer) => layer.category === 'body') ??
+        created[0] ??
+        null
+      )
     })
   }
 
@@ -761,6 +819,16 @@ export const useEditorStore = defineStore('editor', () => {
     editScope.value = 'layer'
   }
 
+  function selectRigLayerForCalibration(layerId: string): void {
+    const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
+    if (!layer) return
+    const group = currentDocument.value.groups.find((candidate) => candidate.id === layer.groupId)
+    if (group?.kind !== 'character') return
+    selectedLayerId.value = layerId
+    selectedGroupId.value = group.id
+    editScope.value = 'layer'
+  }
+
   function selectGroupForEditing(groupId: string): void {
     if (!currentDocument.value.groups.some((group) => group.id === groupId)) return
     selectedGroupId.value = groupId
@@ -832,6 +900,7 @@ export const useEditorStore = defineStore('editor', () => {
     saveDocument,
     flushPersistence,
     assignAssetToGroup,
+    applyCharacterRig,
     toggleAssetInViewport,
     addLayer,
     removeLayer,
@@ -858,6 +927,7 @@ export const useEditorStore = defineStore('editor', () => {
     updateCamera,
     updateDepthOfField,
     selectLayerForEditing,
+    selectRigLayerForCalibration,
     selectGroupForEditing,
     clearStudioSelection,
     beginGesture,

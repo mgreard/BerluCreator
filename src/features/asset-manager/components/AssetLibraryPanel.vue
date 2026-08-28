@@ -15,6 +15,11 @@ import { Input } from '@/components/ui/input'
 import { NavigationItem } from '@/components/ui/navigation-item'
 import { Text } from '@/components/ui/text'
 import { toast } from '@/ui/shared/services/toast.service'
+import { useRigRuntime } from '@/features/studio/rig-calibration/useRigRuntime'
+import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
+import { isRigSlotCategory } from '@/features/studio/rig-calibration/rig-catalog.service'
+import type { RigDefinition } from '@/features/studio/rig-calibration/rig-catalog.types'
+import type { CharacterGroup } from '@core/types/editor.types'
 
 interface CharacterCategory {
   id: string
@@ -57,6 +62,8 @@ type ActiveSelection =
 const open = defineModel<boolean>('open', { default: true })
 const assetStore = useAssetStore()
 const editorStore = useEditorStore()
+const rigCatalog = useRigCatalogStore()
+const rigRuntime = useRigRuntime()
 const isUploadModalOpen = ref(false)
 const activeSelection = ref<ActiveSelection>({ type: 'all' })
 const expandedCharacters = ref<Record<string, boolean>>({})
@@ -69,6 +76,38 @@ function characterName(asset: Asset): string {
   return asset.character?.name || 'Berlu'
 }
 
+function activeRigForCharacterKey(key: string): RigDefinition | undefined {
+  const group = editorStore.currentDocument.groups.find(
+    (g): g is CharacterGroup => g.kind === 'character' && g.characterKey === key
+  )
+  if (group) {
+    return rigCatalog.rigById(group.activeRigId) ?? rigRuntime.activeRigForGroup(group)
+  }
+  return rigCatalog.defaultRig(key)
+}
+
+function isAssetAvailableInRig(asset: Asset, rig?: RigDefinition): boolean {
+  if (!asset.character || !isRigSlotCategory(asset.category)) return true
+  if (asset.category === 'body') return true
+  if (!rig) return true
+
+  const categoryDef = rig.categories.find((c) => c.category === asset.category)
+  if (categoryDef && !categoryDef.enabled) return false
+
+  return Boolean(rigCatalog.partForAsset(rig, asset))
+}
+
+function availableCategoriesForCharacter(key: string): CharacterCategory[] {
+  const activeRig = activeRigForCharacterKey(key)
+  return CHARACTER_CATEGORIES.filter((cat) => {
+    if (cat.id === 'full' || cat.id === 'body') return true
+    if (!activeRig) return true
+    const catDef = activeRig.categories.find((c) => c.category === cat.category)
+    if (catDef && !catDef.enabled) return false
+    return true
+  })
+}
+
 const availableCharacters = computed<CharacterSummary[]>(() => {
   const characters = new Map<string, CharacterSummary>()
   for (const asset of assetStore.assets) {
@@ -79,17 +118,41 @@ const availableCharacters = computed<CharacterSummary[]>(() => {
   return [...characters.values()].sort((left, right) => left.name.localeCompare(right.name, 'fr'))
 })
 
-watch(availableCharacters, (characters) => {
-  for (const character of characters) {
-    if (expandedCharacters.value[character.key] === undefined) {
-      expandedCharacters.value[character.key] = true
+watch(
+  availableCharacters,
+  (characters) => {
+    for (const character of characters) {
+      if (expandedCharacters.value[character.key] === undefined) {
+        expandedCharacters.value[character.key] = true
+      }
     }
-  }
-}, { immediate: true })
+  },
+  { immediate: true }
+)
+
+watch(
+  () => editorStore.currentDocument.groups.map((g) => (g.kind === 'character' ? g.activeRigId : null)),
+  () => {
+    const sel = activeSelection.value
+    if (sel.type === 'character' && sel.categoryId) {
+      const available = availableCategoriesForCharacter(sel.characterKey)
+      if (!available.some((c) => c.id === sel.categoryId)) {
+        activeSelection.value = {
+          type: 'character',
+          characterKey: sel.characterKey,
+          categoryId: null
+        }
+      }
+    }
+  },
+  { deep: true }
+)
 
 function hasOutfitTag(asset: Asset): boolean {
-  return asset.tags.some((tag) => ['tenue', 'outfit'].includes(tag.toLowerCase())) ||
+  return (
+    asset.tags.some((tag) => ['tenue', 'outfit'].includes(tag.toLowerCase())) ||
     /tenue|outfit/i.test(asset.name)
+  )
 }
 
 function matchesCharacterCategory(asset: Asset, definition: CharacterCategory): boolean {
@@ -99,9 +162,12 @@ function matchesCharacterCategory(asset: Asset, definition: CharacterCategory): 
 }
 
 function characterAssets(key: string): Asset[] {
-  return assetStore.assets.filter((asset) =>
-    ASSET_CATEGORIES[asset.category].placementMode === 'character-anchored' &&
-    characterKey(asset) === key
+  const activeRig = activeRigForCharacterKey(key)
+  return assetStore.assets.filter(
+    (asset) =>
+      ASSET_CATEGORIES[asset.category].placementMode === 'character-anchored' &&
+      characterKey(asset) === key &&
+      isAssetAvailableInRig(asset, activeRig)
   )
 }
 
@@ -138,13 +204,21 @@ const displayedAssets = computed(() => {
     if (definition) assets = assets.filter((asset) => matchesCharacterCategory(asset, definition))
   } else if (selection.type === 'stage') {
     assets = assets.filter((asset) => asset.category === selection.category)
+  } else if (selection.type === 'all') {
+    assets = assets.filter((asset) => {
+      if (ASSET_CATEGORIES[asset.category].placementMode !== 'character-anchored') return true
+      const key = characterKey(asset)
+      const activeRig = activeRigForCharacterKey(key)
+      return isAssetAvailableInRig(asset, activeRig)
+    })
   }
 
   const query = assetStore.searchQuery.trim().toLowerCase()
   if (query) {
-    assets = assets.filter((asset) =>
-      asset.name.toLowerCase().includes(query) ||
-      asset.tags.some((tag) => tag.toLowerCase().includes(query))
+    assets = assets.filter(
+      (asset) =>
+        asset.name.toLowerCase().includes(query) ||
+        asset.tags.some((tag) => tag.toLowerCase().includes(query))
     )
   }
   return [...assets].sort((left, right) => left.name.localeCompare(right.name, 'fr'))
@@ -154,11 +228,15 @@ const currentTitle = computed(() => {
   const selection = activeSelection.value
   if (selection.type === 'all') return 'Tous les sprites'
   if (selection.type === 'stage') {
-    return STAGE_CATEGORIES.find((entry) => entry.category === selection.category)?.label || 'Plateau'
+    return (
+      STAGE_CATEGORIES.find((entry) => entry.category === selection.category)?.label || 'Plateau'
+    )
   }
   const character = availableCharacters.value.find((entry) => entry.key === selection.characterKey)
   const category = CHARACTER_CATEGORIES.find((entry) => entry.id === selection.categoryId)
-  return category ? `${character?.name || 'Personnage'} · ${category.label}` : character?.name || 'Personnage'
+  return category
+    ? `${character?.name || 'Personnage'} · ${category.label}`
+    : character?.name || 'Personnage'
 })
 
 const currentCategory = computed(() => {
@@ -198,7 +276,17 @@ const visibleAssetIds = computed(() => {
 })
 
 function onSelectAsset(asset: Asset): void {
-  const layer = editorStore.toggleAssetInViewport(asset.id, asset.category, asset.name)
+  const usesRigCatalog = Boolean(asset.character && isRigSlotCategory(asset.category))
+  const layer = usesRigCatalog
+    ? rigRuntime.selectCharacterAsset(asset)
+    : editorStore.toggleAssetInViewport(asset.id, asset.category, asset.name)
+  if (usesRigCatalog && !layer) {
+    toast.warning(
+      'Élément non associé',
+      'Ouvrez la calibration des rigs pour associer ce sprite à un ou plusieurs corps.'
+    )
+    return
+  }
   if (layer && ASSET_CATEGORIES[asset.category].placementMode === 'character-anchored') {
     editorStore.selectGroupForEditing(layer.groupId)
   }
@@ -209,18 +297,24 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
   try {
     const impact = await assetStore.inspectAssetDeletion(asset.id)
     if (impact.snapshotNames.length > 0) {
-      alert(`Suppression impossible : cet asset est utilisé par les vues sauvegardées suivantes : ${impact.snapshotNames.join(', ')}.`)
+      alert(
+        `Suppression impossible : cet asset est utilisé par les vues sauvegardées suivantes : ${impact.snapshotNames.join(', ')}.`
+      )
       return
     }
-    const message = impact.layerCount > 0
-      ? `Supprimer définitivement « ${asset.name} » et ses ${impact.layerCount} calque(s) ?`
-      : `Supprimer définitivement « ${asset.name} » ?`
+    const message =
+      impact.layerCount > 0
+        ? `Supprimer définitivement « ${asset.name} » et ses ${impact.layerCount} calque(s) ?`
+        : `Supprimer définitivement « ${asset.name} » ?`
     if (!confirm(message)) return
     await assetStore.deleteAssetCascade(asset.id)
     editorStore.syncAfterAssetDeletion(asset.id)
     toast.success('Asset supprimé', `${impact.layerCount} calque(s) nettoyé(s).`)
   } catch (error) {
-    toast.error('Suppression annulée', error instanceof Error ? error.message : 'Une erreur de stockage est survenue.')
+    toast.error(
+      'Suppression annulée',
+      error instanceof Error ? error.message : 'Une erreur de stockage est survenue.'
+    )
   }
 }
 
@@ -228,8 +322,14 @@ onMounted(() => assetStore.loadAssets())
 </script>
 
 <template>
-  <div data-tour="asset-library" class="flex h-full w-full select-none overflow-hidden border-r border-border-subtle bg-bg-surface/30 backdrop-blur-md">
-    <nav class="library-nav custom-scrollbar flex w-52 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border-subtle bg-bg-surface/30 p-2" aria-label="Catégories de sprites">
+  <div
+    data-tour="asset-library"
+    class="flex h-full w-full select-none overflow-hidden border-r border-border-subtle bg-bg-surface/30 backdrop-blur-md"
+  >
+    <nav
+      class="library-nav custom-scrollbar flex w-52 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border-subtle bg-bg-surface/30 p-2"
+      aria-label="Catégories de sprites"
+    >
       <NavigationItem
         label="Tous les sprites"
         icon="apps"
@@ -240,7 +340,13 @@ onMounted(() => assetStore.loadAssets())
       />
 
       <section class="grid gap-1.5">
-        <Text as="p" variant="caption" color="muted" class="px-2 text-[10px] font-bold uppercase tracking-wider">Personnages</Text>
+        <Text
+          as="p"
+          variant="caption"
+          color="muted"
+          class="px-2 text-[10px] font-bold uppercase tracking-wider"
+          >Personnages</Text
+        >
         <Card
           v-for="character in availableCharacters"
           :key="character.key"
@@ -254,7 +360,11 @@ onMounted(() => assetStore.loadAssets())
             :count="characterAssets(character.key).length"
             accent="#f59e0b"
             density="compact"
-            :selected="activeSelection.type === 'character' && activeSelection.characterKey === character.key && activeSelection.categoryId === null"
+            :selected="
+              activeSelection.type === 'character' &&
+              activeSelection.characterKey === character.key &&
+              activeSelection.categoryId === null
+            "
             @click="selectCharacter(character.key, null)"
           >
             <template #prefix>
@@ -274,14 +384,18 @@ onMounted(() => assetStore.loadAssets())
             class="grid gap-1 border-t border-border-subtle bg-bg-base/25 p-1.5 pl-2"
           >
             <NavigationItem
-              v-for="category in CHARACTER_CATEGORIES"
+              v-for="category in availableCategoriesForCharacter(character.key)"
               :key="category.id"
               :label="category.label"
               :icon="category.icon"
               :count="characterCategoryCount(character.key, category) || undefined"
               :accent="ASSET_CATEGORIES[category.category].color"
               density="compact"
-              :selected="activeSelection.type === 'character' && activeSelection.characterKey === character.key && activeSelection.categoryId === category.id"
+              :selected="
+                activeSelection.type === 'character' &&
+                activeSelection.characterKey === character.key &&
+                activeSelection.categoryId === category.id
+              "
               @click="selectCharacter(character.key, category.id)"
             />
           </div>
@@ -289,7 +403,13 @@ onMounted(() => assetStore.loadAssets())
       </section>
 
       <section class="grid gap-1 border-t border-border-subtle pt-3">
-        <Text as="p" variant="caption" color="muted" class="px-2 text-[10px] font-bold uppercase tracking-wider">Plateau & décor</Text>
+        <Text
+          as="p"
+          variant="caption"
+          color="muted"
+          class="px-2 text-[10px] font-bold uppercase tracking-wider"
+          >Plateau & décor</Text
+        >
         <NavigationItem
           v-for="category in STAGE_CATEGORIES"
           :key="category.category"
@@ -298,22 +418,42 @@ onMounted(() => assetStore.loadAssets())
           :count="stageCategoryCount(category.category) || undefined"
           :accent="ASSET_CATEGORIES[category.category].color"
           density="compact"
-          :selected="activeSelection.type === 'stage' && activeSelection.category === category.category"
+          :selected="
+            activeSelection.type === 'stage' && activeSelection.category === category.category
+          "
           @click="selectStage(category.category)"
         />
       </section>
     </nav>
 
     <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-      <div class="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border-subtle px-3">
+      <div
+        class="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border-subtle px-3"
+      >
         <div class="flex min-w-0 items-center gap-2">
-          <Button variant="ghost" size="xs" class="size-7 px-0" aria-label="Replier la bibliothèque" @click="open = false">
+          <Button
+            variant="ghost"
+            size="xs"
+            class="size-7 px-0"
+            aria-label="Replier la bibliothèque"
+            @click="open = false"
+          >
             <Icon name="left_panel_close" size="xs" />
           </Button>
-          <span v-if="currentCategory" class="current-category-icon" :style="{ color: currentCategory.color }"><Icon :name="currentCategory.icon" size="xs" /></span>
+          <span
+            v-if="currentCategory"
+            class="current-category-icon"
+            :style="{ color: currentCategory.color }"
+            ><Icon :name="currentCategory.icon" size="xs"
+          /></span>
           <span class="truncate text-xs font-bold">{{ currentTitle }}</span>
         </div>
-        <Button variant="primary" size="sm" class="h-7 gap-1 px-2" @click="isUploadModalOpen = true">
+        <Button
+          variant="primary"
+          size="sm"
+          class="h-7 gap-1 px-2"
+          @click="isUploadModalOpen = true"
+        >
           <Icon name="cloud_upload" size="xs" />
           Importer
         </Button>
@@ -340,7 +480,11 @@ onMounted(() => assetStore.loadAssets())
           title="Aucun sprite dans cette catégorie"
           class="h-48 border-0 bg-transparent shadow-none"
         >
-          <template #action><Button variant="secondary" size="sm" @click="isUploadModalOpen = true">Importer un sprite</Button></template>
+          <template #action
+            ><Button variant="secondary" size="sm" @click="isUploadModalOpen = true"
+              >Importer un sprite</Button
+            ></template
+          >
         </EmptyState>
       </div>
     </div>
@@ -355,7 +499,9 @@ onMounted(() => assetStore.loadAssets())
 
 <style scoped>
 .library-nav {
-  box-shadow: inset -1px 0 0 rgb(255 255 255 / 3%), inset 0 1px 0 rgb(255 255 255 / 8%);
+  box-shadow:
+    inset -1px 0 0 rgb(255 255 255 / 3%),
+    inset 0 1px 0 rgb(255 255 255 / 8%);
 }
 
 .current-category-icon {
@@ -370,8 +516,14 @@ onMounted(() => assetStore.loadAssets())
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
 
-.custom-scrollbar::-webkit-scrollbar { width: 5px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 12%); border-radius: 9999px; }
-
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 12%);
+  border-radius: 9999px;
+}
 </style>

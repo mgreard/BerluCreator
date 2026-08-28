@@ -10,6 +10,8 @@ import type {
   LayerDepthRole
 } from '@core/types/editor.types'
 import { clampBackgroundCover } from '../engine/background-cover.engine'
+import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
+import { DEFAULT_RIG_CANVAS } from '../rig-calibration/rig-catalog.service'
 
 export interface RenderableLayer {
   id: string
@@ -55,6 +57,7 @@ export function useHierarchyResolver() {
   const editorStore = useEditorStore()
   const assetStore = useAssetStore()
   const projectStore = useProjectStore()
+  const rigCatalog = useRigCatalogStore()
 
   const activeLayers = computed<RenderableLayer[]>(() => {
     const stage = projectStore.currentProject.stage
@@ -66,6 +69,14 @@ export function useHierarchyResolver() {
         (group): group is CharacterGroup => group.kind === 'character'
       ),
       assets,
+      (group) => {
+        const rig =
+          rigCatalog.rigById(group.activeRigId) ?? rigCatalog.defaultRig(group.characterKey)
+        return {
+          canvasWidth: rig?.canvasWidth ?? DEFAULT_RIG_CANVAS.width,
+          canvasHeight: rig?.canvasHeight ?? DEFAULT_RIG_CANVAS.height
+        }
+      },
       stage
     )
     const result: RenderableLayer[] = []
@@ -99,19 +110,24 @@ function resolveCharacterGeometries(
   layers: EditorLayer[],
   groups: CharacterGroup[],
   assets: Map<string, Asset>,
+  getProfile: (group: CharacterGroup) => { canvasWidth: number; canvasHeight: number },
   stage: { width: number; height: number }
 ): Map<string, CharacterGeometry> {
   const geometries = new Map<string, CharacterGeometry>()
   for (const group of groups) {
-    const activeAssets = layers
-      .filter(
-        (layer) =>
-          layer.groupId === group.id && !layer.muted && isLayerActiveForCharacter(layer, group)
-      )
-      .map((layer) => assets.get(layer.assetId))
-      .filter((asset): asset is Asset => Boolean(asset))
-    const referenceWidth = Math.max(1, ...activeAssets.map((asset) => asset.width))
-    const referenceHeight = Math.max(1, ...activeAssets.map((asset) => asset.height))
+    const profile = getProfile(group)
+    const activeFullAsset =
+      group.activeMode === 'full'
+        ? layers
+            .filter(
+              (layer) =>
+                layer.groupId === group.id && !layer.muted && layer.category === 'character_full'
+            )
+            .map((layer) => assets.get(layer.assetId))
+            .find((asset): asset is Asset => Boolean(asset))
+        : undefined
+    const referenceWidth = Math.max(1, activeFullAsset?.width ?? profile.canvasWidth)
+    const referenceHeight = Math.max(1, activeFullAsset?.height ?? profile.canvasHeight)
     const baseScale = Math.min(
       1,
       (stage.width * 0.7) / referenceWidth,
@@ -229,8 +245,8 @@ function resolveLayer(
     const geometry = characterGeometry ?? { x: 0, y: 0, baseScale: 1, originX: 0, originY: 0 }
     const width = asset.width * geometry.baseScale
     const height = asset.height * geometry.baseScale
-    const x = geometry.x + transform.x + rig.x
-    const y = geometry.y + transform.y + rig.y
+    const x = geometry.x + transform.x * geometry.baseScale + rig.x
+    const y = geometry.y + transform.y * geometry.baseScale + rig.y
     return {
       ...commonLayer(layer, asset, group),
       x: Math.round(x),

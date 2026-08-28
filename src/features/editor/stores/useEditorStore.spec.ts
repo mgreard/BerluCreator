@@ -255,6 +255,10 @@ describe('useEditorStore', () => {
     store.selectLayerForEditing(first!.id)
     expect(store.editScope).toBe('group')
     expect(store.selectedLayerId).toBeNull()
+    store.selectRigLayerForCalibration(first!.id)
+    expect(store.editScope).toBe('layer')
+    expect(store.selectedLayerId).toBe(first!.id)
+    store.updateLayerTransform(first!.id, { x: 120, y: 30, scaleX: 0.7, scaleY: 0.7 })
 
     const replacement = store.toggleAssetInViewport('head-b', 'head')
     expect(replacement?.id).toBe(first?.id)
@@ -262,6 +266,7 @@ describe('useEditorStore', () => {
       1
     )
     expect(store.currentDocument.layers[0].assetId).toBe('head-b')
+    expect(replacement?.transform).toMatchObject({ x: 0, y: 0, scaleX: 1, scaleY: 1 })
 
     expect(store.toggleAssetInViewport('head-b', 'head')).toBeNull()
     expect(store.currentDocument.layers.filter((layer) => layer.category === 'head')).toHaveLength(

@@ -15,12 +15,14 @@ import { Switch } from '@/components/ui/switch'
 import { FormGroup } from '@/components/ui/form-group'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { toast } from '@/ui/shared/services/toast.service'
+import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 
 const open = defineModel<boolean>('open', { default: false })
 
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
 const assetStore = useAssetStore()
+const rigCatalogStore = useRigCatalogStore()
 const { activeLayers } = useHierarchyResolver()
 
 const stage = computed(() => projectStore.currentProject.stage)
@@ -60,8 +62,9 @@ function downloadJson() {
     stage: projectStore.currentProject.stage,
     document: editorStore.currentDocument,
     assetsMetadata: assetStore.assets,
+    rigCatalog: rigCatalogStore.exportCatalog(),
     exportedAt: new Date().toISOString(),
-    version: '3.2.0'
+    version: '4.0.0'
   }
 
   const jsonStr = JSON.stringify(exportPayload, null, 2)

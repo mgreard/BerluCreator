@@ -157,6 +157,31 @@ describe('useHierarchyResolver', () => {
     expect(activeLayers.value[0].width / activeLayers.value[0].height).toBeCloseTo(2)
   })
 
+  it('ne déplace pas la tête quand le corps actif change de dimensions', () => {
+    const editor = useEditorStore()
+    const assets = useAssetStore()
+    assets.assets = [
+      asset('bust', 'body', 'rig', 424, 838),
+      asset('full-body', 'body', 'rig', 1031, 812),
+      asset('head', 'head', 'rig', 260, 309)
+    ]
+    editor.assignAssetToGroup('bust', 'body')
+    const head = editor.assignAssetToGroup('head', 'head')
+    editor.updateLayerTransform(head.id, { x: 210, y: 24, scaleX: 0.8, scaleY: 0.8 })
+    const { activeLayers } = useHierarchyResolver()
+    const before = activeLayers.value.find((layer) => layer.layerId === head.id)!
+
+    editor.assignAssetToGroup('full-body', 'body')
+    const after = activeLayers.value.find((layer) => layer.layerId === head.id)!
+
+    expect({ x: after.x, y: after.y, width: after.width, height: after.height }).toEqual({
+      x: before.x,
+      y: before.y,
+      width: before.width,
+      height: before.height
+    })
+  })
+
   it('rend déplaçable un ancien bureau persisté comme non mobile', () => {
     const editor = useEditorStore()
     const assets = useAssetStore()

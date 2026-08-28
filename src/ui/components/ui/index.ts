@@ -29,6 +29,7 @@ export * from './dropdown-menu'
 export * from './lightbox-modal'
 export * from './camera-frame-overlay'
 export * from './depth-of-field-overlay'
+export * from './rig-calibration-panel'
 
 // Data Display
 export * from './avatar'

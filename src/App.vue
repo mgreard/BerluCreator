@@ -13,6 +13,8 @@ import ProjectSettingsModal from '@/features/project/components/ProjectSettingsM
 import ExportModal from '@/features/project/components/ExportModal.vue'
 import { ViewportSnapshotsPanel } from '@/features/editor/components/viewport-snapshots-panel'
 import ResizableSidebar from '@/features/studio/components/ResizableSidebar.vue'
+import RigCalibrationWorkspace from '@/features/studio/components/RigCalibrationWorkspace.vue'
+import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import ToastContainer from '@/components/ui/toast-container/ToastContainer.vue'
 import {
   ProductTour,
@@ -24,6 +26,7 @@ const projectStore = useProjectStore()
 const assetStore = useAssetStore()
 const editorStore = useEditorStore()
 const workspaceBackupStore = useWorkspaceBackupStore()
+const rigCatalogStore = useRigCatalogStore()
 let stopWorkspaceWatch: WatchStopHandle | null = null
 
 const isSettingsOpen = ref(false)
@@ -37,7 +40,8 @@ const productTourSteps: ProductTourStep[] = [
     element: '[data-tour="asset-library"]',
     popover: {
       title: '1. Choisissez vos sprites',
-      description: 'Cliquez sur un sprite pour l’ajouter. Un autre sprite remplace le même slot et un second clic le retire.',
+      description:
+        'Cliquez sur un sprite pour l’ajouter. Une pièce compatible remplace son slot ; une pièce liée à un autre corps charge automatiquement ce rig.',
       side: 'right',
       align: 'start'
     }
@@ -46,7 +50,8 @@ const productTourSteps: ProductTourStep[] = [
     element: '[data-tour="stage"]',
     popover: {
       title: '2. Composez la scène',
-      description: 'Déplacez et redimensionnez les personnages comme un ensemble. Leur ratio original est toujours conservé.',
+      description:
+        'Déplacez et redimensionnez les personnages comme un ensemble. Leur ratio original est toujours conservé.',
       side: 'left',
       align: 'center'
     }
@@ -55,7 +60,8 @@ const productTourSteps: ProductTourStep[] = [
     element: '[data-tour="backup"]',
     popover: {
       title: '3. Sauvegardez votre travail',
-      description: 'Créez une sauvegarde complète de l’application ou restaurez la dernière version enregistrée.',
+      description:
+        'Créez une sauvegarde complète de l’application ou restaurez la dernière version enregistrée.',
       side: 'bottom',
       align: 'end'
     }
@@ -78,17 +84,14 @@ onMounted(async () => {
   // 2. Synchroniser les nouveaux sprites livrés sans toucher aux imports personnels
   await syncBundledAssets()
   await assetStore.loadAssets()
+  rigCatalogStore.initialize(assetStore.assets)
 
   // 3. Charger le document courant de l'éditeur
   await editorStore.loadDocument(proj.editorDocumentId, proj.id)
 
   await workspaceBackupStore.initialize()
   stopWorkspaceWatch = watch(
-    [
-      () => projectStore.currentProject,
-      () => editorStore.currentDocument,
-      () => assetStore.assets
-    ],
+    [() => projectStore.currentProject, () => editorStore.currentDocument, () => assetStore.assets],
     () => workspaceBackupStore.markDirty(),
     { deep: true }
   )
@@ -98,10 +101,23 @@ onBeforeUnmount(() => {
   stopWorkspaceWatch?.()
   workspaceBackupStore.dispose()
 })
+
+watch(
+  () => rigCatalogStore.isCalibrationOpen,
+  (open) => {
+    if (open) isSavedSnapshotsOpen.value = false
+  }
+)
+
+watch(isSavedSnapshotsOpen, (open) => {
+  if (open) rigCatalogStore.closeCalibration()
+})
 </script>
 
 <template>
-  <div class="h-screen w-screen flex flex-col bg-bg-base text-text-primary overflow-hidden font-sans select-none">
+  <div
+    class="h-screen w-screen flex flex-col bg-bg-base text-text-primary overflow-hidden font-sans select-none"
+  >
     <!-- Barre supérieure de navigation -->
     <StudioHeader
       @open-settings="isSettingsOpen = true"
@@ -126,6 +142,18 @@ onBeforeUnmount(() => {
 
       <!-- Viewport & Canvas de Composition (Centre, occupant tout l'espace restant) -->
       <StudioViewport />
+
+      <ResizableSidebar
+        v-if="rigCatalogStore.isCalibrationOpen"
+        v-model:open="rigCatalogStore.isCalibrationOpen"
+        side="right"
+        :default-width="420"
+        :min-width="360"
+        :max-width="560"
+        storage-key="berlu.rig-calibration-sidebar-width.v1"
+      >
+        <RigCalibrationWorkspace />
+      </ResizableSidebar>
 
       <!-- Compositions et vues sauvegardées (Droite) -->
       <ResizableSidebar
