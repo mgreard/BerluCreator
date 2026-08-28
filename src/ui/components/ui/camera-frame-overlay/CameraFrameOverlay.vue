@@ -290,14 +290,14 @@ function resetFrame() {
       </button>
 
       <div
-        class="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-border-default bg-bg-elevated/95 p-1.5 shadow-glass-lg backdrop-blur-md"
+        class="viewport-glass absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-1 rounded-xl border p-1.5"
         @pointerdown.stop
       >
         <button
           v-for="ratio in (['16:9', '9:16', '1:1', 'custom'] as CameraFrameAspectRatio[])"
           :key="ratio"
           type="button"
-          class="min-h-[36px] rounded-lg px-2.5 text-[11px] font-semibold text-text-secondary transition-colors hover:bg-bg-surface-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-primary"
+          class="viewport-action min-h-[36px] rounded-lg px-2.5 text-[11px] font-semibold transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-primary"
           :class="model.aspectRatio === ratio && 'bg-primary text-text-inverse hover:bg-primary hover:text-text-inverse'"
           :data-ratio="ratio"
           @click="applyRatio(ratio)"
@@ -306,7 +306,7 @@ function resetFrame() {
         </button>
         <button
           type="button"
-          class="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border-l border-border-subtle text-text-secondary hover:bg-bg-surface-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-primary"
+          class="viewport-action flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border-l border-white/15 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-primary"
           aria-label="Réinitialiser le cadrage à toute la scène"
           data-reset-camera
           @click="resetFrame"

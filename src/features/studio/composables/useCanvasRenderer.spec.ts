@@ -144,6 +144,12 @@ describe('profondeur de champ', () => {
         enabled: true
       })
     ).toBe(false)
+    expect(
+      shouldApplyDepthOfField(
+        [{ ...backgroundLayer, category: 'foreground', depthRole: 'background' }],
+        { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS, enabled: true }
+      )
+    ).toBe(false)
   })
 
   it('n’alloue aucun canvas temporaire lorsqu’elle est désactivée', () => {

@@ -169,6 +169,19 @@ const currentCategory = computed(() => {
   return definition ? ASSET_CATEGORIES[definition.category] : null
 })
 
+const uploadInitialCategory = computed<AssetCategory | null>(() => {
+  const selection = activeSelection.value
+  if (selection.type === 'stage') return selection.category
+  if (selection.type !== 'character') return null
+  const definition = CHARACTER_CATEGORIES.find((entry) => entry.id === selection.categoryId)
+  return definition?.category ?? 'character_full'
+})
+
+const uploadInitialCharacterKey = computed<string | null>(() => {
+  const selection = activeSelection.value
+  return selection.type === 'character' ? selection.characterKey : null
+})
+
 const visibleAssetIds = computed(() => {
   const ids = new Set<string>()
   const groups = new Map(editorStore.currentDocument.groups.map((group) => [group.id, group]))
@@ -332,7 +345,11 @@ onMounted(() => assetStore.loadAssets())
       </div>
     </div>
 
-    <AssetUploadModal v-model:open="isUploadModalOpen" />
+    <AssetUploadModal
+      v-model:open="isUploadModalOpen"
+      :initial-category="uploadInitialCategory"
+      :initial-character-key="uploadInitialCharacterKey"
+    />
   </div>
 </template>
 

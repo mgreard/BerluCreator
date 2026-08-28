@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onUnmounted, ref, watch, useTemplateRef } from 'vue'
+import { computed, onUnmounted, ref, useId, watch, useTemplateRef } from 'vue'
 import type { AssetCategory, CharacterAssetMetadata } from '@core/types/asset.types'
+import type { CharacterGroup } from '@core/types/editor.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { generateId } from '@/lib/utils'
 import { useAssetStore } from '../stores/useAssetStore'
@@ -13,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Heading } from '@/components/ui/heading'
 import { Text } from '@/components/ui/text'
 import { Input } from '@/components/ui/input'
+import { Select, type SelectOption } from '@/components/ui/select'
 import { FormGroup } from '@/components/ui/form-group'
 import { SelectableSurface } from '@/components/ui/selectable-surface'
 import { SegmentedControl } from '@/components/ui/segmented-control'
@@ -27,12 +29,29 @@ interface PreparedFile {
   error: string | null
 }
 
+interface Props {
+  initialCategory?: AssetCategory | null
+  initialCharacterKey?: string | null
+}
+
+interface CharacterOption {
+  key: string
+  name: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  initialCategory: null,
+  initialCharacterKey: null
+})
+
 const open = defineModel<boolean>('open', { default: false })
 const assetStore = useAssetStore()
 const editorStore = useEditorStore()
 
 const isDragging = ref(false)
 const fileInputRef = useTemplateRef<HTMLInputElement>('fileInput')
+const characterSelectId = useId()
+const newCharacterNameId = useId()
 const isImporting = ref(false)
 const preparedFiles = ref<PreparedFile[]>([])
 
@@ -42,8 +61,10 @@ const assetScope = ref<'character' | 'stage'>('character')
 // Mode Personnage : Personnage complet vs Élément du squelette articulé
 const characterMode = ref<'full' | 'skeleton'>('full')
 
-// Nom / Tag du personnage (ex: Berlu, Invité...)
-const characterName = ref('Berlu')
+// Cible : personnage déjà connu ou nouveau personnage.
+const characterTargetMode = ref<'existing' | 'new'>('existing')
+const selectedCharacterKey = ref('')
+const newCharacterName = ref('')
 
 // Catégorie active résolue
 const selectedCategory = ref<AssetCategory>('character_full')
@@ -71,6 +92,51 @@ const scopeOptions = [
   { value: 'stage', label: 'Plateau & Décor', icon: 'tv_gen' }
 ]
 
+const characterTargetOptions = [
+  { value: 'existing', label: 'Existant', icon: 'person_search' },
+  { value: 'new', label: 'Nouveau', icon: 'person_add' }
+]
+
+const availableCharacters = computed<CharacterOption[]>(() => {
+  const characters = new Map<string, CharacterOption>()
+  for (const group of editorStore.currentDocument.groups) {
+    if (group.kind !== 'character') continue
+    characters.set(group.characterKey, { key: group.characterKey, name: group.name })
+  }
+  for (const asset of assetStore.assets) {
+    if (!asset.character) continue
+    const current = characters.get(asset.character.key)
+    characters.set(asset.character.key, {
+      key: asset.character.key,
+      name: current?.name || asset.character.name
+    })
+  }
+  return [...characters.values()].sort((left, right) => left.name.localeCompare(right.name, 'fr'))
+})
+
+const characterSelectOptions = computed<SelectOption[]>(() =>
+  availableCharacters.value.map((character) => ({
+    value: character.key,
+    label: character.name
+  }))
+)
+
+const newCharacterNameError = computed<string | undefined>(() => {
+  const key = slugifyCharacterName(newCharacterName.value)
+  if (!key) return undefined
+  return availableCharacters.value.some((character) => character.key === key)
+    ? 'Ce personnage existe déjà. Choisissez-le dans la liste.'
+    : undefined
+})
+
+const isCharacterTargetValid = computed(() => {
+  if (assetScope.value !== 'character') return true
+  if (characterTargetMode.value === 'new') {
+    return newCharacterName.value.trim().length > 0 && !newCharacterNameError.value
+  }
+  return availableCharacters.value.some((character) => character.key === selectedCharacterKey.value)
+})
+
 function selectFullCharacterMode() {
   characterMode.value = 'full'
   selectedCategory.value = 'character_full'
@@ -97,31 +163,55 @@ watch(assetScope, (newScope) => {
   }
 })
 
-watch(
-  () => assetStore.selectedCategory,
-  (category) => {
-    if (category && category !== 'all') {
-      selectedCategory.value = category
-      if (CHARACTER_SKELETON_SLOTS.some((s) => s.id === category)) {
-        assetScope.value = 'character'
-        characterMode.value = category === 'character_full' ? 'full' : 'skeleton'
-      } else if (STAGE_SLOTS.some((s) => s.id === category)) {
-        assetScope.value = 'stage'
-      }
-    }
-  },
-  { immediate: true }
-)
+watch(selectedCategory, (category) => {
+  for (const entry of preparedFiles.value) entry.category = category
+})
+
+function applyCategoryContext(category: AssetCategory): void {
+  selectedCategory.value = category
+  if (category === 'character_full') {
+    assetScope.value = 'character'
+    characterMode.value = 'full'
+  } else if (CHARACTER_SKELETON_SLOTS.some((slot) => slot.id === category)) {
+    assetScope.value = 'character'
+    characterMode.value = 'skeleton'
+  } else {
+    assetScope.value = 'stage'
+  }
+}
+
+function selectedEditorCharacterKey(): string | null {
+  const selectedGroup = editorStore.currentDocument.groups.find(
+    (group): group is CharacterGroup =>
+      group.kind === 'character' && group.id === editorStore.selectedGroupId
+  )
+  return selectedGroup?.characterKey ?? null
+}
+
+function resetFormFromContext(): void {
+  const fallbackCategory = assetStore.selectedCategory === 'all'
+    ? 'character_full'
+    : assetStore.selectedCategory
+  applyCategoryContext(props.initialCategory ?? fallbackCategory)
+
+  const preferredKey = props.initialCharacterKey ?? selectedEditorCharacterKey()
+  const preferredCharacter = availableCharacters.value.find(
+    (character) => character.key === preferredKey
+  )
+  const character = preferredCharacter ?? availableCharacters.value[0]
+  selectedCharacterKey.value = character?.key ?? ''
+  characterTargetMode.value = character ? 'existing' : 'new'
+  newCharacterName.value = ''
+}
 
 watch(open, (isOpen) => {
   if (isOpen) {
     isImporting.value = false
-    assetScope.value = 'character'
-    selectFullCharacterMode()
+    resetFormFromContext()
     return
   }
   clearPreparedFiles()
-})
+}, { immediate: true })
 
 function clearPreparedFiles() {
   for (const entry of preparedFiles.value) {
@@ -180,12 +270,7 @@ async function performImport() {
       let importedAssetId: string | null = null
       try {
         const isCharacter = ASSET_CATEGORIES[item.category].placementMode === 'character-anchored'
-        const character = isCharacter
-          ? buildCharacterMetadata(
-              characterName.value,
-              item.category === 'character_full' ? 'full' : 'skeleton'
-            )
-          : undefined
+        const character = isCharacter ? resolveCharacterMetadata(item.category) : undefined
         const asset = await assetStore.importAsset(item.file, item.category, item.name, [], character)
         importedAssetId = asset.id
         editorStore.assignAssetToGroup(asset.id, item.category, null, item.name)
@@ -214,13 +299,29 @@ async function performImport() {
 
 function buildCharacterMetadata(name: string, mode: 'full' | 'skeleton'): CharacterAssetMetadata {
   const cleanName = name.trim()
-  const key = cleanName
+  const key = slugifyCharacterName(cleanName)
+  return { key, name: cleanName, form: mode === 'full' ? 'full' : 'rig' }
+}
+
+function slugifyCharacterName(name: string): string {
+  return name
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '')
-  return { key, name: cleanName, form: mode === 'full' ? 'full' : 'rig' }
+}
+
+function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetadata {
+  const form = category === 'character_full' ? 'full' : 'rig'
+  if (characterTargetMode.value === 'new') {
+    return buildCharacterMetadata(newCharacterName.value, form === 'full' ? 'full' : 'skeleton')
+  }
+  const character = availableCharacters.value.find(
+    (entry) => entry.key === selectedCharacterKey.value
+  )
+  if (!character) throw new Error('Sélectionnez un personnage existant.')
+  return { key: character.key, name: character.name, form }
 }
 </script>
 
@@ -253,16 +354,50 @@ function buildCharacterMetadata(name: string, mode: 'full' | 'skeleton'): Charac
 
         <!-- Section A : Personnages -->
         <div v-if="assetScope === 'character'" class="space-y-3 pt-1">
-          <!-- Nom / Tag du personnage -->
-          <div>
-            <FormGroup label="Nom / Variante du personnage" hint="Ex: Berlu, Invité, Co-Présentateur..." class="mb-0">
-              <Input
-                v-model="characterName"
-                size="sm"
-                placeholder="Ex : Berlu, Invité 1, Avatar..."
-              />
-            </FormGroup>
-          </div>
+          <FormGroup label="Destination du sprite" class="mb-0">
+            <SegmentedControl
+              v-model="characterTargetMode"
+              :options="characterTargetOptions"
+              size="sm"
+              variant="glass"
+              class="w-full"
+            />
+          </FormGroup>
+
+          <FormGroup
+            v-if="characterTargetMode === 'existing'"
+            label="Personnage existant"
+            :label-for="characterSelectId"
+            helper-text="Le sprite sera ajouté à ce personnage."
+            class="mb-0"
+          >
+            <Select
+              :id="characterSelectId"
+              v-model="selectedCharacterKey"
+              :options="characterSelectOptions"
+              size="sm"
+              placeholder="Choisir un personnage"
+              aria-label="Personnage existant"
+            />
+          </FormGroup>
+
+          <FormGroup
+            v-else
+            label="Nom du nouveau personnage"
+            :label-for="newCharacterNameId"
+            helper-text="Un nouveau personnage sera créé avec ce premier sprite."
+            :error="newCharacterNameError"
+            required
+            class="mb-0"
+          >
+            <Input
+              :id="newCharacterNameId"
+              v-model="newCharacterName"
+              size="sm"
+              placeholder="Ex : Berlu, Invité 1, Avatar..."
+              aria-label="Nom du nouveau personnage"
+            />
+          </FormGroup>
 
           <!-- Choix : Personnage complet vs Élément du squelette -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -448,7 +583,7 @@ function buildCharacterMetadata(name: string, mode: 'full' | 'skeleton'): Charac
           variant="primary"
           size="sm"
           class="gap-1.5"
-          :disabled="preparedFiles.length === 0 || isImporting"
+          :disabled="preparedFiles.length === 0 || isImporting || !isCharacterTargetValid"
           :loading="isImporting"
           @click="performImport"
         >

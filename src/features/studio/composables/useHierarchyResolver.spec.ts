@@ -18,7 +18,8 @@ function asset(
   category: Asset['category'],
   form?: 'full' | 'rig',
   width = 840,
-  height = 908
+  height = 908,
+  characterKey = 'berlu'
 ): Asset {
   return {
     id,
@@ -28,7 +29,9 @@ function asset(
     blobId: `blob-${id}`,
     width,
     height,
-    character: form ? { key: 'berlu', name: 'Berlu', form } : undefined,
+    character: form
+      ? { key: characterKey, name: characterKey === 'berlu' ? 'Berlu' : 'Pedro', form }
+      : undefined,
     isMovable: !form,
     createdAt: 1,
     updatedAt: 1
@@ -107,6 +110,32 @@ describe('useHierarchyResolver', () => {
     expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([desk.id, prop.id])
     editor.setLayerDepthRole(prop.id, 'background')
     expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([prop.id, desk.id])
+  })
+
+  it('conserve toujours le foreground devant un personnage ajouté dynamiquement', () => {
+    const editor = useEditorStore()
+    const assets = useAssetStore()
+    assets.assets = [
+      asset('flowers', 'foreground'),
+      asset('pedro-full', 'character_full', 'full', 840, 908, 'pedro')
+    ]
+    const foreground = editor.assignAssetToGroup('flowers', 'foreground')
+    const character = editor.assignAssetToGroup('pedro-full', 'character_full')
+    const { activeLayers } = useHierarchyResolver()
+
+    expect(
+      activeLayers.value.find((layer) => layer.layerId === character.id)?.groupZIndex
+    ).toBeGreaterThan(
+      activeLayers.value.find((layer) => layer.layerId === foreground.id)!.groupZIndex
+    )
+    expect(activeLayers.value.at(-1)?.layerId).toBe(foreground.id)
+
+    editor.setLayerDepthRole(foreground.id, 'background')
+    expect(activeLayers.value.at(-1)).toMatchObject({
+      layerId: foreground.id,
+      category: 'foreground',
+      depthRole: 'subject'
+    })
   })
 
   it('adapte les dimensions au ratio naturel de la représentation active', () => {

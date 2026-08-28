@@ -77,7 +77,9 @@ Le build applicatif signale encore un chunk principal supérieur à 500 kB. Hist
 - Les sliders Reka UI `Intensité` et `Douceur` exposent un rayon de 0 à 32 px et une
   transition de 0 à 600 px.
 - L’effet peut rester actif quand les aides d’édition sont masquées.
-- L’ordre partagé par le rendu et le hit-test place le décor avant les sujets nets.
+- L’ordre partagé par le rendu et le hit-test place le décor avant les sujets nets, puis
+  réserve la dernière bande aux assets `foreground`, quels que soient les `zIndex` des
+  personnages ajoutés ensuite.
 - Les gestes sont coalescés en une entrée undo/redo et les prévisualisations sont limitées
   à une mise à jour réactive par frame.
 - Le viewport, les miniatures et le PNG partagent le même pipeline ; l’overlay d’édition

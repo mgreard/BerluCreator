@@ -102,7 +102,10 @@ export function shouldApplyDepthOfField(
 }
 
 function isDepthBackgroundLayer(layer: RenderableLayer): boolean {
-  return layer.depthRole === 'background' || (!layer.depthRole && layer.category === 'background')
+  return (
+    layer.category !== 'foreground' &&
+    (layer.depthRole === 'background' || (!layer.depthRole && layer.category === 'background'))
+  )
 }
 
 function getDepthOfFieldBuffers(

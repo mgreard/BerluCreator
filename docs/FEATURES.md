@@ -87,13 +87,16 @@ Le flux d’import permet de choisir :
 
 - le domaine « Personnages » ou « Plateau & Décor » ;
 - pour un personnage, le mode « personnage complet » ou « squelette » ;
-- le nom du personnage ;
+- un personnage existant dans lequel classer le sprite, ou la création d’un nouveau personnage ;
 - le slot de rig ou la catégorie de décor ;
 - un ou plusieurs fichiers.
+
+À l’ouverture, le personnage et la catégorie sélectionnés dans la bibliothèque sont repris automatiquement. Sans contexte de bibliothèque, la modale reprend le personnage sélectionné sur le plateau puis utilise « Personnage complet » comme catégorie de repli.
 
 Règles fonctionnelles :
 
 - un fichier produit exactement un asset ;
+- le nom d’un nouveau personnage ne peut pas réutiliser l’identifiant normalisé d’un personnage existant ;
 - les pixels et dimensions d’origine sont conservés ;
 - le nom de fichier sans extension sert de nom par défaut ;
 - type MIME, décodage, dimensions et métadonnées sont validés avant écriture ;
@@ -170,6 +173,8 @@ Toutes les pièces visibles du rig sont manipulées comme un personnage indivisi
 - Une commande du viewport permet de l’activer ou de le désactiver à tout moment.
 - La catégorie `background` rejoint automatiquement le décor floutable. Les personnages,
   bureaux, objets du bureau et premiers plans restent automatiquement dans le sujet net.
+- Les assets `foreground` forment une bande finale toujours dessinée et sélectionnée
+  devant les personnages, y compris ceux ajoutés dynamiquement.
 - Un accessoire de plateau sélectionné peut être placé dans `Décor` ou `Sujet` depuis le
   HUD. Ce choix appartient à l’instance du calque et non à l’asset réutilisable.
 - L’état est conservé dans le document, l’historique et les compositions sauvegardées.

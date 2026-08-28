@@ -735,17 +735,18 @@ function onCanvasDoubleClick(e: MouseEvent) {
       />
 
       <div
-        class="absolute top-3 right-3 z-40 flex items-center gap-1 rounded-xl border border-border-default bg-bg-elevated/30 p-1 shadow-glass-md ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 ease-out"
+        class="viewport-glass absolute top-3 right-3 z-40 flex items-center gap-1 rounded-xl border p-1 transition-all duration-300 ease-out"
         @pointerdown.stop
         @dblclick.stop
       >
-        <Badge variant="neutral" size="sm" class="font-mono text-[10px] mx-1">
+        <Badge variant="neutral" size="sm" class="mx-1 border-white/15 bg-black/30 font-mono text-[10px] text-white/90">
           {{ stage.width }} × {{ stage.height }}
         </Badge>
         <IconButton
           icon="blur_on"
           size="xs"
           variant="ghost"
+          class="viewport-action"
           :active="depthOfField.enabled"
           :aria-label="
             depthOfField.enabled
@@ -763,6 +764,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
           icon="tune"
           size="xs"
           variant="ghost"
+          class="viewport-action"
           :active="isDepthOfFieldEditorOpen"
           :disabled="!depthOfField.enabled"
           :aria-label="
@@ -777,6 +779,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
           icon="crop_free"
           size="xs"
           variant="ghost"
+          class="viewport-action"
           :active="activeCamera.enabled"
           :aria-label="
             activeCamera.enabled ? 'Désactiver le cadrage caméra' : 'Activer le cadrage caméra'
@@ -788,6 +791,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
           icon="undo"
           size="xs"
           variant="ghost"
+          class="viewport-action"
           aria-label="Annuler la dernière transformation"
           aria-keyshortcuts="Control+Z Meta+Z"
           title="Annuler (Ctrl/Cmd+Z)"
@@ -798,6 +802,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
           icon="redo"
           size="xs"
           variant="ghost"
+          class="viewport-action"
           aria-label="Rétablir la dernière transformation"
           aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y"
           title="Rétablir (Ctrl/Cmd+Shift+Z ou Ctrl+Y)"
@@ -813,10 +818,10 @@ function onCanvasDoubleClick(e: MouseEvent) {
         @pointerdown.stop
       >
         <div
-          class="flex items-center gap-3 rounded-xl border border-border-default bg-bg-elevated/30 px-3 py-1.5 text-xs shadow-glass-md ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 ease-out"
+          class="viewport-glass flex items-center gap-3 rounded-xl border px-3 py-1.5 text-xs transition-all duration-300 ease-out"
         >
           <!-- Nom & Icône du calque sélectionné -->
-          <span class="font-semibold text-text-primary flex items-center gap-1.5">
+          <span class="flex items-center gap-1.5 font-semibold text-white/90">
             <Icon
               :name="ASSET_CATEGORIES[activeSelectedLayer.category]?.icon || 'layers'"
               size="xs"
@@ -832,16 +837,16 @@ function onCanvasDoubleClick(e: MouseEvent) {
           <!-- Dimensions en direct -->
           <span
             v-if="selectedBounds"
-            class="text-[10px] text-text-muted font-mono pl-1 border-l border-border-subtle/60"
+            class="border-l border-white/15 pl-1 font-mono text-[10px] text-white/60"
           >
             {{ selectedBounds.width }}&times;{{ selectedBounds.height }}px
           </span>
 
           <div
             v-if="canEditSelectedDepthRole"
-            class="flex items-center gap-2 border-l border-border-subtle/60 pl-2"
+            class="flex items-center gap-2 border-l border-white/15 pl-2"
           >
-            <span class="text-[10px] font-semibold text-text-muted">Plan de mise au point</span>
+            <span class="text-[10px] font-semibold text-white/60">Plan de mise au point</span>
             <SegmentedControl
               v-model="selectedDepthPlan"
               :options="depthPlanOptions"
@@ -866,7 +871,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
             icon="close"
             size="xs"
             variant="ghost"
-            class="text-text-muted hover:text-text-primary size-5 p-0"
+            class="viewport-action size-5 p-0"
             title="Désélectionner"
             @click="editorStore.clearStudioSelection()"
           />

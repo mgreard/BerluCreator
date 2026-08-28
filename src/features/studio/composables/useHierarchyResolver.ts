@@ -91,6 +91,7 @@ export function useHierarchyResolver() {
 }
 
 function depthBand(layer: RenderableLayer): number {
+  if (layer.category === 'foreground') return 2
   return layer.depthRole === 'background' ? 0 : 1
 }
 
@@ -172,11 +173,13 @@ function commonLayer(
     muted: layer.muted,
     locked: layer.locked || group.locked,
     depthRole:
-      layer.depthRole === 'background' || layer.depthRole === 'subject'
-        ? layer.depthRole
-        : layer.category === 'background'
-          ? 'background'
-          : 'subject',
+      layer.category === 'foreground'
+        ? 'subject'
+        : layer.depthRole === 'background' || layer.depthRole === 'subject'
+          ? layer.depthRole
+          : layer.category === 'background'
+            ? 'background'
+            : 'subject',
     // Les anciens bureaux peuvent encore porter isMovable=false en IndexedDB.
     // La catégorie desk est désormais toujours manipulable, sans migration destructive.
     isMovable: group.kind === 'character' || asset.category === 'desk' || asset.isMovable

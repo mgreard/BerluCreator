@@ -23,7 +23,7 @@ Statut : **studio simplifié avec personnages complets/rigs implémenté**.
 - [x] Vues sauvegardées contenant groupes, deux configurations, calques et caméra.
 - [x] Compositions intégrées dans un panneau droit repliable et redimensionnable, avec liste compacte à miniatures.
 - [x] Import indépendant par fichier avec validation et retry sans doublon.
-- [x] Import ouvert par défaut sur la catégorie « Personnage complet ».
+- [x] Import prérempli depuis le personnage ou la catégorie active, avec choix explicite entre personnage existant et nouveau.
 - [x] Suppression transactionnelle bloquée par les vues sauvegardées.
 - [x] Migration Dexie v4→v5 et suppression du legacy sans consommateur.
 - [x] TypeScript, ESLint, tests, build Vite et build Histoire au vert.
@@ -85,5 +85,6 @@ afin de ne provoquer aucun traitement supplémentaire pendant la construction de
 - [x] Résoudre automatiquement les arrière-plans comme décor et tous les autres éléments
       comme sujets nets.
 - [x] Permettre aux accessoires de plateau de rejoindre le décor depuis le HUD contextuel.
-- [x] Aligner l’ordre de rendu et le hit-test sur les bandes Décor puis Sujet.
+- [x] Aligner l’ordre de rendu et le hit-test sur les bandes Décor, Sujet puis Foreground,
+      ce dernier restant toujours au premier plan indépendamment des `zIndex` de groupes.
 - [x] Séparer l’activation de l’effet et la visibilité de ses aides d’édition.

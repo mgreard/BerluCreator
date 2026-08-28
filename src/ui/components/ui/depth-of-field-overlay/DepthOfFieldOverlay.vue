@@ -191,7 +191,7 @@ onBeforeUnmount(() => {
     >
       <div class="w-full border-t-2 border-dashed border-primary/80" aria-hidden="true" />
       <div
-        class="absolute left-3 flex min-h-[44px] items-center gap-1.5 rounded-xl border border-primary/50 bg-bg-elevated/30 px-3 text-[11px] font-semibold text-text-primary shadow-glass-md backdrop-blur-xl transition-all duration-300 ease-out"
+        class="viewport-glass absolute left-3 flex min-h-[44px] items-center gap-1.5 rounded-xl border border-primary/50 px-3 text-[11px] font-semibold text-white/90 transition-all duration-300 ease-out"
       >
         <Icon name="height" size="xs" class="text-primary" />
         <span>Limite de netteté {{ focusPercent }} %</span>
@@ -199,7 +199,7 @@ onBeforeUnmount(() => {
     </div>
 
     <section
-      class="absolute bottom-3 right-3 w-72 rounded-2xl border border-border-default bg-bg-elevated/30 p-3 text-text-primary shadow-glass-lg backdrop-blur-xl pointer-events-auto transition-all duration-300 ease-out"
+      class="viewport-glass pointer-events-auto absolute bottom-3 right-3 w-72 rounded-2xl border p-3 text-white/90 transition-all duration-300 ease-out"
       aria-label="Réglages du flou de profondeur"
       data-depth-controls
       @pointerdown.stop
@@ -211,7 +211,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="min-w-0">
           <p class="text-xs font-semibold">Profondeur de champ</p>
-          <p class="text-[10px] text-text-muted">Arrière-plan uniquement</p>
+          <p class="text-[10px] text-white/60">Arrière-plan uniquement</p>
         </div>
       </div>
 
