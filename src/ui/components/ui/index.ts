@@ -65,6 +65,7 @@ export * from './fieldset'
 // Navigation
 export * from './breadcrumb'
 export * from './command-palette'
+export * from './navigation-item'
 export * from './pagination'
 export * from './tabs'
 export * from './product-tour'
