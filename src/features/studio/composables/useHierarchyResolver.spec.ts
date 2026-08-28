@@ -9,15 +9,21 @@ vi.mock('@infrastructure/db/repositories/editor-document.repository', () => ({
   editorDocumentRepository: { getById: vi.fn(), getByProjectId: vi.fn().mockResolvedValue([]), save: vi.fn().mockResolvedValue(undefined) }
 }))
 
-function asset(id: string, category: Asset['category'], form?: 'full' | 'rig'): Asset {
+function asset(
+  id: string,
+  category: Asset['category'],
+  form?: 'full' | 'rig',
+  width = 840,
+  height = 908
+): Asset {
   return {
     id,
     name: id,
     category,
     tags: [],
     blobId: `blob-${id}`,
-    width: 840,
-    height: 908,
+    width,
+    height,
     character: form ? { key: 'berlu', name: 'Berlu', form } : undefined,
     isMovable: !form,
     createdAt: 1,
@@ -66,5 +72,36 @@ describe('useHierarchyResolver', () => {
     expect(activeLayers.value).toHaveLength(1)
     editor.setLayerMuted(layer.id, true)
     expect(activeLayers.value).toHaveLength(0)
+  })
+
+  it('adapte les dimensions au ratio naturel de la représentation active', () => {
+    const editor = useEditorStore()
+    const assets = useAssetStore()
+    assets.assets = [
+      asset('full', 'character_full', 'full', 1200, 600),
+      asset('body', 'body', 'rig', 600, 900)
+    ]
+    const full = editor.assignAssetToGroup('full', 'character_full')
+    const body = editor.assignAssetToGroup('body', 'body')
+    const { activeLayers } = useHierarchyResolver()
+
+    expect(activeLayers.value[0].layerId).toBe(body.id)
+    expect(activeLayers.value[0].width / activeLayers.value[0].height).toBeCloseTo(2 / 3)
+
+    editor.setCharacterMode(full.groupId, 'full')
+    expect(activeLayers.value[0].layerId).toBe(full.id)
+    expect(activeLayers.value[0].width / activeLayers.value[0].height).toBeCloseTo(2)
+  })
+
+  it('rend déplaçable un ancien bureau persisté comme non mobile', () => {
+    const editor = useEditorStore()
+    const assets = useAssetStore()
+    const legacyDesk = asset('desk', 'desk', undefined, 1792, 1024)
+    legacyDesk.isMovable = false
+    assets.assets = [legacyDesk]
+    editor.assignAssetToGroup('desk', 'desk')
+
+    const { activeLayers } = useHierarchyResolver()
+    expect(activeLayers.value[0]).toMatchObject({ category: 'desk', isMovable: true })
   })
 })

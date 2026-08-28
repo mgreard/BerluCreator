@@ -17,17 +17,17 @@ export const SPRITES_CONFIG: SpritesConfigFile = {
     arms_left: { isMovable: false, defaultZIndex: 12 },
     arms_right: { isMovable: false, defaultZIndex: 15 },
     props_set: { isMovable: true, defaultZIndex: 30 },
-    desk: { isMovable: false, defaultZIndex: 10 },
+    desk: { isMovable: true, defaultZIndex: 10 },
     props_desk: { isMovable: true, defaultZIndex: 30 },
     foreground: { isMovable: true, defaultZIndex: 50 }
   },
 
   rules: [
-    // Décor fixe du plateau (Desk / Bureau / Fond)
+    // Bureau du plateau, manipulable directement dans le viewport
     {
       pattern: 'bureau|desk|plateau_fond',
       category: 'desk',
-      isMovable: false,
+      isMovable: true,
       defaultZIndex: 28
     },
     // Accessoires déplaçables tenus ou posés

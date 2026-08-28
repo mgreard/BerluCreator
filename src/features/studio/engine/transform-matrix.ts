@@ -27,8 +27,7 @@ export interface ResizeScales {
 }
 
 /**
- * Calcule les échelles d'un gizmo centré : les coins conservent le ratio
- * existant, tandis que les poignées latérales ne modifient qu'un seul axe.
+ * Calcule une échelle uniforme depuis n'importe quelle poignée.
  */
 export function computeResizeScales(
   handle: ResizeHandle,
@@ -40,34 +39,24 @@ export function computeResizeScales(
 ): ResizeScales {
   const centerX = bounds.x + bounds.width / 2
   const centerY = bounds.y + bounds.height / 2
-  const isHorizontal = handle === 'left' || handle === 'right'
-  const isVertical = handle === 'top' || handle === 'bottom'
-
-  if (isHorizontal) {
+  let ratio = 1
+  if (handle === 'left' || handle === 'right') {
     const initialDistance = Math.abs(startPointer.x - centerX)
     const currentDistance = Math.abs(pointer.x - centerX)
-    return {
-      scaleX: initialDistance > 0 ? startScaleX * (currentDistance / initialDistance) : startScaleX,
-      scaleY: startScaleY
-    }
-  }
-
-  if (isVertical) {
+    ratio = initialDistance > 0 ? currentDistance / initialDistance : 1
+  } else if (handle === 'top' || handle === 'bottom') {
     const initialDistance = Math.abs(startPointer.y - centerY)
     const currentDistance = Math.abs(pointer.y - centerY)
-    return {
-      scaleX: startScaleX,
-      scaleY: initialDistance > 0 ? startScaleY * (currentDistance / initialDistance) : startScaleY
-    }
+    ratio = initialDistance > 0 ? currentDistance / initialDistance : 1
+  } else {
+    const initialDistance = Math.hypot(startPointer.x - centerX, startPointer.y - centerY)
+    const currentDistance = Math.hypot(pointer.x - centerX, pointer.y - centerY)
+    ratio = initialDistance > 0 ? currentDistance / initialDistance : 1
   }
-
-  const initialDistance = Math.hypot(startPointer.x - centerX, startPointer.y - centerY)
-  const currentDistance = Math.hypot(pointer.x - centerX, pointer.y - centerY)
-  const ratio = initialDistance > 0 ? currentDistance / initialDistance : 1
-
+  const startScale = startScaleX || startScaleY
   return {
-    scaleX: startScaleX * ratio,
-    scaleY: startScaleY * ratio
+    scaleX: startScale * ratio,
+    scaleY: startScale * ratio
   }
 }
 

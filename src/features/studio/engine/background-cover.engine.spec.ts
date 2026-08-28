@@ -43,4 +43,13 @@ describe('background-cover.engine', () => {
     expect(overLeft.x).toBe(-480)
     expect(overLeft.y).toBe(-270)
   })
+
+  it('normalise une ancienne échelle déformée sur un ratio uniforme', () => {
+    const result = clampBackgroundCover(
+      { x: 0, y: 0, scaleX: 1.25, scaleY: 3 },
+      { assetWidth: 1920, assetHeight: 1080, ...stage }
+    )
+    expect(result.scaleX).toBe(1.25)
+    expect(result.scaleY).toBe(1.25)
+  })
 })

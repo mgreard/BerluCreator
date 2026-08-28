@@ -6,7 +6,7 @@ import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useHierarchyResolver, type RenderableLayer } from '../composables/useHierarchyResolver'
 import { getCachedAssetImage, useCanvasRenderer } from '../composables/useCanvasRenderer'
 import { isLayerPointOpaque } from '../engine/alpha-hit-test'
-import { shouldTargetWholeGroup } from '../engine/selection-target'
+import { isActiveSelectionHit, shouldTargetWholeGroup } from '../engine/selection-target'
 import { clampBackgroundCover } from '../engine/background-cover.engine'
 import {
   computeResizeScales,
@@ -17,7 +17,6 @@ import {
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CameraFrameOverlay } from '@/components/ui/camera-frame-overlay'
 import type { CameraFrame } from '@core/types/editor.types'
@@ -79,13 +78,8 @@ const activeSelectedGroup = computed(() => {
   return null
 })
 
-const isCharacterTarget = computed(() => {
-  const cat = activeSelectedLayer.value?.category
-  return Boolean(cat && ASSET_CATEGORIES[cat]?.placementMode === 'character-anchored')
-})
-
 const isGroupTarget = computed(() => {
-  return (editScope.value === 'group' || isCharacterTarget.value) && Boolean(activeSelectedGroup.value)
+  return editScope.value === 'group' && Boolean(activeSelectedGroup.value)
 })
 
 const isSelectionLocked = computed(() =>
@@ -195,12 +189,20 @@ const selectedBounds = computed<BoxBounds | null>(() => {
 const targetLabel = computed<string | null>(() => {
   if (!activeSelectedLayer.value) return null
   if (isGroupTarget.value && activeSelectedGroup.value) {
-    const scaleX = activeSelectedGroup.value.transform?.scaleX ?? 1
-    const scaleY = activeSelectedGroup.value.transform?.scaleY ?? 1
-    return `Groupe : ${activeSelectedGroup.value.name} (X ${scaleX.toFixed(2)}× · Y ${scaleY.toFixed(2)}×)`
+    const scale = activeSelectedGroup.value.transform.scaleX
+    return `Groupe : ${activeSelectedGroup.value.name} (${scale.toFixed(2)}×)`
   }
   const l = activeSelectedLayer.value
-  return `${l.name || l.asset.name} (X ${l.scaleX.toFixed(2)}× · Y ${l.scaleY.toFixed(2)}×)`
+  return `${l.name || l.asset.name} (${l.localScaleX.toFixed(2)}×)`
+})
+
+const deleteSelectionLabel = computed(() => {
+  if (activeSelectedGroup.value?.kind === 'character' && isGroupTarget.value) {
+    return activeSelectedGroup.value.activeMode === 'full'
+      ? `Supprimer le sprite complet de ${activeSelectedGroup.value.name}`
+      : `Supprimer le rig complet de ${activeSelectedGroup.value.name}`
+  }
+  return `Supprimer ${activeSelectedLayer.value?.asset.name || 'cet élément'}`
 })
 
 // Envoi vers le moteur de rendu canvas
@@ -228,18 +230,11 @@ const dragStartScale = ref({ x: 1, y: 1 })
 const dragStartLayerPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 const dragStartGroupPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 
-const currentScaleX = computed(() => {
+const currentScale = computed(() => {
   if (isGroupTarget.value && activeSelectedGroup.value) {
-    return activeSelectedGroup.value.transform?.scaleX ?? 1
+    return activeSelectedGroup.value.transform.scaleX
   }
   return activeSelectedLayer.value?.localScaleX ?? activeSelectedLayer.value?.scaleX ?? 1
-})
-
-const currentScaleY = computed(() => {
-  if (isGroupTarget.value && activeSelectedGroup.value) {
-    return activeSelectedGroup.value.transform?.scaleY ?? 1
-  }
-  return activeSelectedLayer.value?.localScaleY ?? activeSelectedLayer.value?.scaleY ?? 1
 })
 
 const resizeCursorClass = computed(() => {
@@ -306,43 +301,33 @@ function clampScale(value: number) {
   return Number(Math.max(0.05, Math.min(5, value)).toFixed(2))
 }
 
-function applyScaleAxes(newScaleX: number, newScaleY: number) {
-  const clampedX = clampScale(newScaleX)
-  const clampedY = clampScale(newScaleY)
+function applyUniformScale(newScale: number) {
+  const scale = clampScale(newScale)
 
   if (isGroupTarget.value && activeSelectedGroup.value) {
     editorStore.updateGroupTransform(activeSelectedGroup.value.id, {
-      scaleX: clampedX,
-      scaleY: clampedY
+      scaleX: scale,
+      scaleY: scale
     })
   } else if (activeSelectedLayer.value) {
     editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, {
-      scaleX: clampedX,
-      scaleY: clampedY
+      scaleX: scale,
+      scaleY: scale
     })
   }
 }
 
-function adjustScale(delta: number) {
-  if (isSelectionLocked.value) return
-  editorStore.beginGesture('Redimensionner la sélection')
-  applyScaleAxes(currentScaleX.value + delta, currentScaleY.value + delta)
-  editorStore.endGesture()
-}
+function removeSelectedFromViewport() {
+  const layer = activeSelectedLayer.value
+  if (!layer) return
 
-function setExactScale(value: number) {
-  if (isSelectionLocked.value) return
-  editorStore.beginGesture('Redimensionner la sélection')
-  applyScaleAxes(value, value)
-  editorStore.endGesture()
-}
-
-function onCanvasWheel(e: WheelEvent) {
-  if (e.altKey || e.shiftKey) {
-    e.preventDefault()
-    const delta = e.deltaY < 0 ? 0.05 : -0.05
-    adjustScale(delta)
+  const group = activeSelectedGroup.value
+  if (isGroupTarget.value && group?.kind === 'character') {
+    editorStore.removeActiveCharacterRepresentation(group.id)
+  } else {
+    editorStore.removeLayer(layer.layerId)
   }
+  assetStore.selectAsset(null)
 }
 
 function getStageCoordinates(e: PointerEvent): { x: number; y: number } | null {
@@ -430,7 +415,7 @@ function onCanvasPointerDown(e: PointerEvent) {
       activeHandle.value = hitHandle
       dragStartPointer.value = { ...pos }
       dragStartBounds.value = { ...selectedBounds.value }
-      dragStartScale.value = { x: currentScaleX.value, y: currentScaleY.value }
+      dragStartScale.value = { x: currentScale.value, y: currentScale.value }
 
       const target = e.currentTarget as HTMLElement
       target?.setPointerCapture?.(e.pointerId)
@@ -467,8 +452,7 @@ function onCanvasPointerDown(e: PointerEvent) {
   // 3. Sélection au clic sur un calque
   const hit = hitTestLayer(pos)
   if (hit) {
-    const isChar = ASSET_CATEGORIES[hit.category]?.placementMode === 'character-anchored'
-    const selectWholeGroup = isChar || shouldTargetWholeGroup(hit.groupId, hit.category, editScope.value, e.shiftKey)
+    const selectWholeGroup = shouldTargetWholeGroup(hit.groupId, hit.category, editScope.value, e.shiftKey)
     if (hit.groupId && selectWholeGroup) {
       editorStore.selectGroupForEditing(hit.groupId)
     } else {
@@ -510,7 +494,7 @@ function onCanvasPointerMove(e: PointerEvent) {
       dragStartScale.value.x,
       dragStartScale.value.y
     )
-    applyScaleAxes(scales.scaleX, scales.scaleY)
+    applyUniformScale(scales.scaleX)
     return
   }
 
@@ -529,8 +513,8 @@ function onCanvasPointerMove(e: PointerEvent) {
           {
             x: dragStartLayerPos.value.x + dx,
             y: dragStartLayerPos.value.y + dy,
-            scaleX: currentScaleX.value,
-            scaleY: currentScaleY.value
+            scaleX: currentScale.value,
+            scaleY: currentScale.value
           },
           {
             assetWidth: activeSelectedLayer.value.asset.width || stage.value.width,
@@ -559,14 +543,10 @@ function onCanvasPointerMove(e: PointerEvent) {
 }
 
 function onCanvasPointerUp(e: PointerEvent) {
-  const restoreGroupId = (isDragging.value || isResizing.value) && !isGroupTarget.value
-    ? activeSelectedLayer.value?.groupId
-    : undefined
   isDragging.value = false
   isResizing.value = false
   activeHandle.value = null
   editorStore.endGesture()
-  if (restoreGroupId) editorStore.selectGroupForEditing(restoreGroupId)
 
   const target = e.currentTarget as HTMLElement
   if (target?.hasPointerCapture?.(e.pointerId)) {
@@ -579,11 +559,24 @@ function onCanvasDoubleClick(e: MouseEvent) {
   if (!pos) return
 
   const hit = hitTestLayer(pos)
+  if (
+    hit &&
+    isActiveSelectionHit(
+      {
+        selectedLayerId: editorStore.selectedLayerId,
+        selectedGroupId: editorStore.selectedGroupId,
+        editScope: editorStore.editScope
+      },
+      hit
+    )
+  ) {
+    editorStore.clearStudioSelection()
+    assetStore.selectAsset(null)
+    return
+  }
+
   if (hit && hit.groupId) {
-    const isChar = ASSET_CATEGORIES[hit.category]?.placementMode === 'character-anchored'
-    if (isChar) {
-      editorStore.selectGroupForEditing(hit.groupId)
-    } else if (e.shiftKey) {
+    if (e.shiftKey) {
       editorStore.selectGroupForEditing(hit.groupId)
     } else {
       editorStore.selectLayerForEditing(hit.layerId)
@@ -591,6 +584,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
     assetStore.selectAsset(hit.asset.id)
   } else if (!hit && !editorStore.hasActiveGesture) {
     editorStore.clearStudioSelection()
+    assetStore.selectAsset(null)
   }
 }
 </script>
@@ -615,7 +609,6 @@ function onCanvasDoubleClick(e: MouseEvent) {
       @pointercancel="onCanvasPointerUp"
       @pointerleave="onCanvasPointerUp"
       @dblclick="onCanvasDoubleClick"
-      @wheel.prevent="onCanvasWheel"
     >
       <canvas
         ref="canvas"
@@ -688,53 +681,18 @@ function onCanvasDoubleClick(e: MouseEvent) {
             <span>{{ isGroupTarget && activeSelectedGroup ? activeSelectedGroup.name : (activeSelectedLayer.name || activeSelectedLayer.asset.name) }}</span>
           </span>
 
-          <!-- Contrôle de l'Échelle (Scale) -->
-          <div class="flex items-center gap-1 pl-2 border-l border-border-subtle/60">
-            <span class="text-[10px] text-text-muted">Échelle :</span>
-            <IconButton
-              icon="remove"
-              size="xs"
-              variant="secondary"
-              class="w-5 h-5 rounded bg-bg-surface hover:bg-bg-surface-hover text-text-muted hover:text-text-primary border border-border-subtle flex items-center justify-center text-xs font-bold cursor-pointer transition-colors"
-              title="Réduire l'échelle (-0.05)"
-              @click="adjustScale(-0.05)"
-            />
-            <span class="font-mono text-[10px] font-bold text-primary min-w-[82px] text-center">
-              X {{ currentScaleX.toFixed(2) }}× · Y {{ currentScaleY.toFixed(2) }}×
-            </span>
-            <IconButton
-              icon="add"
-              size="xs"
-              variant="secondary"
-              class="w-5 h-5 rounded bg-bg-surface hover:bg-bg-surface-hover text-text-muted hover:text-text-primary border border-border-subtle flex items-center justify-center text-xs font-bold cursor-pointer transition-colors"
-              title="Augmenter l'échelle (+0.05)"
-              @click="adjustScale(0.05)"
-            />
-            <Button
-              v-if="currentScaleX !== 1 || currentScaleY !== 1"
-              size="xs"
-              variant="ghost"
-              class="text-[9px] font-bold text-text-muted hover:text-text-primary px-1 py-0.5 rounded border border-border-subtle hover:bg-bg-surface-hover cursor-pointer ml-0.5"
-              title="Rétablir l'échelle à 1.00×"
-              @click="setExactScale(1)"
-            >
-              1:1
-            </Button>
-          </div>
-
           <!-- Dimensions en direct -->
           <span v-if="selectedBounds" class="text-[10px] text-text-muted font-mono pl-1 border-l border-border-subtle/60">
             {{ selectedBounds.width }}&times;{{ selectedBounds.height }}px
           </span>
 
           <IconButton
-            v-if="!isGroupTarget"
             icon="delete"
             size="xs"
             variant="destructive"
-            :aria-label="`Supprimer ${activeSelectedLayer.asset.name}`"
-            title="Supprimer ce calque"
-            @click="editorStore.removeLayer(activeSelectedLayer.layerId)"
+            :aria-label="deleteSelectionLabel"
+            :title="deleteSelectionLabel"
+            @click="removeSelectedFromViewport"
           />
 
           <!-- Bouton Désélectionner / Fermer HUD -->

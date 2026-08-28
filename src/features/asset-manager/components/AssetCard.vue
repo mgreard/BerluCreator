@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watchEffect, onWatcherCleanup } from 'vue'
+import { ref, watchEffect, onWatcherCleanup } from 'vue'
 import type { Asset } from '@core/types/asset.types'
-import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
@@ -17,12 +16,7 @@ const { asset, selected = false } = defineProps<{
 const emit = defineEmits<{
   (e: 'select', asset: Asset): void
   (e: 'delete', asset: Asset): void
-  (e: 'calibrate', asset: Asset): void
 }>()
-
-const isCharacterCategory = computed(() => {
-  return ASSET_CATEGORIES[asset.category]?.placementMode === 'character-anchored'
-})
 
 const previewUrl = ref<string | null>(null)
 
@@ -71,29 +65,6 @@ watchEffect(async () => {
         <Icon name="image" size="md" />
       </div>
 
-      <!-- Badge indicateur calibré sur Berlu -->
-      <Badge
-        v-if="asset.calibration"
-        variant="accent"
-        size="sm"
-        class="absolute top-1.5 left-1.5 text-[9px] font-semibold gap-1 shadow-glass-xs border-primary/40 backdrop-blur-md"
-        title="Cet asset est calibré sur le mannequin de Berlu"
-      >
-        <Icon name="accessibility_new" size="xs" />
-        <span>Calibré</span>
-      </Badge>
-
-      <!-- Badge indicateur déplaçable / mobile sur canvas -->
-      <Badge
-        v-else-if="asset.isMovable"
-        variant="accent"
-        size="sm"
-        class="absolute top-1.5 left-1.5 text-[9px] font-semibold gap-1 shadow-glass-xs border-primary/30 backdrop-blur-md"
-        title="Ce sprite peut être déplacé à la souris sur le canvas"
-      >
-        <Icon name="open_with" size="xs" class="text-primary" />
-        <span>Mobile</span>
-      </Badge>
     </div>
 
     <!-- Informations et Actions -->
@@ -114,15 +85,6 @@ watchEffect(async () => {
 
       <!-- Actions directes -->
       <div class="flex items-center gap-0.5 shrink-0">
-        <IconButton
-          v-if="isCharacterCategory"
-          icon="accessibility_new"
-          size="xs"
-          variant="ghost"
-          title="Calibrer sur le mannequin Berlu (Fitting Room)"
-          class="size-6 p-0 text-text-muted hover:text-primary hover:bg-primary/10"
-          @click.stop="emit('calibrate', asset)"
-        />
         <IconButton
           icon="delete"
           size="xs"

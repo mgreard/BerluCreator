@@ -9,7 +9,6 @@ import { seedDemoAssetsIfEmpty } from '@/features/asset-manager/services/demo-as
 import StudioHeader from '@/features/project/components/StudioHeader.vue'
 import AssetLibraryPanel from '@/features/asset-manager/components/AssetLibraryPanel.vue'
 import StudioViewport from '@/features/studio/components/StudioViewport.vue'
-import HierarchyInspector from '@/features/studio/components/HierarchyInspector.vue'
 import ProjectSettingsModal from '@/features/project/components/ProjectSettingsModal.vue'
 import ExportModal from '@/features/project/components/ExportModal.vue'
 import ViewportSnapshotsModal from '@/features/editor/components/ViewportSnapshotsModal.vue'
@@ -30,7 +29,6 @@ let stopWorkspaceWatch: WatchStopHandle | null = null
 const isSettingsOpen = ref(false)
 const isExportOpen = ref(false)
 const isSavedSnapshotsOpen = ref(false)
-const showHierarchy = ref(true)
 const showAssetLibrary = ref(true)
 const productTourRef = useTemplateRef<ProductTourExpose>('productTourRef')
 
@@ -39,7 +37,7 @@ const productTourSteps: ProductTourStep[] = [
     element: '[data-tour="asset-library"]',
     popover: {
       title: '1. Choisissez vos sprites',
-      description: 'Filtrez la bibliothèque puis cliquez sur un sprite pour l’ajouter sur le plateau ou dans le groupe actif.',
+      description: 'Cliquez sur un sprite pour l’ajouter. Un autre sprite remplace le même slot et un second clic le retire.',
       side: 'right',
       align: 'start'
     }
@@ -48,24 +46,15 @@ const productTourSteps: ProductTourStep[] = [
     element: '[data-tour="stage"]',
     popover: {
       title: '2. Composez la scène',
-      description: 'Déplacez et redimensionnez les éléments. Le mode « Groupe entier » transforme tous les enfants ensemble.',
+      description: 'Déplacez et redimensionnez les personnages comme un ensemble. Leur ratio original est toujours conservé.',
       side: 'left',
       align: 'center'
     }
   },
   {
-    element: '[data-tour="hierarchy"]',
-    popover: {
-      title: '3. Organisez les calques',
-      description: 'Sélectionnez un groupe cible, configurez la profondeur des calques ou supprimez-en.',
-      side: 'left',
-      align: 'start'
-    }
-  },
-  {
     element: '[data-tour="backup"]',
     popover: {
-      title: '4. Sauvegardez votre travail',
+      title: '3. Sauvegardez votre travail',
       description: 'Créez une sauvegarde complète de l’application ou restaurez la dernière version enregistrée.',
       side: 'bottom',
       align: 'end'
@@ -74,7 +63,7 @@ const productTourSteps: ProductTourStep[] = [
   {
     element: '[data-tour="export"]',
     popover: {
-      title: '5. Exportez votre création',
+      title: '4. Exportez votre création',
       description: 'Téléchargez une image PNG haute définition ou la structure de scène en JSON.',
       side: 'bottom',
       align: 'end'
@@ -121,34 +110,22 @@ onBeforeUnmount(() => {
       @start-tour="productTourRef?.start()"
     />
 
-    <!-- Zone Centrale du Studio (3 Colonnes plein écran) -->
+    <!-- Zone centrale du studio : bibliothèque et viewport -->
     <div class="flex-1 flex overflow-hidden">
       <!-- Bibliothèque d'Assets (Gauche) -->
       <ResizableSidebar
         v-model:open="showAssetLibrary"
         side="left"
-        :default-width="370"
-        :min-width="300"
-        :max-width="560"
-        storage-key="berlu.asset-sidebar-width"
+        :default-width="460"
+        :min-width="360"
+        :max-width="680"
+        storage-key="berlu.asset-sidebar-width.v2"
       >
         <AssetLibraryPanel v-model:open="showAssetLibrary" />
       </ResizableSidebar>
 
       <!-- Viewport & Canvas de Composition (Centre, occupant tout l'espace restant) -->
       <StudioViewport />
-
-      <!-- Inspecteur de Hiérarchie des Calques (Droite) -->
-      <ResizableSidebar
-        v-model:open="showHierarchy"
-        side="right"
-        :default-width="320"
-        :min-width="260"
-        :max-width="520"
-        storage-key="berlu.hierarchy-sidebar-width"
-      >
-        <HierarchyInspector v-model:open="showHierarchy" />
-      </ResizableSidebar>
     </div>
 
     <!-- Modales Globales -->
@@ -162,7 +139,7 @@ onBeforeUnmount(() => {
       ref="productTourRef"
       :steps="productTourSteps"
       auto-start
-      storage-key="berlu-creator.product-tour.v3"
+      storage-key="berlu-creator.product-tour.v4"
       :start-delay-ms="1400"
       :config="{ skipMissingElement: true }"
     />

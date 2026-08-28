@@ -170,4 +170,84 @@ describe('useEditorStore', () => {
     expect(store.canUndo).toBe(false)
     expect(store.currentDocument.camera.enabled).toBe(true)
   })
+
+  it('ajoute, remplace puis retire un slot de rig par clic', () => {
+    const store = useEditorStore()
+    const assets = useAssetStore()
+    assets.assets = [
+      characterAsset('head-a', 'Tête A', 'berlu', 'head'),
+      characterAsset('head-b', 'Tête B', 'berlu', 'head')
+    ]
+
+    const first = store.toggleAssetInViewport('head-a', 'head')
+    expect(first?.assetId).toBe('head-a')
+    expect(store.editScope).toBe('group')
+    expect(store.selectedLayerId).toBeNull()
+    store.selectLayerForEditing(first!.id)
+    expect(store.editScope).toBe('group')
+    expect(store.selectedLayerId).toBeNull()
+
+    const replacement = store.toggleAssetInViewport('head-b', 'head')
+    expect(replacement?.id).toBe(first?.id)
+    expect(store.currentDocument.layers.filter((layer) => layer.category === 'head')).toHaveLength(1)
+    expect(store.currentDocument.layers[0].assetId).toBe('head-b')
+
+    expect(store.toggleAssetInViewport('head-b', 'head')).toBeNull()
+    expect(store.currentDocument.layers.filter((layer) => layer.category === 'head')).toHaveLength(0)
+  })
+
+  it('réactive une représentation inactive avant de la retirer au clic suivant', () => {
+    const store = useEditorStore()
+    const assets = useAssetStore()
+    assets.assets = [
+      characterAsset('full', 'Berlu complet', 'berlu', 'character_full'),
+      characterAsset('head', 'Tête Berlu', 'berlu', 'head')
+    ]
+
+    const full = store.toggleAssetInViewport('full', 'character_full')!
+    store.toggleAssetInViewport('head', 'head')
+    const group = store.currentDocument.groups.find(
+      (candidate): candidate is CharacterGroup => candidate.id === full.groupId && candidate.kind === 'character'
+    )!
+    expect(group.activeMode).toBe('rig')
+    expect(store.currentDocument.layers).toHaveLength(2)
+
+    expect(store.toggleAssetInViewport('full', 'character_full')?.id).toBe(full.id)
+    expect(group.activeMode).toBe('full')
+    expect(store.currentDocument.layers).toHaveLength(2)
+
+    expect(store.toggleAssetInViewport('full', 'character_full')).toBeNull()
+    expect(store.currentDocument.layers.map((layer) => layer.assetId)).toEqual(['head'])
+  })
+
+  it('normalise toujours les transformations sur une échelle uniforme', () => {
+    const store = useEditorStore()
+    const layer = store.assignAssetToGroup('prop', 'props_set')
+    store.updateLayerTransform(layer.id, { scaleY: 1.75 })
+    expect(layer.transform).toMatchObject({ scaleX: 1.75, scaleY: 1.75 })
+
+    const group = store.currentDocument.groups.find((candidate) => candidate.kind === 'character')!
+    store.updateGroupTransform(group.id, { scaleX: 0.8, scaleY: 2 })
+    expect(group.transform).toMatchObject({ scaleX: 0.8, scaleY: 0.8 })
+  })
+
+  it('retire le rig actif en une action sans supprimer le sprite complet mémorisé', () => {
+    const store = useEditorStore()
+    const assets = useAssetStore()
+    assets.assets = [
+      characterAsset('full', 'Berlu complet', 'berlu', 'character_full'),
+      characterAsset('body', 'Corps Berlu', 'berlu', 'body'),
+      characterAsset('head', 'Tête Berlu', 'berlu', 'head')
+    ]
+    const full = store.assignAssetToGroup('full', 'character_full')
+    store.assignAssetToGroup('body', 'body')
+    store.assignAssetToGroup('head', 'head')
+
+    expect(store.removeActiveCharacterRepresentation(full.groupId)).toBe(2)
+    expect(store.currentDocument.layers.map((layer) => layer.assetId)).toEqual(['full'])
+    expect(store.selectedGroupId).toBeNull()
+
+    store.undo()
+    expect(store.currentDocument.layers.map((layer) => layer.assetId)).toEqual(['full', 'body', 'head'])
+  })
 })

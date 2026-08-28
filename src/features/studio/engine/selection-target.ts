@@ -1,13 +1,36 @@
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import type { AssetCategory } from '@core/types/asset.types'
 
+export interface StudioSelectionTarget {
+  selectedLayerId: string | null
+  selectedGroupId: string | null
+  editScope: 'group' | 'layer'
+}
+
+export interface CanvasHitTarget {
+  layerId: string
+  groupId?: string
+}
+
 /**
- * Détermine si la sélection ou la manipulation sur le canvas doit cibler le groupe parent
- * plutôt que le calque individuel.
- *
- * Règle d'or : Les catégories appartenant au personnage (placementMode: 'character-anchored',
- * comme la tête, la bouche, les yeux, le torse ou les bras de Berlu) sont TOUJOURS manipulées
- * solidairement au niveau du groupe pour préserver l'intégrité anatomique de l'avatar.
+ * Indique si un calque touché appartient à la sélection actuellement manipulée.
+ * Un personnage est comparé par groupe, car son sprite complet ou ses pièces de rig
+ * partagent une unique cible de transformation.
+ */
+export function isActiveSelectionHit(
+  selection: StudioSelectionTarget,
+  hit: CanvasHitTarget
+): boolean {
+  if (selection.editScope === 'group') {
+    return Boolean(hit.groupId && hit.groupId === selection.selectedGroupId)
+  }
+
+  return hit.layerId === selection.selectedLayerId
+}
+
+/**
+ * Les pièces d'un personnage sont toujours manipulées via leur groupe afin que le rig
+ * reste indivisible. Les assets de plateau restent manipulables individuellement.
  */
 export function shouldTargetWholeGroup(
   groupId: string | undefined,
@@ -17,9 +40,8 @@ export function shouldTargetWholeGroup(
 ): boolean {
   if (!groupId) return false
 
-  if (category && ASSET_CATEGORIES[category]?.placementMode === 'character-anchored') {
-    return true
-  }
-
-  return editScope === 'group' || shiftKey
+  const isCharacterAsset = category
+    ? ASSET_CATEGORIES[category].placementMode === 'character-anchored'
+    : false
+  return isCharacterAsset || editScope === 'group' || shiftKey
 }

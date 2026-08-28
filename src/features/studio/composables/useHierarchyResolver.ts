@@ -40,8 +40,9 @@ export interface RenderableLayer {
 interface CharacterGeometry {
   x: number
   y: number
-  width: number
-  height: number
+  baseScale: number
+  originX: number
+  originY: number
 }
 
 export function useHierarchyResolver() {
@@ -51,16 +52,16 @@ export function useHierarchyResolver() {
 
   const activeLayers = computed<RenderableLayer[]>(() => {
     const stage = projectStore.currentProject.stage
-    const characterHeight = Math.round(stage.height * 0.7)
-    const characterWidth = Math.round(characterHeight * (840 / 908))
-    const characterBase: CharacterGeometry = {
-      x: Math.round((stage.width - characterWidth) / 2),
-      y: Math.round(stage.height * 0.12),
-      width: characterWidth,
-      height: characterHeight
-    }
     const assets = new Map(assetStore.assets.map((asset) => [asset.id, asset]))
     const groups = new Map(editorStore.currentDocument.groups.map((group) => [group.id, group]))
+    const characterGeometries = resolveCharacterGeometries(
+      editorStore.currentDocument.layers,
+      editorStore.currentDocument.groups.filter(
+        (group): group is CharacterGroup => group.kind === 'character'
+      ),
+      assets,
+      stage
+    )
     const result: RenderableLayer[] = []
 
     for (const layer of editorStore.currentDocument.layers) {
@@ -68,7 +69,7 @@ export function useHierarchyResolver() {
       const asset = assets.get(layer.assetId)
       if (!group || !asset || layer.muted || group.muted) continue
       if (group.kind === 'character' && !isLayerActiveForCharacter(layer, group)) continue
-      result.push(resolveLayer(layer, asset, group, stage, characterBase))
+      result.push(resolveLayer(layer, asset, group, stage, characterGeometries.get(group.id)))
     }
 
     return result.sort((left, right) =>
@@ -79,6 +80,42 @@ export function useHierarchyResolver() {
   })
 
   return { activeLayers }
+}
+
+function resolveCharacterGeometries(
+  layers: EditorLayer[],
+  groups: CharacterGroup[],
+  assets: Map<string, Asset>,
+  stage: { width: number; height: number }
+): Map<string, CharacterGeometry> {
+  const geometries = new Map<string, CharacterGeometry>()
+  for (const group of groups) {
+    const activeAssets = layers
+      .filter((layer) =>
+        layer.groupId === group.id &&
+        !layer.muted &&
+        isLayerActiveForCharacter(layer, group)
+      )
+      .map((layer) => assets.get(layer.assetId))
+      .filter((asset): asset is Asset => Boolean(asset))
+    const referenceWidth = Math.max(1, ...activeAssets.map((asset) => asset.width))
+    const referenceHeight = Math.max(1, ...activeAssets.map((asset) => asset.height))
+    const baseScale = Math.min(
+      1,
+      (stage.width * 0.7) / referenceWidth,
+      (stage.height * 0.7) / referenceHeight
+    )
+    const x = Math.round((stage.width - referenceWidth * baseScale) / 2)
+    const y = Math.round((stage.height - referenceHeight * baseScale) / 2)
+    geometries.set(group.id, {
+      x,
+      y,
+      baseScale,
+      originX: x + referenceWidth * baseScale / 2,
+      originY: y + referenceHeight * baseScale / 2
+    })
+  }
+  return geometries
 }
 
 function isLayerActiveForCharacter(layer: EditorLayer, group: CharacterGroup): boolean {
@@ -108,7 +145,9 @@ function commonLayer(
     zIndex: layer.zIndex,
     muted: layer.muted,
     locked: layer.locked || group.locked,
-    isMovable: asset.isMovable
+    // Les anciens bureaux peuvent encore porter isMovable=false en IndexedDB.
+    // La catégorie desk est désormais toujours manipulable, sans migration destructive.
+    isMovable: group.kind === 'character' || asset.category === 'desk' || asset.isMovable
   }
 }
 
@@ -117,7 +156,7 @@ function resolveLayer(
   asset: Asset,
   group: EditorGroup,
   stage: { width: number; height: number },
-  characterBase: CharacterGeometry
+  characterGeometry?: CharacterGeometry
 ): RenderableLayer {
   const transform = layer.transform
 
@@ -152,16 +191,19 @@ function resolveLayer(
 
   if (group.kind === 'character') {
     const rig = group.transform
-    const x = characterBase.x + transform.x + rig.x
-    const y = characterBase.y + transform.y + rig.y
+    const geometry = characterGeometry ?? { x: 0, y: 0, baseScale: 1, originX: 0, originY: 0 }
+    const width = asset.width * geometry.baseScale
+    const height = asset.height * geometry.baseScale
+    const x = geometry.x + transform.x + rig.x
+    const y = geometry.y + transform.y + rig.y
     return {
       ...commonLayer(layer, asset, group),
       x: Math.round(x),
       y: Math.round(y),
-      width: characterBase.width,
-      height: characterBase.height,
-      transformOriginX: x + characterBase.width / 2,
-      transformOriginY: y + characterBase.height / 2,
+      width,
+      height,
+      transformOriginX: geometry.originX + rig.x,
+      transformOriginY: geometry.originY + rig.y,
       scaleX: transform.scaleX * rig.scaleX,
       scaleY: transform.scaleY * rig.scaleY,
       localX: transform.x,
@@ -173,8 +215,8 @@ function resolveLayer(
     }
   }
 
-  const width = asset.width || characterBase.width
-  const height = asset.height || characterBase.height
+  const width = asset.width || stage.width
+  const height = asset.height || stage.height
   const localX = transform.x
   const localY = transform.y
   const x = localX + group.transform.x

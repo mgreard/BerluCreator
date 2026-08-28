@@ -47,7 +47,34 @@ function clone<T>(value: T): T {
 }
 
 function normalizeTransform(transform?: Partial<Transform2D>): Transform2D {
-  return { ...DEFAULT_TRANSFORM, ...(transform ?? {}) }
+  const scale = transform?.scaleX ?? transform?.scaleY ?? DEFAULT_TRANSFORM.scaleX
+  return { ...DEFAULT_TRANSFORM, ...(transform ?? {}), scaleX: scale, scaleY: scale }
+}
+
+function mergeUniformTransform(
+  current: Transform2D,
+  changes: Partial<Transform2D>
+): Transform2D {
+  const scale = changes.scaleX ?? changes.scaleY
+  return normalizeTransform({
+    ...current,
+    ...changes,
+    ...(scale === undefined ? {} : { scaleX: scale, scaleY: scale })
+  })
+}
+
+function normalizeDocument(document: EditorDocument): EditorDocument {
+  return {
+    ...document,
+    groups: document.groups.map((group) => ({
+      ...group,
+      transform: normalizeTransform(group.transform)
+    })),
+    layers: document.layers.map((layer) => ({
+      ...layer,
+      transform: normalizeTransform(layer.transform)
+    }))
+  }
 }
 
 function slugifyCharacter(value: string): string {
@@ -237,7 +264,7 @@ export const useEditorStore = defineStore('editor', () => {
     try {
       const existing = await editorDocumentRepository.getById(documentId)
       if (existing) {
-        currentDocument.value = existing
+        currentDocument.value = normalizeDocument(existing)
       } else {
         const projectDocuments = await editorDocumentRepository.getByProjectId(projectId)
         currentDocument.value = projectDocuments[0] ?? createDefaultDocument(projectId)
@@ -321,9 +348,13 @@ export const useEditorStore = defineStore('editor', () => {
           existing.transform = normalizeTransform(calibration)
           existing.zIndex = calibration.zIndex ?? existing.zIndex
         }
-        if (group.kind === 'character') group.activeMode = category === 'character_full' ? 'full' : 'rig'
-        selectedLayerId.value = existing.id
+        if (group.kind === 'character') {
+          group.activeMode = category === 'character_full' ? 'full' : 'rig'
+          group.muted = false
+        }
+        selectedLayerId.value = group.kind === 'character' ? null : existing.id
         selectedGroupId.value = group.id
+        editScope.value = group.kind === 'character' ? 'group' : 'layer'
         return existing
       }
 
@@ -346,16 +377,77 @@ export const useEditorStore = defineStore('editor', () => {
         layer.transform.y = Math.round((stage.height - asset.height) / 2)
       }
       currentDocument.value.layers.push(layer)
-      if (group.kind === 'character') group.activeMode = category === 'character_full' ? 'full' : 'rig'
-      selectedLayerId.value = layer.id
+      if (group.kind === 'character') {
+        group.activeMode = category === 'character_full' ? 'full' : 'rig'
+        group.muted = false
+      }
+      selectedLayerId.value = group.kind === 'character' ? null : layer.id
       selectedGroupId.value = group.id
+      editScope.value = group.kind === 'character' ? 'group' : 'layer'
       return layer
     })
   }
 
+  function toggleAssetInViewport(
+    assetId: string,
+    category: AssetCategory,
+    name?: string
+  ): EditorLayer | null {
+    const asset = resolveAsset(assetId)
+    const characterKey = asset?.character?.key || 'berlu'
+    const group = isCharacterCategory(category)
+      ? currentDocument.value.groups.find(
+          (candidate): candidate is CharacterGroup =>
+            candidate.kind === 'character' && candidate.characterKey === characterKey
+        )
+      : findStageGroup(category)
+    const existing = group
+      ? currentDocument.value.layers.find(
+          (layer) => layer.groupId === group.id && layer.category === category && layer.assetId === assetId
+        )
+      : undefined
+    const compatibleMode = group?.kind !== 'character' ||
+      (group.activeMode === 'full') === (category === 'character_full')
+    const isVisible = Boolean(existing && !existing.muted && !group?.muted && compatibleMode)
+
+    if (existing && isVisible) {
+      removeLayer(existing.id)
+      assetStoreSelectionAfterToggle(null)
+      return null
+    }
+
+    if (existing && group) {
+      return mutateStudio('Afficher un asset', () => {
+        existing.muted = false
+        group.muted = false
+        if (group.kind === 'character') {
+          group.activeMode = category === 'character_full' ? 'full' : 'rig'
+        }
+        selectedLayerId.value = group.kind === 'character' ? null : existing.id
+        selectedGroupId.value = group.id
+        editScope.value = group.kind === 'character' ? 'group' : 'layer'
+        return existing
+      })
+    }
+
+    return assignAssetToGroup(assetId, category, null, name)
+  }
+
+  function assetStoreSelectionAfterToggle(assetId: string | null): void {
+    try {
+      useAssetStore().selectAsset(assetId)
+    } catch {
+      // Le store d'assets peut ne pas être initialisé dans certains tests isolés.
+    }
+  }
+
   function addLayer(layer: Omit<EditorLayer, 'id'> & { id?: string }): EditorLayer {
     return mutateStudio('Ajouter un calque', () => {
-      const created = { ...layer, id: layer.id || generateId('layer') } as EditorLayer
+      const created = {
+        ...layer,
+        id: layer.id || generateId('layer'),
+        transform: normalizeTransform(layer.transform)
+      } as EditorLayer
       currentDocument.value.layers.push(created)
       return created
     })
@@ -365,6 +457,26 @@ export const useEditorStore = defineStore('editor', () => {
     mutateStudio('Retirer un calque', () => {
       currentDocument.value.layers = currentDocument.value.layers.filter((layer) => layer.id !== layerId)
       if (selectedLayerId.value === layerId) selectedLayerId.value = null
+    })
+  }
+
+  function removeActiveCharacterRepresentation(groupId: string): number {
+    return mutateStudio('Retirer la représentation du personnage', () => {
+      const group = currentDocument.value.groups.find(
+        (candidate): candidate is CharacterGroup =>
+          candidate.id === groupId && candidate.kind === 'character'
+      )
+      if (!group) return 0
+
+      const removesLayer = (layer: EditorLayer) =>
+        layer.groupId === group.id &&
+        (group.activeMode === 'full'
+          ? layer.category === 'character_full'
+          : layer.category !== 'character_full')
+      const removedCount = currentDocument.value.layers.filter(removesLayer).length
+      currentDocument.value.layers = currentDocument.value.layers.filter((layer) => !removesLayer(layer))
+      if (selectedGroupId.value === group.id) clearStudioSelection()
+      return removedCount
     })
   }
 
@@ -378,7 +490,7 @@ export const useEditorStore = defineStore('editor', () => {
   function updateLayerTransform(layerId: string, transform: Partial<Transform2D>): void {
     const apply = () => {
       const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
-      if (layer) layer.transform = normalizeTransform({ ...layer.transform, ...transform })
+      if (layer) layer.transform = mergeUniformTransform(layer.transform, transform)
     }
     if (activeGesture.value) apply()
     else mutateStudio('Transformer un calque', apply)
@@ -388,7 +500,7 @@ export const useEditorStore = defineStore('editor', () => {
     mutateStudio('Régler un calque', () => {
       const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
       if (!layer) return
-      layer.transform = normalizeTransform({ ...layer.transform, ...transform })
+      layer.transform = mergeUniformTransform(layer.transform, transform)
       layer.zIndex = zIndex
     })
   }
@@ -453,7 +565,7 @@ export const useEditorStore = defineStore('editor', () => {
   function updateGroupTransform(groupId: string, transform: Partial<Transform2D>): void {
     const apply = () => {
       const group = currentDocument.value.groups.find((candidate) => candidate.id === groupId)
-      if (group) group.transform = normalizeTransform({ ...group.transform, ...transform })
+      if (group) group.transform = mergeUniformTransform(group.transform, transform)
     }
     if (activeGesture.value) apply()
     else mutateStudio('Transformer un groupe', apply)
@@ -463,7 +575,7 @@ export const useEditorStore = defineStore('editor', () => {
     mutateStudio('Régler un groupe', () => {
       const group = currentDocument.value.groups.find((candidate) => candidate.id === groupId)
       if (!group) return
-      group.transform = normalizeTransform({ ...group.transform, ...transform })
+      group.transform = mergeUniformTransform(group.transform, transform)
       group.zIndex = zIndex
     })
   }
@@ -521,6 +633,11 @@ export const useEditorStore = defineStore('editor', () => {
   function selectLayerForEditing(layerId: string): void {
     const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
     if (!layer) return
+    const group = currentDocument.value.groups.find((candidate) => candidate.id === layer.groupId)
+    if (group?.kind === 'character') {
+      selectGroupForEditing(group.id)
+      return
+    }
     selectedLayerId.value = layerId
     selectedGroupId.value = layer.groupId
     editScope.value = 'layer'
@@ -540,8 +657,13 @@ export const useEditorStore = defineStore('editor', () => {
 
   function applyViewportSnapshot(snapshot: ViewportSnapshot): number {
     currentDocument.value.camera = clone(snapshot.camera)
-    currentDocument.value.groups = clone(snapshot.groups)
-    currentDocument.value.layers = clone(snapshot.layers)
+    const normalized = normalizeDocument({
+      ...currentDocument.value,
+      groups: clone(snapshot.groups),
+      layers: clone(snapshot.layers)
+    })
+    currentDocument.value.groups = normalized.groups
+    currentDocument.value.layers = normalized.layers
     clearStudioSelection()
     clearHistory()
     persistInBackground()
@@ -586,8 +708,10 @@ export const useEditorStore = defineStore('editor', () => {
     saveDocument,
     flushPersistence,
     assignAssetToGroup,
+    toggleAssetInViewport,
     addLayer,
     removeLayer,
+    removeActiveCharacterRepresentation,
     updateLayer,
     updateLayerTransform,
     updateLayerSettings,

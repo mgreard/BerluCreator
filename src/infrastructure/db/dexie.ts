@@ -86,7 +86,6 @@ export type V4Asset = Omit<Asset, 'category' | 'character'> & {
   character?: Asset['character']
   displayWidth?: number
   displayHeight?: number
-  trimFrame?: unknown
 }
 
 const SYSTEM_TAGS = new Set([
@@ -97,7 +96,8 @@ const SYSTEM_TAGS = new Set([
 ])
 
 function transformOf(transform?: Partial<Transform2D>): Transform2D {
-  return { ...DEFAULT_TRANSFORM, ...(transform ?? {}) }
+  const scale = transform?.scaleX ?? transform?.scaleY ?? DEFAULT_TRANSFORM.scaleX
+  return { ...DEFAULT_TRANSFORM, ...(transform ?? {}), scaleX: scale, scaleY: scale }
 }
 
 function slugify(value: string): string {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ASSET_CATEGORY_IDS, normalizeAssetCategory } from '../types/asset.types'
 import { ASSET_CATEGORIES } from './categories'
-import { SPRITES_CONFIG } from './sprites-config'
+import { resolveSpriteConfig, SPRITES_CONFIG } from './sprites-config'
 
 describe('asset categories', () => {
   it('keeps definitions and sprite defaults aligned with the canonical ids', () => {
@@ -14,5 +14,10 @@ describe('asset categories', () => {
     expect(normalizeAssetCategory('props')).toBe('props_host')
     expect(normalizeAssetCategory('overlay')).toBe('foreground')
     expect(normalizeAssetCategory('unknown')).toBeUndefined()
+  })
+
+  it('déclare les bureaux comme éléments déplaçables', () => {
+    expect(resolveSpriteConfig('desk1', 'desk').isMovable).toBe(true)
+    expect(SPRITES_CONFIG.categoryDefaults.desk.isMovable).toBe(true)
   })
 })

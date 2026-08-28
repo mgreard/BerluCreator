@@ -2,8 +2,9 @@ import { db } from '@infrastructure/db/dexie'
 
 export const APPLICATION_STORAGE_KEYS = [
   'berlu.asset-sidebar-width',
-  'berlu.hierarchy-sidebar-width',
+  'berlu.asset-sidebar-width.v2',
   'berlu-creator.product-tour.v2',
+  'berlu-creator.product-tour.v4',
   'mycomplib-theme'
 ] as const
 

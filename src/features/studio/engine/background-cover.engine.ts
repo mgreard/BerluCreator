@@ -39,15 +39,13 @@ export function clampBackgroundCover(
 ): ClampedBackgroundTransform {
   const minScale = computeCoverMinScale(params)
 
-  const rawScaleX = transform.scaleX ?? 1
-  const rawScaleY = transform.scaleY ?? 1
+  const rawScale = transform.scaleX ?? transform.scaleY ?? 1
 
   // L'échelle effective ne peut jamais être inférieure à l'échelle de couverture minimale
-  const scaleX = Math.max(minScale, rawScaleX)
-  const scaleY = Math.max(minScale, rawScaleY)
+  const scale = Math.max(minScale, rawScale)
 
-  const renderedWidth = params.assetWidth * scaleX
-  const renderedHeight = params.assetHeight * scaleY
+  const renderedWidth = params.assetWidth * scale
+  const renderedHeight = params.assetHeight * scale
 
   // Bornes de translation autorisées (x <= 0 et x + renderedWidth >= stageWidth)
   const minX = params.stageWidth - renderedWidth
@@ -64,7 +62,7 @@ export function clampBackgroundCover(
   return {
     x,
     y,
-    scaleX,
-    scaleY
+    scaleX: scale,
+    scaleY: scale
   }
 }

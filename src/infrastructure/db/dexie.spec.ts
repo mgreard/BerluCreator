@@ -93,8 +93,7 @@ describe('migration Dexie v4 vers v5', () => {
       name: 'Berlu complet',
       tags: ['torso', 'full', 'Berlu'],
       displayWidth: 420,
-      displayHeight: 454,
-      trimFrame: { x: 1 }
+      displayHeight: 454
     }))
 
     expect(migrated.category).toBe('character_full')

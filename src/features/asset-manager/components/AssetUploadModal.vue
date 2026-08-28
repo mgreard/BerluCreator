@@ -40,13 +40,13 @@ const preparedFiles = ref<PreparedFile[]>([])
 const assetScope = ref<'character' | 'stage'>('character')
 
 // Mode Personnage : Personnage complet vs Élément du squelette articulé
-const characterMode = ref<'full' | 'skeleton'>('skeleton')
+const characterMode = ref<'full' | 'skeleton'>('full')
 
 // Nom / Tag du personnage (ex: Berlu, Invité...)
 const characterName = ref('Berlu')
 
 // Catégorie active résolue
-const selectedCategory = ref<AssetCategory>('head')
+const selectedCategory = ref<AssetCategory>('character_full')
 
 const CHARACTER_SKELETON_SLOTS: { id: AssetCategory; label: string; icon: string; description: string }[] = [
   { id: 'head', label: 'Tête & Visage', icon: 'face', description: 'Expressions faciales et regards' },
@@ -116,6 +116,8 @@ watch(
 watch(open, (isOpen) => {
   if (isOpen) {
     isImporting.value = false
+    assetScope.value = 'character'
+    selectFullCharacterMode()
     return
   }
   clearPreparedFiles()
