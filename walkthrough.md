@@ -15,6 +15,7 @@ Le studio repose sur un document unique dont les groupes et calques sont l’uni
 
 - La sidebar droite, la modale de réglages de calque et l’atelier de calibration ont été supprimés.
 - La sidebar gauche conserve un rail lisible : chaque personnage expose ses catégories (complet, corps, têtes, yeux, bouches, bras et accessoires), puis viennent les catégories de décor.
+- Les couleurs de `ASSET_CATEGORIES` structurent désormais les icônes, compteurs et états actifs de la sidebar sans modifier les comportements de filtrage.
 - Un clic sur un asset l’ajoute. Un clic sur une autre variante remplace uniquement le même slot. Un clic sur l’asset déjà rendu le retire.
 - Cliquer une pièce de rig dans le viewport sélectionne toujours le personnage entier. Déplacement et redimensionnement utilisent exclusivement son transform global.
 - Double-cliquer le sprite ou le rig sélectionné vide la sélection du studio et de la bibliothèque, sans le retirer du viewport.
@@ -34,6 +35,8 @@ Le studio repose sur un document unique dont les groupes et calques sont l’uni
 ## Assets
 
 - Chaque nouvelle ouverture de la modale d’import sélectionne par défaut `Personnage complet` (`character_full`) ; le mode squelette et les catégories de décor restent sélectionnables manuellement.
+- Les cartes génèrent paresseusement une miniature carrée recadrée sur la masse alpha significative. Les pixels parasites sont ignorés, plusieurs zones séparées restent visibles et l’asset original n’est jamais modifié.
+- Les miniatures dérivées sont mises en cache par `blobId`, révoquées après usage et remplacées par l’image originale si le canvas du navigateur est indisponible.
 - L’import accepte uniquement PNG, JPEG, WebP et SVG décodables, avec dimensions valides et métadonnées de personnage cohérentes.
 - Chaque fichier est traité indépendamment. Les succès quittent immédiatement la file ; les erreurs restent visibles et peuvent être retentées.
 - Toutes les Object URLs de prévisualisation sont révoquées au retrait, à la fermeture et au démontage.
@@ -54,7 +57,7 @@ Le studio repose sur un document unique dont les groupes et calques sont l’uni
 | --- | --- | --- |
 | TypeScript strict | `pnpm exec vue-tsc -p tsconfig.app.json --noEmit --incremental false` | Succès |
 | ESLint sans réécriture | `pnpm exec eslint src vite.config.ts histoire.config.ts` | Succès, 0 avertissement |
-| Tests unitaires | `pnpm run test:unit` | 86 fichiers, 362 tests passés |
+| Tests unitaires | `pnpm run test:unit` | 88 fichiers, 369 tests passés |
 | Build applicatif | `pnpm run build` | Succès avec Vite 5.4.21 |
 | Build Histoire | `pnpm run story:build` | 67 stories, 173 variantes |
 

@@ -11,6 +11,7 @@ Statut : **studio simplifié avec personnages complets/rigs implémenté**.
 - [x] Métadonnées explicites des assets personnage et catégorie `character_full`.
 - [x] Sidebar droite et réglages de calques supprimés du studio.
 - [x] Sidebar gauche structurée par personnage, catégorie de sprite et catégorie de décor.
+- [x] Miniatures recadrées sur le contenu alpha et navigation colorée par catégorie.
 - [x] Un clic ajoute, remplace le slot correspondant ou retire l’asset déjà visible.
 - [x] Sprite complet et rig manipulés comme des personnages indivisibles dans le viewport.
 - [x] Ratio naturel des images garanti par des redimensionnements toujours uniformes.

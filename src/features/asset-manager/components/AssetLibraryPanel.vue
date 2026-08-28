@@ -161,6 +161,18 @@ const currentTitle = computed(() => {
   return category ? `${character?.name || 'Personnage'} · ${category.label}` : character?.name || 'Personnage'
 })
 
+const currentCategory = computed(() => {
+  const selection = activeSelection.value
+  if (selection.type === 'stage') return ASSET_CATEGORIES[selection.category]
+  if (selection.type !== 'character' || !selection.categoryId) return null
+  const definition = CHARACTER_CATEGORIES.find((entry) => entry.id === selection.categoryId)
+  return definition ? ASSET_CATEGORIES[definition.category] : null
+})
+
+function categoryAccentStyle(category: AssetCategory): Record<string, string> {
+  return { '--category-accent': ASSET_CATEGORIES[category].color }
+}
+
 const visibleAssetIds = computed(() => {
   const ids = new Set<string>()
   const groups = new Map(editorStore.currentDocument.groups.map((group) => [group.id, group]))
@@ -208,23 +220,25 @@ onMounted(() => assetStore.loadAssets())
 
 <template>
   <div data-tour="asset-library" class="flex h-full w-full select-none overflow-hidden border-r border-border-subtle bg-bg-surface/30 backdrop-blur-md">
-    <nav class="custom-scrollbar flex w-48 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border-subtle bg-bg-surface/40 p-2" aria-label="Catégories de sprites">
+    <nav class="library-nav custom-scrollbar flex w-52 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border-subtle bg-bg-surface/30 p-2" aria-label="Catégories de sprites">
       <SelectableSurface
         as="button"
         :selected="activeSelection.type === 'all'"
-        class="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-xs"
+        :data-active="activeSelection.type === 'all'"
+        class="category-row flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-xs"
+        style="--category-accent: #a78bfa"
         @click="selectAll"
       >
-        <span class="flex min-w-0 items-center gap-2"><Icon name="apps" size="xs" /><span class="truncate">Tous les sprites</span></span>
-        <Badge variant="neutral" size="sm">{{ assetStore.assets.length }}</Badge>
+        <span class="flex min-w-0 items-center gap-2"><span class="category-icon"><Icon name="apps" size="xs" /></span><span class="truncate font-semibold">Tous les sprites</span></span>
+        <Badge variant="neutral" size="sm" class="category-count">{{ assetStore.assets.length }}</Badge>
       </SelectableSurface>
 
       <section class="space-y-1.5">
-        <Text as="p" variant="caption" color="muted" class="px-2 text-[10px] font-bold uppercase tracking-wider">Personnages</Text>
-        <div v-for="character in availableCharacters" :key="character.key" class="overflow-hidden rounded-xl border border-border-subtle/70">
+        <Text as="p" variant="caption" color="muted" class="section-label px-2 text-[10px] font-bold uppercase tracking-wider">Personnages</Text>
+        <div v-for="character in availableCharacters" :key="character.key" class="character-panel overflow-hidden rounded-xl border border-border-subtle/70" style="--category-accent: #f59e0b">
           <div
-            class="flex cursor-pointer items-center gap-1.5 px-1.5 py-1.5 text-xs hover:bg-bg-surface-hover/50"
-            :class="activeSelection.type === 'character' && activeSelection.characterKey === character.key && activeSelection.categoryId === null ? 'bg-primary/15 text-primary' : 'text-text-primary'"
+            class="character-row flex cursor-pointer items-center gap-1.5 px-1.5 py-1.5 text-xs text-text-primary"
+            :data-active="activeSelection.type === 'character' && activeSelection.characterKey === character.key && activeSelection.categoryId === null"
             @click="selectCharacter(character.key, null)"
           >
             <IconButton
@@ -235,23 +249,25 @@ onMounted(() => assetStore.loadAssets())
               :aria-label="expandedCharacters[character.key] ? 'Replier' : 'Déplier'"
               @click.stop="toggleCharacter(character.key)"
             />
-            <Icon name="person" size="xs" class="shrink-0 text-primary" />
+            <span class="category-icon"><Icon name="person" size="xs" /></span>
             <span class="min-w-0 flex-1 truncate font-semibold">{{ character.name }}</span>
-            <Badge variant="neutral" size="sm">{{ characterAssets(character.key).length }}</Badge>
+            <Badge variant="neutral" size="sm" class="category-count">{{ characterAssets(character.key).length }}</Badge>
           </div>
 
-          <div v-show="expandedCharacters[character.key]" class="space-y-0.5 border-t border-border-subtle/50 bg-bg-base/25 p-1">
+          <div v-show="expandedCharacters[character.key]" class="character-category-list space-y-0.5 border-t border-border-subtle/50 bg-bg-base/25 p-1 pl-2">
             <SelectableSurface
               v-for="category in CHARACTER_CATEGORIES"
               :key="category.id"
               as="button"
               density="compact"
               :selected="activeSelection.type === 'character' && activeSelection.characterKey === character.key && activeSelection.categoryId === category.id"
-              class="flex w-full items-center justify-between gap-1.5 rounded-lg px-2 py-1 text-left text-[11px]"
+              :data-active="activeSelection.type === 'character' && activeSelection.characterKey === character.key && activeSelection.categoryId === category.id"
+              :style="categoryAccentStyle(category.category)"
+              class="category-row flex w-full items-center justify-between gap-1.5 rounded-lg px-2 py-1 text-left text-[11px]"
               @click="selectCharacter(character.key, category.id)"
             >
-              <span class="flex min-w-0 items-center gap-1.5"><Icon :name="category.icon" size="xs" /><span class="truncate">{{ category.label }}</span></span>
-              <Badge v-if="characterCategoryCount(character.key, category)" variant="neutral" size="sm">
+              <span class="flex min-w-0 items-center gap-1.5"><span class="category-icon"><Icon :name="category.icon" size="xs" /></span><span class="truncate">{{ category.label }}</span></span>
+              <Badge v-if="characterCategoryCount(character.key, category)" variant="neutral" size="sm" class="category-count">
                 {{ characterCategoryCount(character.key, category) }}
               </Badge>
             </SelectableSurface>
@@ -260,18 +276,20 @@ onMounted(() => assetStore.loadAssets())
       </section>
 
       <section class="space-y-1 border-t border-border-subtle/60 pt-3">
-        <Text as="p" variant="caption" color="muted" class="px-2 text-[10px] font-bold uppercase tracking-wider">Plateau & décor</Text>
+        <Text as="p" variant="caption" color="muted" class="section-label px-2 text-[10px] font-bold uppercase tracking-wider">Plateau & décor</Text>
         <SelectableSurface
           v-for="category in STAGE_CATEGORIES"
           :key="category.category"
           as="button"
           density="compact"
           :selected="activeSelection.type === 'stage' && activeSelection.category === category.category"
-          class="flex w-full items-center justify-between gap-1.5 rounded-lg px-2 py-1.5 text-left text-[11px]"
+          :data-active="activeSelection.type === 'stage' && activeSelection.category === category.category"
+          :style="categoryAccentStyle(category.category)"
+          class="category-row flex w-full items-center justify-between gap-1.5 rounded-lg px-2 py-1.5 text-left text-[11px]"
           @click="selectStage(category.category)"
         >
-          <span class="flex min-w-0 items-center gap-1.5"><Icon :name="category.icon" size="xs" /><span class="truncate">{{ category.label }}</span></span>
-          <Badge v-if="stageCategoryCount(category.category)" variant="neutral" size="sm">{{ stageCategoryCount(category.category) }}</Badge>
+          <span class="flex min-w-0 items-center gap-1.5"><span class="category-icon"><Icon :name="category.icon" size="xs" /></span><span class="truncate">{{ category.label }}</span></span>
+          <Badge v-if="stageCategoryCount(category.category)" variant="neutral" size="sm" class="category-count">{{ stageCategoryCount(category.category) }}</Badge>
         </SelectableSurface>
       </section>
     </nav>
@@ -282,6 +300,7 @@ onMounted(() => assetStore.loadAssets())
           <Button variant="ghost" size="xs" class="size-7 px-0" aria-label="Replier la bibliothèque" @click="open = false">
             <Icon name="left_panel_close" size="xs" />
           </Button>
+          <span v-if="currentCategory" class="current-category-icon" :style="{ color: currentCategory.color }"><Icon :name="currentCategory.icon" size="xs" /></span>
           <span class="truncate text-xs font-bold">{{ currentTitle }}</span>
         </div>
         <Button variant="primary" size="sm" class="h-7 gap-1 px-2" @click="isUploadModalOpen = true">
@@ -321,7 +340,139 @@ onMounted(() => assetStore.loadAssets())
 </template>
 
 <style scoped>
+.library-nav {
+  box-shadow: inset -1px 0 0 rgb(255 255 255 / 3%), inset 0 1px 0 rgb(255 255 255 / 8%);
+}
+
+.section-label {
+  color: rgb(255 255 255 / 44%);
+  letter-spacing: 0.11em;
+}
+
+.character-panel {
+  background: rgb(16 16 23 / 28%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%);
+  transition: border-color 300ms ease-out, background-color 300ms ease-out;
+}
+
+.character-panel:hover {
+  border-color: color-mix(in srgb, var(--category-accent) 24%, transparent);
+}
+
+.character-row,
+.category-row {
+  position: relative;
+  transition: color 300ms ease-out, background-color 300ms ease-out, box-shadow 300ms ease-out;
+}
+
+.character-row::before,
+.category-row::before {
+  position: absolute;
+  inset-block: 7px;
+  left: 0;
+  width: 3px;
+  border-radius: 9999px;
+  background: var(--category-accent);
+  content: '';
+  opacity: 0;
+  transform: scaleY(0.55);
+  transition: opacity 300ms ease-out, transform 300ms ease-out;
+}
+
+.character-row:hover,
+.category-row:hover {
+  color: rgb(255 255 255 / 96%);
+  background: color-mix(in srgb, var(--category-accent) 7%, transparent);
+}
+
+.character-row[data-active='true'],
+.category-row[data-active='true'] {
+  color: color-mix(in srgb, var(--category-accent) 82%, white 18%);
+  background: color-mix(in srgb, var(--category-accent) 13%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%);
+}
+
+.character-row[data-active='true']::before,
+.category-row[data-active='true']::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+.category-icon {
+  display: inline-flex;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--category-accent) 22%, transparent);
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, var(--category-accent) 8%, transparent);
+  color: color-mix(in srgb, var(--category-accent) 80%, white 20%);
+  transition: background-color 300ms ease-out, border-color 300ms ease-out;
+}
+
+.category-row[data-active='true'] .category-icon,
+.character-row[data-active='true'] .category-icon {
+  border-color: color-mix(in srgb, var(--category-accent) 42%, transparent);
+  background: color-mix(in srgb, var(--category-accent) 16%, transparent);
+}
+
+.category-count {
+  min-width: 1.65rem;
+  justify-content: center;
+  border-color: rgb(255 255 255 / 8%);
+  background: rgb(255 255 255 / 3%);
+  color: rgb(255 255 255 / 46%);
+  font-size: 0.58rem;
+  transition: color 300ms ease-out, border-color 300ms ease-out, background-color 300ms ease-out;
+}
+
+[data-active='true'] > .category-count {
+  border-color: color-mix(in srgb, var(--category-accent) 32%, transparent);
+  background: color-mix(in srgb, var(--category-accent) 11%, transparent);
+  color: color-mix(in srgb, var(--category-accent) 74%, white 26%);
+}
+
+.character-category-list {
+  position: relative;
+}
+
+.character-category-list::before {
+  position: absolute;
+  top: 0.4rem;
+  bottom: 0.4rem;
+  left: 0.32rem;
+  width: 1px;
+  background: linear-gradient(to bottom, color-mix(in srgb, #f59e0b 42%, transparent), transparent);
+  content: '';
+}
+
+.current-category-icon {
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
 .custom-scrollbar::-webkit-scrollbar { width: 5px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 12%); border-radius: 9999px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .character-panel,
+  .character-row,
+  .category-row,
+  .character-row::before,
+  .category-row::before,
+  .category-icon,
+  .category-count {
+    transition: none;
+  }
+}
 </style>
