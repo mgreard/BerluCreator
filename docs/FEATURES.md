@@ -32,7 +32,7 @@
 ### Premier lancement — Disponible
 
 - Création automatique d’un projet et d’un document uniques.
-- Installation du pack de sprites livré avec l’application si la base d’assets est vide.
+- Installation initiale puis synchronisation additive du pack de sprites livré avec l’application, sans suppression des imports personnels.
 - Démarrage d’une visite guidée en quatre étapes : sprites, scène, sauvegarde, export.
 - Possibilité de relancer la visite depuis l’en-tête.
 

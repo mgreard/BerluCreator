@@ -34,16 +34,12 @@ async function getImageDimensions(blob: Blob): Promise<{ width: number; height: 
  * Charge l'ensemble des sprites réels du studio dans la base locale Dexie
  * avec leurs dimensions natives, sans recadrage transparent.
  */
-export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
+export async function syncBundledAssets(force = false): Promise<void> {
   const existing = await assetRepository.getAll()
 
   const needsSpritePackMigration = existing.some(
     (asset) => !isAssetCategory(asset.category) || asset.isMovable === undefined
   )
-
-  if (!force && existing.length > 0 && !needsSpritePackMigration) {
-    return
-  }
 
   // Nettoyer les anciens assets si leur structure est obsolète ou en cas de forçage.
   if (needsSpritePackMigration || force) {
@@ -52,8 +48,15 @@ export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
     }
   }
 
-  // Importer chaque sprite PNG détecté par Vite
+  const assetsToKeep = needsSpritePackMigration || force ? [] : existing
+  const missingPaths = new Set(
+    findMissingBundledSpritePaths(Object.keys(spriteModules), assetsToKeep)
+  )
+
+  // Importer uniquement les sprites absents. Les imports personnels et les anciens
+  // sprites locaux sont conservés lors d'une synchronisation normale.
   for (const [path, url] of Object.entries(spriteModules)) {
+    if (!missingPaths.has(path)) continue
     try {
       const response = await fetch(url)
       const blob = await response.blob()
@@ -85,6 +88,28 @@ export async function seedDemoAssetsIfEmpty(force = false): Promise<void> {
       console.error(`Erreur chargement sprite ${path}:`, err)
     }
   }
+}
+
+function spriteIdentity(name: string, category: AssetCategory): string {
+  return `${category}:${name.trim().toLocaleLowerCase('fr')}`
+}
+
+export function findMissingBundledSpritePaths(
+  paths: string[],
+  existing: Array<Pick<Asset, 'name' | 'category'>>
+): string[] {
+  const existingIdentities = new Set(
+    existing.map((asset) => spriteIdentity(asset.name, asset.category))
+  )
+  const missing: string[] = []
+  for (const path of paths) {
+    const metadata = parseSpriteMetadata(path)
+    const identity = spriteIdentity(metadata.name, metadata.category)
+    if (existingIdentities.has(identity)) continue
+    existingIdentities.add(identity)
+    missing.push(path)
+  }
+  return missing
 }
 
 export function parseSpriteMetadata(filePath: string): {

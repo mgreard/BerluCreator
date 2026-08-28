@@ -4,7 +4,7 @@ import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useWorkspaceBackupStore } from '@/features/project/stores/useWorkspaceBackupStore'
-import { seedDemoAssetsIfEmpty } from '@/features/asset-manager/services/demo-asset-seeder'
+import { syncBundledAssets } from '@/features/asset-manager/services/demo-asset-seeder'
 
 import StudioHeader from '@/features/project/components/StudioHeader.vue'
 import AssetLibraryPanel from '@/features/asset-manager/components/AssetLibraryPanel.vue'
@@ -75,8 +75,8 @@ onMounted(async () => {
   // 1. Initialiser l'espace de travail unique
   const proj = await projectStore.loadInitialProject()
 
-  // 2. Pré-remplir les assets de démonstration si premier lancement
-  await seedDemoAssetsIfEmpty()
+  // 2. Synchroniser les nouveaux sprites livrés sans toucher aux imports personnels
+  await syncBundledAssets()
   await assetStore.loadAssets()
 
   // 3. Charger le document courant de l'éditeur
