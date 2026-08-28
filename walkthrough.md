@@ -14,6 +14,8 @@ Le studio repose sur un document unique dont les groupes et calques sont l’uni
 ## Interaction simplifiée
 
 - La sidebar droite, la modale de réglages de calque et l’atelier de calibration ont été supprimés.
+- Les compositions occupent désormais un panneau droit repliable et redimensionnable, dont la largeur est mémorisée. L’ancienne grande modale a été retirée.
+- Les vues sauvegardées sont présentées dans une liste dense avec miniature, nom, date et nombre de calques. Les actions charger et supprimer restent accessibles sur chaque ligne ; charger une vue replie le panneau.
 - La sidebar gauche conserve un rail lisible : chaque personnage expose ses catégories (complet, corps, têtes, yeux, bouches, bras et accessoires), puis viennent les catégories de décor.
 - Les couleurs de `ASSET_CATEGORIES` structurent désormais les icônes, compteurs et états actifs de la sidebar sans modifier les comportements de filtrage.
 - Un clic sur un asset l’ajoute. Un clic sur une autre variante remplace uniquement le même slot. Un clic sur l’asset déjà rendu le retire.
@@ -57,7 +59,7 @@ Le studio repose sur un document unique dont les groupes et calques sont l’uni
 | --- | --- | --- |
 | TypeScript strict | `pnpm exec vue-tsc -p tsconfig.app.json --noEmit --incremental false` | Succès |
 | ESLint sans réécriture | `pnpm exec eslint src vite.config.ts histoire.config.ts` | Succès, 0 avertissement |
-| Tests unitaires | `pnpm run test:unit` | 88 fichiers, 369 tests passés |
+| Tests unitaires | `pnpm run test:unit` | 89 fichiers, 371 tests passés |
 | Build applicatif | `pnpm run build` | Succès avec Vite 5.4.21 |
 | Build Histoire | `pnpm run story:build` | 67 stories, 173 variantes |
 

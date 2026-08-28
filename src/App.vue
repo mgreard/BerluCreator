@@ -11,7 +11,7 @@ import AssetLibraryPanel from '@/features/asset-manager/components/AssetLibraryP
 import StudioViewport from '@/features/studio/components/StudioViewport.vue'
 import ProjectSettingsModal from '@/features/project/components/ProjectSettingsModal.vue'
 import ExportModal from '@/features/project/components/ExportModal.vue'
-import ViewportSnapshotsModal from '@/features/editor/components/ViewportSnapshotsModal.vue'
+import { ViewportSnapshotsPanel } from '@/features/editor/components/viewport-snapshots-panel'
 import ResizableSidebar from '@/features/studio/components/ResizableSidebar.vue'
 import ToastContainer from '@/components/ui/toast-container/ToastContainer.vue'
 import {
@@ -126,12 +126,23 @@ onBeforeUnmount(() => {
 
       <!-- Viewport & Canvas de Composition (Centre, occupant tout l'espace restant) -->
       <StudioViewport />
+
+      <!-- Compositions et vues sauvegardées (Droite) -->
+      <ResizableSidebar
+        v-model:open="isSavedSnapshotsOpen"
+        side="right"
+        :default-width="380"
+        :min-width="320"
+        :max-width="520"
+        storage-key="berlu.saved-views-sidebar-width.v1"
+      >
+        <ViewportSnapshotsPanel v-model:open="isSavedSnapshotsOpen" />
+      </ResizableSidebar>
     </div>
 
     <!-- Modales Globales -->
     <ProjectSettingsModal v-model:open="isSettingsOpen" />
     <ExportModal v-model:open="isExportOpen" />
-    <ViewportSnapshotsModal v-model:open="isSavedSnapshotsOpen" />
 
     <!-- Système de notifications Toasts & Tour -->
     <ToastContainer />

@@ -20,6 +20,7 @@ Statut : **studio simplifié avec personnages complets/rigs implémenté**.
 - [x] Double-clic sur le sprite ou le rig actif pour le désélectionner sans le supprimer.
 - [x] Historique atomique de 50 actions, gestes coalescés, caméra exclue et persistance séquentielle.
 - [x] Vues sauvegardées contenant groupes, deux configurations, calques et caméra.
+- [x] Compositions intégrées dans un panneau droit repliable et redimensionnable, avec liste compacte à miniatures.
 - [x] Import indépendant par fichier avec validation et retry sans doublon.
 - [x] Import ouvert par défaut sur la catégorie « Personnage complet ».
 - [x] Suppression transactionnelle bloquée par les vues sauvegardées.
