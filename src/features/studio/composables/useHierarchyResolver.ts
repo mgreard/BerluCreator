@@ -3,7 +3,12 @@ import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
-import type { CharacterGroup, EditorGroup, EditorLayer } from '@core/types/editor.types'
+import type {
+  CharacterGroup,
+  EditorGroup,
+  EditorLayer,
+  LayerDepthRole
+} from '@core/types/editor.types'
 import { clampBackgroundCover } from '../engine/background-cover.engine'
 
 export interface RenderableLayer {
@@ -35,6 +40,7 @@ export interface RenderableLayer {
   muted: boolean
   locked: boolean
   isMovable: boolean
+  depthRole: Exclude<LayerDepthRole, 'auto'>
 }
 
 interface CharacterGeometry {
@@ -72,14 +78,20 @@ export function useHierarchyResolver() {
       result.push(resolveLayer(layer, asset, group, stage, characterGeometries.get(group.id)))
     }
 
-    return result.sort((left, right) =>
-      left.groupZIndex - right.groupZIndex ||
-      left.layerZIndex - right.layerZIndex ||
-      left.order - right.order
+    return result.sort(
+      (left, right) =>
+        depthBand(left) - depthBand(right) ||
+        left.groupZIndex - right.groupZIndex ||
+        left.layerZIndex - right.layerZIndex ||
+        left.order - right.order
     )
   })
 
   return { activeLayers }
+}
+
+function depthBand(layer: RenderableLayer): number {
+  return layer.depthRole === 'background' ? 0 : 1
 }
 
 function resolveCharacterGeometries(
@@ -91,10 +103,9 @@ function resolveCharacterGeometries(
   const geometries = new Map<string, CharacterGeometry>()
   for (const group of groups) {
     const activeAssets = layers
-      .filter((layer) =>
-        layer.groupId === group.id &&
-        !layer.muted &&
-        isLayerActiveForCharacter(layer, group)
+      .filter(
+        (layer) =>
+          layer.groupId === group.id && !layer.muted && isLayerActiveForCharacter(layer, group)
       )
       .map((layer) => assets.get(layer.assetId))
       .filter((asset): asset is Asset => Boolean(asset))
@@ -111,8 +122,8 @@ function resolveCharacterGeometries(
       x,
       y,
       baseScale,
-      originX: x + referenceWidth * baseScale / 2,
-      originY: y + referenceHeight * baseScale / 2
+      originX: x + (referenceWidth * baseScale) / 2,
+      originY: y + (referenceHeight * baseScale) / 2
     })
   }
   return geometries
@@ -128,9 +139,24 @@ function commonLayer(
   layer: EditorLayer,
   asset: Asset,
   group: EditorGroup
-): Pick<RenderableLayer,
-  'id' | 'layerId' | 'name' | 'category' | 'groupId' | 'groupName' |
-  'groupZIndex' | 'layerZIndex' | 'order' | 'asset' | 'zIndex' | 'muted' | 'locked' | 'isMovable'> {
+): Pick<
+  RenderableLayer,
+  | 'id'
+  | 'layerId'
+  | 'name'
+  | 'category'
+  | 'groupId'
+  | 'groupName'
+  | 'groupZIndex'
+  | 'layerZIndex'
+  | 'order'
+  | 'asset'
+  | 'zIndex'
+  | 'muted'
+  | 'locked'
+  | 'isMovable'
+  | 'depthRole'
+> {
   return {
     id: layer.id,
     layerId: layer.id,
@@ -145,6 +171,12 @@ function commonLayer(
     zIndex: layer.zIndex,
     muted: layer.muted,
     locked: layer.locked || group.locked,
+    depthRole:
+      layer.depthRole === 'background' || layer.depthRole === 'subject'
+        ? layer.depthRole
+        : layer.category === 'background'
+          ? 'background'
+          : 'subject',
     // Les anciens bureaux peuvent encore porter isMovable=false en IndexedDB.
     // La catégorie desk est désormais toujours manipulable, sans migration destructive.
     isMovable: group.kind === 'character' || asset.category === 'desk' || asset.isMovable

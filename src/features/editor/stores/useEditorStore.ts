@@ -4,16 +4,19 @@ import type {
   CameraFrame,
   CharacterGroup,
   CharacterMode,
+  DepthOfFieldSettings,
   EditorDocument,
   EditorGroup,
   EditorGroupColor,
   EditorLayer,
+  LayerDepthRole,
   Transform2D,
   ViewportSnapshot
 } from '@core/types/editor.types'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import {
   CHARACTER_CATEGORIES,
+  DEFAULT_DEPTH_OF_FIELD_SETTINGS,
   DEFAULT_EDITOR_GROUPS,
   DEFAULT_STAGE_RESOLUTION,
   DEFAULT_TRANSFORM
@@ -25,6 +28,7 @@ import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { generateId } from '@/lib/utils'
 
 interface StudioState {
+  depthOfField: DepthOfFieldSettings
   groups: EditorGroup[]
   layers: EditorLayer[]
 }
@@ -51,10 +55,29 @@ function normalizeTransform(transform?: Partial<Transform2D>): Transform2D {
   return { ...DEFAULT_TRANSFORM, ...(transform ?? {}), scaleX: scale, scaleY: scale }
 }
 
-function mergeUniformTransform(
-  current: Transform2D,
-  changes: Partial<Transform2D>
-): Transform2D {
+function normalizeDepthOfField(settings?: Partial<DepthOfFieldSettings>): DepthOfFieldSettings {
+  const focusY = Number.isFinite(settings?.focusY)
+    ? Math.max(0, Math.min(1, settings!.focusY!))
+    : DEFAULT_DEPTH_OF_FIELD_SETTINGS.focusY
+  const feather = Number.isFinite(settings?.feather)
+    ? Math.max(0, Math.min(4096, settings!.feather!))
+    : DEFAULT_DEPTH_OF_FIELD_SETTINGS.feather
+  const blurRadius = Number.isFinite(settings?.blurRadius)
+    ? Math.max(0, Math.min(64, settings!.blurRadius!))
+    : DEFAULT_DEPTH_OF_FIELD_SETTINGS.blurRadius
+  return {
+    enabled: settings?.enabled ?? DEFAULT_DEPTH_OF_FIELD_SETTINGS.enabled,
+    focusY,
+    feather,
+    blurRadius
+  }
+}
+
+function normalizeLayerDepthRole(role?: LayerDepthRole): LayerDepthRole {
+  return role === 'background' || role === 'subject' ? role : 'auto'
+}
+
+function mergeUniformTransform(current: Transform2D, changes: Partial<Transform2D>): Transform2D {
   const scale = changes.scaleX ?? changes.scaleY
   return normalizeTransform({
     ...current,
@@ -66,25 +89,29 @@ function mergeUniformTransform(
 function normalizeDocument(document: EditorDocument): EditorDocument {
   return {
     ...document,
+    depthOfField: normalizeDepthOfField(document.depthOfField),
     groups: document.groups.map((group) => ({
       ...group,
       transform: normalizeTransform(group.transform)
     })),
     layers: document.layers.map((layer) => ({
       ...layer,
+      depthRole: normalizeLayerDepthRole(layer.depthRole),
       transform: normalizeTransform(layer.transform)
     }))
   }
 }
 
 function slugifyCharacter(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '') || 'berlu'
+  return (
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || 'berlu'
+  )
 }
 
 function createDefaultDocument(projectId = 'proj_default'): EditorDocument {
@@ -101,6 +128,7 @@ function createDefaultDocument(projectId = 'proj_default'): EditorDocument {
       height: DEFAULT_STAGE_RESOLUTION.height,
       aspectRatio: '16:9'
     },
+    depthOfField: { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS },
     groups: clone(DEFAULT_EDITOR_GROUPS),
     layers: [],
     createdAt: now,
@@ -109,7 +137,11 @@ function createDefaultDocument(projectId = 'proj_default'): EditorDocument {
 }
 
 function stateOf(document: EditorDocument): StudioState {
-  return clone({ groups: document.groups, layers: document.layers })
+  return clone({
+    depthOfField: document.depthOfField,
+    groups: document.groups,
+    layers: document.layers
+  })
 }
 
 function statesAreEqual(left: StudioState, right: StudioState): boolean {
@@ -152,11 +184,11 @@ export const useEditorStore = defineStore('editor', () => {
   let saveQueue: Promise<void> = Promise.resolve()
   let queuedSaves = 0
 
-  const selectedLayer = computed(() =>
-    currentDocument.value.layers.find((layer) => layer.id === selectedLayerId.value) ?? null
+  const selectedLayer = computed(
+    () => currentDocument.value.layers.find((layer) => layer.id === selectedLayerId.value) ?? null
   )
-  const selectedGroup = computed(() =>
-    currentDocument.value.groups.find((group) => group.id === selectedGroupId.value) ?? null
+  const selectedGroup = computed(
+    () => currentDocument.value.groups.find((group) => group.id === selectedGroupId.value) ?? null
   )
   const canUndo = computed(() => undoStack.value.length > 0)
   const canRedo = computed(() => redoStack.value.length > 0)
@@ -221,6 +253,7 @@ export const useEditorStore = defineStore('editor', () => {
     if (!gesture) return
     currentDocument.value.groups = clone(gesture.before.groups)
     currentDocument.value.layers = clone(gesture.before.layers)
+    currentDocument.value.depthOfField = clone(gesture.before.depthOfField)
     activeGesture.value = null
   }
 
@@ -231,12 +264,19 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function restoreState(state: StudioState): void {
+    currentDocument.value.depthOfField = clone(state.depthOfField)
     currentDocument.value.groups = clone(state.groups)
     currentDocument.value.layers = clone(state.layers)
-    if (selectedLayerId.value && !currentDocument.value.layers.some((l) => l.id === selectedLayerId.value)) {
+    if (
+      selectedLayerId.value &&
+      !currentDocument.value.layers.some((l) => l.id === selectedLayerId.value)
+    ) {
       selectedLayerId.value = null
     }
-    if (selectedGroupId.value && !currentDocument.value.groups.some((g) => g.id === selectedGroupId.value)) {
+    if (
+      selectedGroupId.value &&
+      !currentDocument.value.groups.some((g) => g.id === selectedGroupId.value)
+    ) {
       selectedGroupId.value = null
     }
   }
@@ -259,7 +299,10 @@ export const useEditorStore = defineStore('editor', () => {
     persistInBackground()
   }
 
-  async function loadDocument(documentId: string, projectId = 'proj_default'): Promise<EditorDocument> {
+  async function loadDocument(
+    documentId: string,
+    projectId = 'proj_default'
+  ): Promise<EditorDocument> {
     isLoading.value = true
     try {
       const existing = await editorDocumentRepository.getById(documentId)
@@ -269,7 +312,8 @@ export const useEditorStore = defineStore('editor', () => {
         const projectDocuments = await editorDocumentRepository.getByProjectId(projectId)
         currentDocument.value = projectDocuments[0] ?? createDefaultDocument(projectId)
         currentDocument.value.id = documentId || 'doc_default'
-        if (projectDocuments.length === 0) await editorDocumentRepository.save(currentDocument.value)
+        if (projectDocuments.length === 0)
+          await editorDocumentRepository.save(currentDocument.value)
       }
       clearStudioSelection()
       clearHistory()
@@ -292,9 +336,15 @@ export const useEditorStore = defineStore('editor', () => {
     }
   }
 
-  function findOrCreateCharacterGroup(asset?: Asset, targetGroupId?: string | null): CharacterGroup {
+  function findOrCreateCharacterGroup(
+    asset?: Asset,
+    targetGroupId?: string | null
+  ): CharacterGroup {
     const targeted = targetGroupId
-      ? currentDocument.value.groups.find((group): group is CharacterGroup => group.id === targetGroupId && group.kind === 'character')
+      ? currentDocument.value.groups.find(
+          (group): group is CharacterGroup =>
+            group.id === targetGroupId && group.kind === 'character'
+        )
       : undefined
     if (targeted) return targeted
 
@@ -313,14 +363,19 @@ export const useEditorStore = defineStore('editor', () => {
 
   function findStageGroup(category: AssetCategory, targetGroupId?: string | null): EditorGroup {
     const targeted = targetGroupId
-      ? currentDocument.value.groups.find((group) => group.id === targetGroupId && group.kind === 'stage')
+      ? currentDocument.value.groups.find(
+          (group) => group.id === targetGroupId && group.kind === 'stage'
+        )
       : undefined
     if (targeted) return targeted
     const matching = currentDocument.value.groups.find(
       (group) => group.kind === 'stage' && group.allowedCategories.includes(category)
     )
     if (matching) return matching
-    return currentDocument.value.groups.find((group) => group.kind === 'stage') ?? currentDocument.value.groups[0]
+    return (
+      currentDocument.value.groups.find((group) => group.kind === 'stage') ??
+      currentDocument.value.groups[0]
+    )
   }
 
   function assignAssetToGroup(
@@ -334,9 +389,12 @@ export const useEditorStore = defineStore('editor', () => {
       const group = isCharacterCategory(category)
         ? findOrCreateCharacterGroup(asset, targetGroupId)
         : findStageGroup(category, targetGroupId)
-      const singleton = ASSET_CATEGORIES[category].layerCardinality === 'singleton' || isCharacterCategory(category)
+      const singleton =
+        ASSET_CATEGORIES[category].layerCardinality === 'singleton' || isCharacterCategory(category)
       const existing = singleton
-        ? currentDocument.value.layers.find((layer) => layer.groupId === group.id && layer.category === category)
+        ? currentDocument.value.layers.find(
+            (layer) => layer.groupId === group.id && layer.category === category
+          )
         : undefined
       const calibration = asset?.calibration
 
@@ -358,7 +416,8 @@ export const useEditorStore = defineStore('editor', () => {
         return existing
       }
 
-      const nextOrder = currentDocument.value.layers.reduce((max, layer) => Math.max(max, layer.order), -1) + 1
+      const nextOrder =
+        currentDocument.value.layers.reduce((max, layer) => Math.max(max, layer.order), -1) + 1
       const layer: EditorLayer = {
         id: generateId('layer'),
         assetId,
@@ -369,6 +428,7 @@ export const useEditorStore = defineStore('editor', () => {
         order: nextOrder,
         muted: false,
         locked: false,
+        depthRole: 'auto',
         transform: normalizeTransform(calibration)
       }
       if (!calibration && group.kind === 'stage' && category !== 'background' && asset) {
@@ -403,10 +463,12 @@ export const useEditorStore = defineStore('editor', () => {
       : findStageGroup(category)
     const existing = group
       ? currentDocument.value.layers.find(
-          (layer) => layer.groupId === group.id && layer.category === category && layer.assetId === assetId
+          (layer) =>
+            layer.groupId === group.id && layer.category === category && layer.assetId === assetId
         )
       : undefined
-    const compatibleMode = group?.kind !== 'character' ||
+    const compatibleMode =
+      group?.kind !== 'character' ||
       (group.activeMode === 'full') === (category === 'character_full')
     const isVisible = Boolean(existing && !existing.muted && !group?.muted && compatibleMode)
 
@@ -446,6 +508,7 @@ export const useEditorStore = defineStore('editor', () => {
       const created = {
         ...layer,
         id: layer.id || generateId('layer'),
+        depthRole: normalizeLayerDepthRole(layer.depthRole),
         transform: normalizeTransform(layer.transform)
       } as EditorLayer
       currentDocument.value.layers.push(created)
@@ -455,7 +518,9 @@ export const useEditorStore = defineStore('editor', () => {
 
   function removeLayer(layerId: string): void {
     mutateStudio('Retirer un calque', () => {
-      currentDocument.value.layers = currentDocument.value.layers.filter((layer) => layer.id !== layerId)
+      currentDocument.value.layers = currentDocument.value.layers.filter(
+        (layer) => layer.id !== layerId
+      )
       if (selectedLayerId.value === layerId) selectedLayerId.value = null
     })
   }
@@ -474,13 +539,19 @@ export const useEditorStore = defineStore('editor', () => {
           ? layer.category === 'character_full'
           : layer.category !== 'character_full')
       const removedCount = currentDocument.value.layers.filter(removesLayer).length
-      currentDocument.value.layers = currentDocument.value.layers.filter((layer) => !removesLayer(layer))
+      currentDocument.value.layers = currentDocument.value.layers.filter(
+        (layer) => !removesLayer(layer)
+      )
       if (selectedGroupId.value === group.id) clearStudioSelection()
       return removedCount
     })
   }
 
-  function updateLayer(layerId: string, changes: Partial<EditorLayer>, label = 'Modifier un calque'): void {
+  function updateLayer(
+    layerId: string,
+    changes: Partial<EditorLayer>,
+    label = 'Modifier un calque'
+  ): void {
     mutateStudio(label, () => {
       const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
       if (layer) Object.assign(layer, changes)
@@ -496,7 +567,11 @@ export const useEditorStore = defineStore('editor', () => {
     else mutateStudio('Transformer un calque', apply)
   }
 
-  function updateLayerSettings(layerId: string, transform: Partial<Transform2D>, zIndex: number): void {
+  function updateLayerSettings(
+    layerId: string,
+    transform: Partial<Transform2D>,
+    zIndex: number
+  ): void {
     mutateStudio('Régler un calque', () => {
       const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
       if (!layer) return
@@ -517,6 +592,15 @@ export const useEditorStore = defineStore('editor', () => {
     updateLayer(layerId, { locked }, locked ? 'Verrouiller un calque' : 'Déverrouiller un calque')
   }
 
+  function setLayerDepthRole(layerId: string, depthRole: LayerDepthRole): void {
+    const normalizedRole = normalizeLayerDepthRole(depthRole)
+    updateLayer(
+      layerId,
+      { depthRole: normalizedRole },
+      normalizedRole === 'background' ? 'Placer dans le décor' : 'Garder le sujet net'
+    )
+  }
+
   function moveLayer(layerId: string, direction: -1 | 1): void {
     mutateStudio(direction > 0 ? 'Monter un calque' : 'Descendre un calque', () => {
       const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
@@ -533,9 +617,16 @@ export const useEditorStore = defineStore('editor', () => {
     })
   }
 
-  function createGroup(name: string, _customCategory?: string, color: EditorGroupColor = 'indigo'): EditorGroup {
+  function createGroup(
+    name: string,
+    _customCategory?: string,
+    color: EditorGroupColor = 'indigo'
+  ): EditorGroup {
     return mutateStudio('Créer un groupe', () => {
-      const maxZ = currentDocument.value.groups.reduce((max, group) => Math.max(max, group.zIndex), 0)
+      const maxZ = currentDocument.value.groups.reduce(
+        (max, group) => Math.max(max, group.zIndex),
+        0
+      )
       const group: EditorGroup = {
         id: generateId('grp'),
         name: name.trim() || 'Nouveau groupe',
@@ -555,7 +646,11 @@ export const useEditorStore = defineStore('editor', () => {
     })
   }
 
-  function updateGroup(groupId: string, changes: Partial<EditorGroup>, label = 'Modifier un groupe'): void {
+  function updateGroup(
+    groupId: string,
+    changes: Partial<EditorGroup>,
+    label = 'Modifier un groupe'
+  ): void {
     mutateStudio(label, () => {
       const group = currentDocument.value.groups.find((candidate) => candidate.id === groupId)
       if (group) Object.assign(group, changes)
@@ -571,7 +666,11 @@ export const useEditorStore = defineStore('editor', () => {
     else mutateStudio('Transformer un groupe', apply)
   }
 
-  function updateGroupSettings(groupId: string, transform: Partial<Transform2D>, zIndex: number): void {
+  function updateGroupSettings(
+    groupId: string,
+    transform: Partial<Transform2D>,
+    zIndex: number
+  ): void {
     mutateStudio('Régler un groupe', () => {
       const group = currentDocument.value.groups.find((candidate) => candidate.id === groupId)
       if (!group) return
@@ -586,15 +685,21 @@ export const useEditorStore = defineStore('editor', () => {
 
   function deleteGroup(groupId: string, deleteLayers = true): void {
     mutateStudio('Supprimer un groupe', () => {
-      const fallback = currentDocument.value.groups.find((group) => group.id !== groupId && group.kind === 'stage')
+      const fallback = currentDocument.value.groups.find(
+        (group) => group.id !== groupId && group.kind === 'stage'
+      )
       if (deleteLayers || !fallback) {
-        currentDocument.value.layers = currentDocument.value.layers.filter((layer) => layer.groupId !== groupId)
+        currentDocument.value.layers = currentDocument.value.layers.filter(
+          (layer) => layer.groupId !== groupId
+        )
       } else {
         for (const layer of currentDocument.value.layers) {
           if (layer.groupId === groupId) layer.groupId = fallback.id
         }
       }
-      currentDocument.value.groups = currentDocument.value.groups.filter((group) => group.id !== groupId)
+      currentDocument.value.groups = currentDocument.value.groups.filter(
+        (group) => group.id !== groupId
+      )
       if (selectedGroupId.value === groupId) clearStudioSelection()
     })
   }
@@ -617,17 +722,30 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function setCharacterMode(groupId: string, activeMode: CharacterMode): void {
-    mutateStudio(activeMode === 'full' ? 'Afficher le personnage complet' : 'Afficher le rig', () => {
-      const group = currentDocument.value.groups.find(
-        (candidate): candidate is CharacterGroup => candidate.id === groupId && candidate.kind === 'character'
-      )
-      if (group) group.activeMode = activeMode
-    })
+    mutateStudio(
+      activeMode === 'full' ? 'Afficher le personnage complet' : 'Afficher le rig',
+      () => {
+        const group = currentDocument.value.groups.find(
+          (candidate): candidate is CharacterGroup =>
+            candidate.id === groupId && candidate.kind === 'character'
+        )
+        if (group) group.activeMode = activeMode
+      }
+    )
   }
 
   function updateCamera(camera: CameraFrame): void {
     currentDocument.value.camera = { ...camera }
     persistInBackground()
+  }
+
+  function updateDepthOfField(changes: Partial<DepthOfFieldSettings>): void {
+    mutateStudio('Régler la profondeur de champ', () => {
+      currentDocument.value.depthOfField = normalizeDepthOfField({
+        ...currentDocument.value.depthOfField,
+        ...changes
+      })
+    })
   }
 
   function selectLayerForEditing(layerId: string): void {
@@ -657,6 +775,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   function applyViewportSnapshot(snapshot: ViewportSnapshot): number {
     currentDocument.value.camera = clone(snapshot.camera)
+    currentDocument.value.depthOfField = normalizeDepthOfField(snapshot.depthOfField)
     const normalized = normalizeDocument({
       ...currentDocument.value,
       groups: clone(snapshot.groups),
@@ -672,12 +791,17 @@ export const useEditorStore = defineStore('editor', () => {
 
   function syncAfterAssetDeletion(assetId: string): void {
     const affectedGroupIds = new Set(
-      currentDocument.value.layers.filter((layer) => layer.assetId === assetId).map((layer) => layer.groupId)
+      currentDocument.value.layers
+        .filter((layer) => layer.assetId === assetId)
+        .map((layer) => layer.groupId)
     )
-    currentDocument.value.layers = currentDocument.value.layers.filter((layer) => layer.assetId !== assetId)
+    currentDocument.value.layers = currentDocument.value.layers.filter(
+      (layer) => layer.assetId !== assetId
+    )
     for (const groupId of affectedGroupIds) {
       const group = currentDocument.value.groups.find(
-        (candidate): candidate is CharacterGroup => candidate.id === groupId && candidate.kind === 'character'
+        (candidate): candidate is CharacterGroup =>
+          candidate.id === groupId && candidate.kind === 'character'
       )
       if (!group || group.activeMode !== 'full') continue
       const hasFull = currentDocument.value.layers.some(
@@ -718,6 +842,7 @@ export const useEditorStore = defineStore('editor', () => {
     updateLayerZIndex,
     setLayerMuted,
     setLayerLocked,
+    setLayerDepthRole,
     moveLayer,
     createGroup,
     updateGroup,
@@ -731,6 +856,7 @@ export const useEditorStore = defineStore('editor', () => {
     setGroupCollapsed,
     setCharacterMode,
     updateCamera,
+    updateDepthOfField,
     selectLayerForEditing,
     selectGroupForEditing,
     clearStudioSelection,

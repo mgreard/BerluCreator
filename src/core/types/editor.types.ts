@@ -29,6 +29,15 @@ export interface CameraFrame {
   aspectRatio: CameraAspectRatio
 }
 
+export interface DepthOfFieldSettings {
+  enabled: boolean
+  focusY: number
+  feather: number
+  blurRadius: number
+}
+
+export type LayerDepthRole = 'auto' | 'background' | 'subject'
+
 export type EditorGroupColor = 'indigo' | 'emerald' | 'amber' | 'rose' | 'blue' | 'purple' | 'cyan'
 export type CharacterMode = 'full' | 'rig'
 
@@ -69,6 +78,8 @@ export interface EditorLayer {
   order: number
   muted: boolean
   locked: boolean
+  /** Rôle optique de cette instance. Absent dans les anciens documents = auto. */
+  depthRole?: LayerDepthRole
   transform: Transform2D
 }
 
@@ -77,6 +88,7 @@ export interface EditorDocument {
   projectId: string
   name: string
   camera: CameraFrame
+  depthOfField: DepthOfFieldSettings
   layers: EditorLayer[]
   groups: EditorGroup[]
   createdAt: number
@@ -88,6 +100,7 @@ export interface ViewportSnapshot {
   name: string
   thumbnailDataUrl: string
   camera: CameraFrame
+  depthOfField: DepthOfFieldSettings
   layers: EditorLayer[]
   groups: EditorGroup[]
   createdAt: number

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { DEFAULT_EDITOR_GROUPS } from '@core/constants/editor'
+import { DEFAULT_DEPTH_OF_FIELD_SETTINGS, DEFAULT_EDITOR_GROUPS } from '@core/constants/editor'
 import type { EditorDocument } from '@core/types/editor.types'
 import { useViewportSnapshotStore } from './useViewportSnapshotStore'
 
@@ -18,6 +18,7 @@ function documentFixture(): EditorDocument {
     projectId: 'project',
     name: 'Document',
     camera: { enabled: true, x: 0, y: 0, width: 1792, height: 1024, aspectRatio: '16:9' },
+    depthOfField: { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS, enabled: true },
     groups: JSON.parse(JSON.stringify(DEFAULT_EDITOR_GROUPS)),
     layers: [],
     createdAt: 1,
@@ -35,6 +36,8 @@ describe('useViewportSnapshotStore', () => {
     expect(snapshot.groups).toEqual(document.groups)
     expect(snapshot.groups).not.toBe(document.groups)
     expect(snapshot.thumbnailDataUrl).toContain('data:image/png')
+    expect(snapshot.depthOfField).toEqual(document.depthOfField)
+    expect(snapshot.depthOfField).not.toBe(document.depthOfField)
   })
 
   it('supprime un snapshot par identifiant', async () => {

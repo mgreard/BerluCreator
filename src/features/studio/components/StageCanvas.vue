@@ -18,7 +18,12 @@ import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
 import { Badge } from '@/components/ui/badge'
+import { SegmentedControl, type SegmentOption } from '@/components/ui/segmented-control'
 import { CameraFrameOverlay } from '@/components/ui/camera-frame-overlay'
+import {
+  DepthOfFieldOverlay,
+  type DepthOfFieldOverlayValue
+} from '@/components/ui/depth-of-field-overlay'
 import type { CameraFrame } from '@core/types/editor.types'
 
 const projectStore = useProjectStore()
@@ -52,9 +57,7 @@ const activeSelectedLayer = computed(() => {
   }
 
   if (editorStore.selectedGroupId) {
-    return (
-      activeLayers.value.find((layer) => layer.groupId === editorStore.selectedGroupId) ?? null
-    )
+    return activeLayers.value.find((layer) => layer.groupId === editorStore.selectedGroupId) ?? null
   }
 
   return null
@@ -93,32 +96,106 @@ const activeCamera = computed<CameraFrame>({
   set: (camera) => editorStore.updateCamera(camera)
 })
 
+const depthOfField = computed(() => editorStore.currentDocument.depthOfField)
+const isDepthOfFieldEditorOpen = ref(false)
+let depthOfFieldFrame: number | null = null
+let pendingDepthOfField: DepthOfFieldOverlayValue | null = null
+let hasDepthOfFieldGesture = false
+
 const showSelection = computed(() => !activeCamera.value.enabled)
+
+const depthPlanOptions: SegmentOption[] = [
+  { value: 'background', label: 'Décor', icon: 'landscape' },
+  { value: 'subject', label: 'Sujet', icon: 'person' }
+]
+
+const canEditSelectedDepthRole = computed(
+  () =>
+    depthOfField.value.enabled &&
+    editScope.value === 'layer' &&
+    editorStore.selectedLayer?.category === 'props_set'
+)
+
+const selectedDepthPlan = computed<string>({
+  get: () => (editorStore.selectedLayer?.depthRole === 'background' ? 'background' : 'subject'),
+  set: (value) => {
+    const layer = editorStore.selectedLayer
+    if (!layer || (value !== 'background' && value !== 'subject')) return
+    editorStore.setLayerDepthRole(layer.id, value)
+  }
+})
 
 function toggleCameraFrame() {
   const current = activeCamera.value
   const enabled = !current.enabled
   const frameFitsStage =
-    current.width >= 64 && current.height >= 64 &&
-    current.x >= 0 && current.y >= 0 &&
+    current.width >= 64 &&
+    current.height >= 64 &&
+    current.x >= 0 &&
+    current.y >= 0 &&
     current.x + current.width <= stage.value.width &&
     current.y + current.height <= stage.value.height
 
   editorStore.clearStudioSelection()
-  editorStore.updateCamera(frameFitsStage
-    ? { ...current, enabled }
-    : {
-        enabled,
-        x: 0,
-        y: 0,
-        width: stage.value.width,
-        height: stage.value.height,
-        aspectRatio: 'custom'
-      })
+  editorStore.updateCamera(
+    frameFitsStage
+      ? { ...current, enabled }
+      : {
+          enabled,
+          x: 0,
+          y: 0,
+          width: stage.value.width,
+          height: stage.value.height,
+          aspectRatio: 'custom'
+        }
+  )
 }
 
 function commitCameraFrame(camera: CameraFrame) {
   editorStore.updateCamera(camera)
+}
+
+function toggleDepthOfField() {
+  const enabled = !depthOfField.value.enabled
+  editorStore.updateDepthOfField({ enabled })
+  isDepthOfFieldEditorOpen.value = enabled
+}
+
+function toggleDepthOfFieldEditor() {
+  if (!depthOfField.value.enabled) return
+  isDepthOfFieldEditorOpen.value = !isDepthOfFieldEditorOpen.value
+}
+
+function beginDepthOfFieldInteraction(label: string) {
+  if (hasDepthOfFieldGesture) return
+  hasDepthOfFieldGesture = true
+  editorStore.beginGesture(label)
+}
+
+function flushDepthOfFieldUpdate() {
+  depthOfFieldFrame = null
+  const next = pendingDepthOfField
+  pendingDepthOfField = null
+  if (next) editorStore.updateDepthOfField(next)
+}
+
+function scheduleDepthOfFieldUpdate(value: DepthOfFieldOverlayValue) {
+  pendingDepthOfField = value
+  if (depthOfFieldFrame !== null) return
+  depthOfFieldFrame = window.requestAnimationFrame(flushDepthOfFieldUpdate)
+}
+
+function commitDepthOfFieldUpdate(value: DepthOfFieldOverlayValue) {
+  pendingDepthOfField = value
+  if (depthOfFieldFrame !== null) {
+    window.cancelAnimationFrame(depthOfFieldFrame)
+    depthOfFieldFrame = null
+  }
+  flushDepthOfFieldUpdate()
+  if (hasDepthOfFieldGesture) {
+    hasDepthOfFieldGesture = false
+    editorStore.endGesture()
+  }
 }
 
 // Calcul des bornes englobantes (Bounding Box) du groupe ou du calque individuel
@@ -126,7 +203,9 @@ const selectedBounds = computed<BoxBounds | null>(() => {
   if (!activeSelectedLayer.value) return null
 
   if (isGroupTarget.value && activeSelectedGroup.value) {
-    const groupLayers = activeLayers.value.filter((l) => l.groupId === activeSelectedGroup.value?.id)
+    const groupLayers = activeLayers.value.filter(
+      (l) => l.groupId === activeSelectedGroup.value?.id
+    )
     if (groupLayers.length === 0) {
       const l = activeSelectedLayer.value
       return computeTransformedBounds(
@@ -214,7 +293,8 @@ useCanvasRenderer(
   selectedBounds,
   targetLabel,
   isGroupTarget,
-  showSelection
+  showSelection,
+  depthOfField
 )
 
 // --- GESTION DU DRAG & DROP ET DU REDIMENSIONNEMENT INTERACTIF ---
@@ -295,7 +375,12 @@ function onHistoryKeydown(event: KeyboardEvent) {
 }
 
 onMounted(() => window.addEventListener('keydown', onHistoryKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onHistoryKeydown))
+onUnmounted(() => {
+  window.removeEventListener('keydown', onHistoryKeydown)
+  if (depthOfFieldFrame !== null) window.cancelAnimationFrame(depthOfFieldFrame)
+  if (pendingDepthOfField) editorStore.updateDepthOfField(pendingDepthOfField)
+  if (hasDepthOfFieldGesture) editorStore.endGesture()
+})
 
 function clampScale(value: number) {
   return Number(Math.max(0.05, Math.min(5, value)).toFixed(2))
@@ -342,7 +427,10 @@ function getStageCoordinates(e: PointerEvent): { x: number; y: number } | null {
   }
 }
 
-function hitTestResizeHandle(pos: { x: number; y: number }, bounds: BoxBounds): ResizeHandle | null {
+function hitTestResizeHandle(
+  pos: { x: number; y: number },
+  bounds: BoxBounds
+): ResizeHandle | null {
   const handleRadius = 10
   const centerX = bounds.x + bounds.width / 2
   const centerY = bounds.y + bounds.height / 2
@@ -373,7 +461,9 @@ function hitTestLayer(pos: { x: number; y: number }): RenderableLayer | null {
     const isFullScreenBg =
       layer.category === 'background' ||
       (layer.category === 'foreground' && !layer.isMovable) ||
-      (layer.width >= stage.value.width * 0.95 && layer.height >= stage.value.height * 0.95 && !layer.isMovable)
+      (layer.width >= stage.value.width * 0.95 &&
+        layer.height >= stage.value.height * 0.95 &&
+        !layer.isMovable)
 
     if (isFullScreenBg) continue
 
@@ -452,7 +542,12 @@ function onCanvasPointerDown(e: PointerEvent) {
   // 3. Sélection au clic sur un calque
   const hit = hitTestLayer(pos)
   if (hit) {
-    const selectWholeGroup = shouldTargetWholeGroup(hit.groupId, hit.category, editScope.value, e.shiftKey)
+    const selectWholeGroup = shouldTargetWholeGroup(
+      hit.groupId,
+      hit.category,
+      editScope.value,
+      e.shiftKey
+    )
     if (hit.groupId && selectWholeGroup) {
       editorStore.selectGroupForEditing(hit.groupId)
     } else {
@@ -467,7 +562,9 @@ function onCanvasPointerDown(e: PointerEvent) {
     dragStartPointer.value = { ...pos }
 
     if (selectWholeGroup && hit.groupId) {
-      const group = editorStore.currentDocument.groups.find((candidate) => candidate.id === hit.groupId)
+      const group = editorStore.currentDocument.groups.find(
+        (candidate) => candidate.id === hit.groupId
+      )
       dragStartGroupPos.value = { x: group?.transform.x ?? 0, y: group?.transform.y ?? 0 }
     } else {
       dragStartLayerPos.value = { x: hit.localX ?? 0, y: hit.localY ?? 0 }
@@ -523,7 +620,10 @@ function onCanvasPointerMove(e: PointerEvent) {
             stageHeight: stage.value.height
           }
         )
-        editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, { x: clamped.x, y: clamped.y })
+        editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, {
+          x: clamped.x,
+          y: clamped.y
+        })
       } else {
         const newX = Math.round(dragStartLayerPos.value.x + dx)
         const newY = Math.round(dragStartLayerPos.value.y + dy)
@@ -625,8 +725,17 @@ function onCanvasDoubleClick(e: MouseEvent) {
         @commit="commitCameraFrame"
       />
 
+      <DepthOfFieldOverlay
+        v-if="depthOfField.enabled && isDepthOfFieldEditorOpen && !activeCamera.enabled"
+        :model-value="depthOfField"
+        :stage-height="stage.height"
+        @interaction-start="beginDepthOfFieldInteraction"
+        @update:model-value="scheduleDepthOfFieldUpdate"
+        @commit="commitDepthOfFieldUpdate"
+      />
+
       <div
-        class="absolute top-3 right-3 z-40 flex items-center gap-1 rounded-xl border border-border-default bg-bg-elevated/95 p-1 shadow-glass-md backdrop-blur-md"
+        class="absolute top-3 right-3 z-40 flex items-center gap-1 rounded-xl border border-border-default bg-bg-elevated/30 p-1 shadow-glass-md ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 ease-out"
         @pointerdown.stop
         @dblclick.stop
       >
@@ -634,11 +743,44 @@ function onCanvasDoubleClick(e: MouseEvent) {
           {{ stage.width }} × {{ stage.height }}
         </Badge>
         <IconButton
+          icon="blur_on"
+          size="xs"
+          variant="ghost"
+          :active="depthOfField.enabled"
+          :aria-label="
+            depthOfField.enabled
+              ? 'Désactiver le flou de profondeur'
+              : 'Activer le flou de profondeur'
+          "
+          :title="
+            depthOfField.enabled
+              ? 'Désactiver le flou de profondeur'
+              : 'Activer le flou de profondeur'
+          "
+          @click="toggleDepthOfField"
+        />
+        <IconButton
+          icon="tune"
+          size="xs"
+          variant="ghost"
+          :active="isDepthOfFieldEditorOpen"
+          :disabled="!depthOfField.enabled"
+          :aria-label="
+            isDepthOfFieldEditorOpen
+              ? 'Masquer les réglages de profondeur de champ'
+              : 'Afficher les réglages de profondeur de champ'
+          "
+          :title="isDepthOfFieldEditorOpen ? 'Masquer les réglages' : 'Afficher les réglages'"
+          @click="toggleDepthOfFieldEditor"
+        />
+        <IconButton
           icon="crop_free"
           size="xs"
           variant="ghost"
           :active="activeCamera.enabled"
-          :aria-label="activeCamera.enabled ? 'Désactiver le cadrage caméra' : 'Activer le cadrage caméra'"
+          :aria-label="
+            activeCamera.enabled ? 'Désactiver le cadrage caméra' : 'Activer le cadrage caméra'
+          "
           :title="activeCamera.enabled ? 'Désactiver le cadrage' : 'Activer le cadrage caméra'"
           @click="toggleCameraFrame"
         />
@@ -667,10 +809,12 @@ function onCanvasDoubleClick(e: MouseEvent) {
       <!-- HUD contextuel d'Édition Directe (Bannière Inférieure) -->
       <div
         v-if="activeSelectedLayer"
-        class="absolute bottom-3 left-3 flex items-center gap-2 pointer-events-auto animate-in fade-in duration-200"
+        class="absolute bottom-3 left-3 z-30 flex items-center gap-2 pointer-events-auto animate-in fade-in duration-200"
         @pointerdown.stop
       >
-        <div class="px-3 py-1.5 rounded-xl bg-bg-elevated/95 backdrop-blur-md border border-border-default shadow-glass-md flex items-center gap-3 text-xs">
+        <div
+          class="flex items-center gap-3 rounded-xl border border-border-default bg-bg-elevated/30 px-3 py-1.5 text-xs shadow-glass-md ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 ease-out"
+        >
           <!-- Nom & Icône du calque sélectionné -->
           <span class="font-semibold text-text-primary flex items-center gap-1.5">
             <Icon
@@ -678,13 +822,35 @@ function onCanvasDoubleClick(e: MouseEvent) {
               size="xs"
               class="text-primary"
             />
-            <span>{{ isGroupTarget && activeSelectedGroup ? activeSelectedGroup.name : (activeSelectedLayer.name || activeSelectedLayer.asset.name) }}</span>
+            <span>{{
+              isGroupTarget && activeSelectedGroup
+                ? activeSelectedGroup.name
+                : activeSelectedLayer.name || activeSelectedLayer.asset.name
+            }}</span>
           </span>
 
           <!-- Dimensions en direct -->
-          <span v-if="selectedBounds" class="text-[10px] text-text-muted font-mono pl-1 border-l border-border-subtle/60">
+          <span
+            v-if="selectedBounds"
+            class="text-[10px] text-text-muted font-mono pl-1 border-l border-border-subtle/60"
+          >
             {{ selectedBounds.width }}&times;{{ selectedBounds.height }}px
           </span>
+
+          <div
+            v-if="canEditSelectedDepthRole"
+            class="flex items-center gap-2 border-l border-border-subtle/60 pl-2"
+          >
+            <span class="text-[10px] font-semibold text-text-muted">Plan de mise au point</span>
+            <SegmentedControl
+              v-model="selectedDepthPlan"
+              :options="depthPlanOptions"
+              size="sm"
+              variant="primary"
+              class="bg-bg-surface/30"
+              aria-label="Plan de mise au point de l’accessoire"
+            />
+          </div>
 
           <IconButton
             icon="delete"

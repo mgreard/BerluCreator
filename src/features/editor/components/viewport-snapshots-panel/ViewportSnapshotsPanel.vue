@@ -50,7 +50,8 @@ async function saveCurrentViewport() {
     const thumbnail = await captureCleanFrame(
       activeLayers.value,
       projectStore.currentProject.stage,
-      'image/png'
+      'image/png',
+      { depthOfField: editorStore.currentDocument.depthOfField }
     )
     const snapshot = await snapshotStore.createSnapshot(
       editorStore.currentDocument,
@@ -80,10 +81,7 @@ async function loadSnapshot(snapshot: ViewportSnapshot) {
     toast.success('Composition chargée', `${layerCount} calque(s) restauré(s).`)
     open.value = false
   } catch (error) {
-    toast.error(
-      'Échec du chargement',
-      error instanceof Error ? error.message : 'Erreur inconnue.'
-    )
+    toast.error('Échec du chargement', error instanceof Error ? error.message : 'Erreur inconnue.')
   } finally {
     loadingSnapshotId.value = null
   }
@@ -119,10 +117,16 @@ function formatDate(timestamp: number) {
     <header class="flex h-12 shrink-0 items-center gap-2 border-b border-border-subtle px-3">
       <span class="panel-icon"><Icon name="collections_bookmark" size="sm" /></span>
       <div class="min-w-0 flex-1">
-        <Text as="p" variant="caption" color="primary" weight="semibold" truncate class="text-xs">Compositions</Text>
-        <Text as="p" variant="caption" color="muted" truncate class="text-[10px]">Vues sauvegardées</Text>
+        <Text as="p" variant="caption" color="primary" weight="semibold" truncate class="text-xs"
+          >Compositions</Text
+        >
+        <Text as="p" variant="caption" color="muted" truncate class="text-[10px]"
+          >Vues sauvegardées</Text
+        >
       </div>
-      <Badge variant="neutral" size="sm" class="count-badge">{{ snapshotStore.snapshots.length }}</Badge>
+      <Badge variant="neutral" size="sm" class="count-badge">{{
+        snapshotStore.snapshots.length
+      }}</Badge>
       <IconButton
         icon="right_panel_close"
         size="sm"
@@ -134,11 +138,7 @@ function formatDate(timestamp: number) {
     </header>
 
     <div class="shrink-0 border-b border-border-subtle/70 p-3">
-      <FormGroup
-        label="Nouvelle composition"
-        :label-for="nameInputId"
-        class="mb-0"
-      >
+      <FormGroup label="Nouvelle composition" :label-for="nameInputId" class="mb-0">
         <div class="flex items-center gap-2">
           <Input
             :id="nameInputId"
@@ -174,7 +174,9 @@ function formatDate(timestamp: number) {
           :key="snapshot.id"
           class="snapshot-row group flex min-w-0 gap-2.5 rounded-xl border p-2"
         >
-          <div class="snapshot-thumbnail relative aspect-video w-28 shrink-0 overflow-hidden rounded-lg border border-border-subtle bg-bg-base">
+          <div
+            class="snapshot-thumbnail relative aspect-video w-28 shrink-0 overflow-hidden rounded-lg border border-border-subtle bg-bg-base"
+          >
             <img
               v-if="snapshot.thumbnailDataUrl"
               :src="snapshot.thumbnailDataUrl"
@@ -188,7 +190,14 @@ function formatDate(timestamp: number) {
 
           <div class="flex min-w-0 flex-1 flex-col justify-between py-0.5">
             <div class="min-w-0">
-              <Text as="p" variant="caption" color="primary" weight="semibold" truncate class="text-xs">
+              <Text
+                as="p"
+                variant="caption"
+                color="primary"
+                weight="semibold"
+                truncate
+                class="text-xs"
+              >
                 {{ snapshot.name }}
               </Text>
               <Text as="p" variant="caption" color="muted" class="mt-0.5 text-[9px] leading-tight">
@@ -230,7 +239,9 @@ function formatDate(timestamp: number) {
       />
     </div>
 
-    <footer class="shrink-0 border-t border-border-subtle/70 px-3 py-2 text-[9px] leading-snug text-text-muted">
+    <footer
+      class="shrink-0 border-t border-border-subtle/70 px-3 py-2 text-[9px] leading-snug text-text-muted"
+    >
       Charger une vue remplace le contenu du document courant.
     </footer>
   </section>
@@ -238,7 +249,9 @@ function formatDate(timestamp: number) {
 
 <style scoped>
 .saved-views-panel {
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 15%), -12px 0 32px rgb(0 0 0 / 14%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 15%),
+    -12px 0 32px rgb(0 0 0 / 14%);
 }
 
 .panel-icon {
@@ -267,13 +280,18 @@ function formatDate(timestamp: number) {
   border-color: rgb(255 255 255 / 8%);
   background: rgb(18 18 26 / 30%);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%);
-  transition: border-color 300ms ease-out, background-color 300ms ease-out, box-shadow 300ms ease-out;
+  transition:
+    border-color 300ms ease-out,
+    background-color 300ms ease-out,
+    box-shadow 300ms ease-out;
 }
 
 .snapshot-row:hover {
   border-color: rgb(129 140 248 / 34%);
   background: rgb(129 140 248 / 7%);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 15%), 0 8px 20px rgb(0 0 0 / 12%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 15%),
+    0 8px 20px rgb(0 0 0 / 12%);
 }
 
 .snapshot-thumbnail img {
@@ -284,9 +302,16 @@ function formatDate(timestamp: number) {
   transform: scale(1.025);
 }
 
-.custom-scrollbar::-webkit-scrollbar { width: 5px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 12%); border-radius: 9999px; }
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 12%);
+  border-radius: 9999px;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .snapshot-row,

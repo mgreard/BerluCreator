@@ -49,9 +49,9 @@ function getCaptureOptions() {
   const camera = applyCameraFrames.value ? editorStore.currentDocument.camera : undefined
   return {
     camera,
-    outputResolution: resolutionMode.value === '1080p'
-      ? get1080pExportResolution(stage.value, camera)
-      : undefined
+    depthOfField: editorStore.currentDocument.depthOfField,
+    outputResolution:
+      resolutionMode.value === '1080p' ? get1080pExportResolution(stage.value, camera) : undefined
   }
 }
 
@@ -61,7 +61,7 @@ function downloadJson() {
     document: editorStore.currentDocument,
     assetsMetadata: assetStore.assets,
     exportedAt: new Date().toISOString(),
-    version: '3.0.0'
+    version: '3.2.0'
   }
 
   const jsonStr = JSON.stringify(exportPayload, null, 2)
@@ -88,7 +88,8 @@ async function captureCurrentFrame() {
     )
     const link = document.createElement('a')
     link.href = dataUrl
-    const docName = editorStore.currentDocument.name.toLowerCase().replace(/\s+/g, '-') || 'viewport'
+    const docName =
+      editorStore.currentDocument.name.toLowerCase().replace(/\s+/g, '-') || 'viewport'
     link.download = `berlu_creator_${docName}.png`
     link.click()
     toast.success('Rendu PNG exporté', 'Capture d’image générée avec succès.')
@@ -123,7 +124,9 @@ async function captureCurrentFrame() {
           <Badge variant="accent" size="sm">PNG</Badge>
         </div>
 
-        <div class="grid gap-3 rounded-lg border border-border-subtle bg-bg-surface/50 p-3 sm:grid-cols-[1fr_190px] sm:items-center">
+        <div
+          class="grid gap-3 rounded-lg border border-border-subtle bg-bg-surface/50 p-3 sm:grid-cols-[1fr_190px] sm:items-center"
+        >
           <Switch
             v-model="applyCameraFrames"
             size="sm"
@@ -159,7 +162,9 @@ async function captureCurrentFrame() {
       </div>
 
       <!-- Option 2: JSON -->
-      <div class="p-3 rounded-lg border border-border/40 bg-surface/40 flex items-center justify-between">
+      <div
+        class="p-3 rounded-lg border border-border/40 bg-surface/40 flex items-center justify-between"
+      >
         <div>
           <Heading as="h4" variant="sm" class="font-semibold text-foreground">
             Structure de scène (JSON)
@@ -174,19 +179,17 @@ async function captureCurrentFrame() {
         </Button>
       </div>
 
-      <div class="border-t border-border/40 pt-3 flex items-center justify-between text-muted-foreground text-[11px]">
+      <div
+        class="border-t border-border/40 pt-3 flex items-center justify-between text-muted-foreground text-[11px]"
+      >
         <span>Plateau : {{ stage.width }} × {{ stage.height }}px</span>
-        <Badge variant="neutral" size="sm">
-          Éditeur unique
-        </Badge>
+        <Badge variant="neutral" size="sm"> Éditeur unique </Badge>
       </div>
     </div>
 
     <template #footer>
       <div class="flex items-center justify-end">
-        <Button variant="ghost" size="sm" @click="open = false">
-          Fermer
-        </Button>
+        <Button variant="ghost" size="sm" @click="open = false"> Fermer </Button>
       </div>
     </template>
   </Modal>

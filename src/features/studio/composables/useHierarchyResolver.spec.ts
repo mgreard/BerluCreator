@@ -6,7 +6,11 @@ import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useHierarchyResolver } from './useHierarchyResolver'
 
 vi.mock('@infrastructure/db/repositories/editor-document.repository', () => ({
-  editorDocumentRepository: { getById: vi.fn(), getByProjectId: vi.fn().mockResolvedValue([]), save: vi.fn().mockResolvedValue(undefined) }
+  editorDocumentRepository: {
+    getById: vi.fn(),
+    getByProjectId: vi.fn().mockResolvedValue([]),
+    save: vi.fn().mockResolvedValue(undefined)
+  }
 }))
 
 function asset(
@@ -37,7 +41,11 @@ describe('useHierarchyResolver', () => {
   it('rend seulement la représentation active du personnage', () => {
     const editor = useEditorStore()
     const assets = useAssetStore()
-    assets.assets = [asset('full', 'character_full', 'full'), asset('body', 'body', 'rig'), asset('head', 'head', 'rig')]
+    assets.assets = [
+      asset('full', 'character_full', 'full'),
+      asset('body', 'body', 'rig'),
+      asset('head', 'head', 'rig')
+    ]
     const full = editor.assignAssetToGroup('full', 'character_full')
     const body = editor.assignAssetToGroup('body', 'body')
     const head = editor.assignAssetToGroup('head', 'head')
@@ -56,7 +64,9 @@ describe('useHierarchyResolver', () => {
     const { activeLayers } = useHierarchyResolver()
     const before = activeLayers.value.map((layer) => ({ id: layer.id, x: layer.x, y: layer.y }))
     editor.updateGroupTransform(body.groupId, { x: 100, y: 50 })
-    for (const layer of activeLayers.value.filter((item) => item.id === body.id || item.id === head.id)) {
+    for (const layer of activeLayers.value.filter(
+      (item) => item.id === body.id || item.id === head.id
+    )) {
       const initial = before.find((item) => item.id === layer.id)!
       expect(layer.x).toBe(initial.x + 100)
       expect(layer.y).toBe(initial.y + 50)
@@ -72,6 +82,31 @@ describe('useHierarchyResolver', () => {
     expect(activeLayers.value).toHaveLength(1)
     editor.setLayerMuted(layer.id, true)
     expect(activeLayers.value).toHaveLength(0)
+  })
+
+  it('résout automatiquement le plan net des accessoires et accepte le plan décor', () => {
+    const editor = useEditorStore()
+    const assets = useAssetStore()
+    assets.assets = [asset('prop', 'props_set')]
+    const layer = editor.assignAssetToGroup('prop', 'props_set')
+    const { activeLayers } = useHierarchyResolver()
+
+    expect(activeLayers.value[0]?.depthRole).toBe('subject')
+    editor.setLayerDepthRole(layer.id, 'background')
+    expect(activeLayers.value[0]?.depthRole).toBe('background')
+  })
+
+  it('place les éléments du décor avant les sujets dans l’ordre de rendu et de hit-test', () => {
+    const editor = useEditorStore()
+    const assets = useAssetStore()
+    assets.assets = [asset('desk', 'desk'), asset('prop', 'props_set')]
+    const desk = editor.assignAssetToGroup('desk', 'desk')
+    const prop = editor.assignAssetToGroup('prop', 'props_set')
+    const { activeLayers } = useHierarchyResolver()
+
+    expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([desk.id, prop.id])
+    editor.setLayerDepthRole(prop.id, 'background')
+    expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([prop.id, desk.id])
   })
 
   it('adapte les dimensions au ratio naturel de la représentation active', () => {

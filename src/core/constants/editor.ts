@@ -1,4 +1,9 @@
-import type { CharacterGroup, EditorGroup, Transform2D } from '../types/editor.types'
+import type {
+  CharacterGroup,
+  DepthOfFieldSettings,
+  EditorGroup,
+  Transform2D
+} from '../types/editor.types'
 
 export const DEFAULT_STAGE_RESOLUTION = {
   width: 1792,
@@ -13,6 +18,13 @@ export const DEFAULT_TRANSFORM: Transform2D = {
   scaleY: 1,
   rotation: 0,
   opacity: 1
+}
+
+export const DEFAULT_DEPTH_OF_FIELD_SETTINGS: DepthOfFieldSettings = {
+  enabled: false,
+  focusY: 0.62,
+  feather: 180,
+  blurRadius: 12
 }
 
 export const CHARACTER_CATEGORIES = [

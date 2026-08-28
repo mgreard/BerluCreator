@@ -28,6 +28,7 @@ export * from './drawer'
 export * from './dropdown-menu'
 export * from './lightbox-modal'
 export * from './camera-frame-overlay'
+export * from './depth-of-field-overlay'
 
 // Data Display
 export * from './avatar'

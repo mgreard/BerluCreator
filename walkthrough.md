@@ -56,12 +56,44 @@ Le studio repose sur un document unique dont les groupes et calques sont l’uni
 
 ## Gates validées
 
-| Contrôle | Commande | Résultat |
-| --- | --- | --- |
-| TypeScript strict | `pnpm exec vue-tsc -p tsconfig.app.json --noEmit --incremental false` | Succès |
-| ESLint sans réécriture | `pnpm exec eslint src vite.config.ts histoire.config.ts` | Succès, 0 avertissement |
-| Tests unitaires | `pnpm run test:unit` | 90 fichiers, 374 tests passés |
-| Build applicatif | `pnpm run build` | Succès avec Vite 5.4.21 |
-| Build Histoire | `pnpm run story:build` | 68 stories, 176 variantes |
+| Contrôle               | Commande                                                              | Résultat                      |
+| ---------------------- | --------------------------------------------------------------------- | ----------------------------- |
+| TypeScript strict      | `pnpm exec vue-tsc -p tsconfig.app.json --noEmit --incremental false` | Succès                        |
+| ESLint sans réécriture | `pnpm exec eslint src vite.config.ts histoire.config.ts`              | Succès, 0 avertissement       |
+| Tests unitaires        | `pnpm run test:unit`                                                  | 90 fichiers, 374 tests passés |
+| Build applicatif       | `pnpm run build`                                                      | Succès avec Vite 5.4.21       |
+| Build Histoire         | `pnpm run story:build`                                                | 68 stories, 176 variantes     |
 
 Le build applicatif signale encore un chunk principal supérieur à 500 kB. Histoire 0.17 émet aussi ses avertissements historiques de bundle/CJS, sans faire échouer le build. La vérification visuelle locale n’a pas pu être automatisée dans cette session faute de navigateur connecté.
+
+## Jalon profondeur de champ sélective
+
+### Spécifications validées
+
+- L’effet reste désactivé par défaut. `background` rejoint automatiquement le décor et un
+  accessoire de plateau peut être classé `Décor` ou `Sujet` sur son instance de calque.
+- Une limite de netteté DOM, draggable et accessible au clavier, pilote une coordonnée
+  verticale normalisée lorsque les aides de réglage sont ouvertes.
+- Les sliders Reka UI `Intensité` et `Douceur` exposent un rayon de 0 à 32 px et une
+  transition de 0 à 600 px.
+- L’effet peut rester actif quand les aides d’édition sont masquées.
+- L’ordre partagé par le rendu et le hit-test place le décor avant les sujets nets.
+- Les gestes sont coalescés en une entrée undo/redo et les prévisualisations sont limitées
+  à une mise à jour réactive par frame.
+- Le viewport, les miniatures et le PNG partagent le même pipeline ; l’overlay d’édition
+  reste absent des sorties.
+- La passe gaussienne est mise en cache indépendamment du masque : déplacer le focus ou
+  modifier la transition ne reconstruit que le masque alpha léger.
+- Un padding avec extension des pixels de bord empêche le filtre de mélanger le fond avec
+  du transparent hors-scène.
+
+### Validation visuelle et fluidité
+
+- Le moteur Browser ne signale aucun navigateur connecté dans cette session.
+- `pnpm.cmd playwright test` échoue avant exécution : Playwright n’est ni installé ni
+  configuré dans le dépôt.
+- Les garanties actuellement mesurées sont déterministes : une passe identique ne relance
+  rien, une modification du focus reconstruit le masque sans relancer le filtre gaussien,
+  et plusieurs changements d’un même geste ne créent qu’une entrée d’historique.
+- La mesure FPS et l’inspection des bords à 1792 × 1024 restent à effectuer dans un vrai
+  navigateur ; elles ne sont pas déclarées réussies par inférence.

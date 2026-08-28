@@ -11,6 +11,7 @@ import type {
 } from '@core/types/editor.types'
 import {
   CHARACTER_CATEGORIES,
+  DEFAULT_DEPTH_OF_FIELD_SETTINGS,
   DEFAULT_EDITOR_GROUPS,
   DEFAULT_TRANSFORM
 } from '@core/constants/editor'
@@ -89,10 +90,35 @@ export type V4Asset = Omit<Asset, 'category' | 'character'> & {
 }
 
 const SYSTEM_TAGS = new Set([
-  'arms', 'arms_left', 'arms_right', 'bras', 'left', 'right', 'head', 'face',
-  'mouth', 'bouche', 'phoneme', 'torso', 'body', 'corps', 'eyes', 'props_host',
-  'props-set', 'props_set', 'props-desk', 'props_desk', 'background', 'desk',
-  'foreground', 'full', 'complet', 'sprite', 'accessoire', 'objet', 'plateau'
+  'arms',
+  'arms_left',
+  'arms_right',
+  'bras',
+  'left',
+  'right',
+  'head',
+  'face',
+  'mouth',
+  'bouche',
+  'phoneme',
+  'torso',
+  'body',
+  'corps',
+  'eyes',
+  'props_host',
+  'props-set',
+  'props_set',
+  'props-desk',
+  'props_desk',
+  'background',
+  'desk',
+  'foreground',
+  'full',
+  'complet',
+  'sprite',
+  'accessoire',
+  'objet',
+  'plateau'
 ])
 
 function transformOf(transform?: Partial<Transform2D>): Transform2D {
@@ -101,39 +127,63 @@ function transformOf(transform?: Partial<Transform2D>): Transform2D {
 }
 
 function slugify(value: string): string {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
-    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'berlu'
+  return (
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || 'berlu'
+  )
 }
 
 function inferCharacterName(asset: V4Asset): string {
   const explicit = asset.character?.name?.trim()
   if (explicit) return explicit
-  return asset.tags.find((tag) => {
-    const clean = tag.toLowerCase().trim()
-    return clean && !SYSTEM_TAGS.has(clean) && !clean.includes('_')
-  }) ?? 'Berlu'
+  return (
+    asset.tags.find((tag) => {
+      const clean = tag.toLowerCase().trim()
+      return clean && !SYSTEM_TAGS.has(clean) && !clean.includes('_')
+    }) ?? 'Berlu'
+  )
 }
 
 function isFullAsset(asset: V4Asset): boolean {
   const searchable = `${asset.name} ${asset.tags.join(' ')}`.toLowerCase()
-  return asset.category === 'character_full' ||
+  return (
+    asset.category === 'character_full' ||
     (asset.category === 'torso' && (searchable.includes('full') || searchable.includes('complet')))
+  )
 }
 
 function migrateCategory(category: string, full = false): AssetCategory {
   if (full) return 'character_full'
   if (category === 'torso') return 'body'
   const allowed: readonly string[] = [
-    'background', 'character_full', 'body', 'head', 'mouth', 'eyes', 'props_host',
-    'arms_left', 'arms_right', 'props_set', 'desk', 'props_desk', 'foreground'
+    'background',
+    'character_full',
+    'body',
+    'head',
+    'mouth',
+    'eyes',
+    'props_host',
+    'arms_left',
+    'arms_right',
+    'props_set',
+    'desk',
+    'props_desk',
+    'foreground'
   ]
-  return allowed.includes(category) ? category as AssetCategory : 'props_set'
+  return allowed.includes(category) ? (category as AssetCategory) : 'props_set'
 }
 
 export function migrateV4Asset(raw: V4Asset): Asset {
   const full = isFullAsset(raw)
   const category = migrateCategory(raw.category, full)
-  const characterAnchored = CHARACTER_CATEGORIES.includes(category as typeof CHARACTER_CATEGORIES[number])
+  const characterAnchored = CHARACTER_CATEGORIES.includes(
+    category as (typeof CHARACTER_CATEGORIES)[number]
+  )
   const characterName = characterAnchored ? inferCharacterName(raw) : undefined
   return {
     id: raw.id,
@@ -144,7 +194,11 @@ export function migrateV4Asset(raw: V4Asset): Asset {
     width: raw.width,
     height: raw.height,
     character: characterName
-      ? { key: raw.character?.key || slugify(characterName), name: characterName, form: full ? 'full' : 'rig' }
+      ? {
+          key: raw.character?.key || slugify(characterName),
+          name: characterName,
+          form: full ? 'full' : 'rig'
+        }
       : undefined,
     calibration: raw.calibration,
     isMovable: raw.isMovable ?? !characterAnchored,
@@ -180,25 +234,31 @@ function migrateGroups(
         })
       }
     }
-    const characterLayers = rawLayers.filter((layer) =>
-      layer.groupId === raw.id && assets.get(layer.assetId)?.character
+    const characterLayers = rawLayers.filter(
+      (layer) => layer.groupId === raw.id && assets.get(layer.assetId)?.character
     )
-    const isCharacter = raw.id === 'grp_berlu' || Boolean(raw.customCategory) || characterLayers.length > 0
+    const isCharacter =
+      raw.id === 'grp_berlu' || Boolean(raw.customCategory) || characterLayers.length > 0
     const base = {
       id: raw.id,
       name: raw.name,
-      zIndex: raw.id === 'grp_berlu' ? character?.zIndex ?? raw.zIndex ?? 20 : raw.zIndex ?? 0,
-      transform: transformOf(raw.id === 'grp_berlu' && character
-        ? {
-            ...raw.transform,
-            x: character.x,
-            y: character.y,
-            scaleX: character.scaleX,
-            scaleY: character.scaleY,
-            rotation: character.rotation
-          }
-        : raw.transform),
-      muted: raw.id === 'grp_berlu' ? character?.visible === false || Boolean(raw.muted) : Boolean(raw.muted),
+      zIndex: raw.id === 'grp_berlu' ? (character?.zIndex ?? raw.zIndex ?? 20) : (raw.zIndex ?? 0),
+      transform: transformOf(
+        raw.id === 'grp_berlu' && character
+          ? {
+              ...raw.transform,
+              x: character.x,
+              y: character.y,
+              scaleX: character.scaleX,
+              scaleY: character.scaleY,
+              rotation: character.rotation
+            }
+          : raw.transform
+      ),
+      muted:
+        raw.id === 'grp_berlu'
+          ? character?.visible === false || Boolean(raw.muted)
+          : Boolean(raw.muted),
       locked: Boolean(raw.locked),
       collapsed: Boolean(raw.collapsed),
       color: raw.color ?? 'indigo',
@@ -207,8 +267,8 @@ function migrateGroups(
     if (isCharacter) {
       const firstAsset = assets.get(characterLayers[0]?.assetId)
       const name = firstAsset?.character?.name || raw.customCategory || raw.name || 'Berlu'
-      const hasVisibleFull = characterLayers.some((layer) =>
-        assets.get(layer.assetId)?.category === 'character_full' && !layer.muted
+      const hasVisibleFull = characterLayers.some(
+        (layer) => assets.get(layer.assetId)?.category === 'character_full' && !layer.muted
       )
       return {
         ...base,
@@ -227,15 +287,22 @@ function migrateGroups(
 }
 
 function fallbackGroupId(category: AssetCategory, groups: EditorGroup[]): string {
-  if (CHARACTER_CATEGORIES.includes(category as typeof CHARACTER_CATEGORIES[number])) {
+  if (CHARACTER_CATEGORIES.includes(category as (typeof CHARACTER_CATEGORIES)[number])) {
     return groups.find((group) => group.kind === 'character')?.id ?? 'grp_berlu'
   }
-  return groups.find((group) => group.kind === 'stage' && group.allowedCategories.includes(category))?.id
-    ?? groups.find((group) => group.kind === 'stage')?.id
-    ?? groups[0].id
+  return (
+    groups.find((group) => group.kind === 'stage' && group.allowedCategories.includes(category))
+      ?.id ??
+    groups.find((group) => group.kind === 'stage')?.id ??
+    groups[0].id
+  )
 }
 
-function migrateLayers(rawLayers: V4Layer[], groups: EditorGroup[], assets: Map<string, Asset>): EditorLayer[] {
+function migrateLayers(
+  rawLayers: V4Layer[],
+  groups: EditorGroup[],
+  assets: Map<string, Asset>
+): EditorLayer[] {
   return rawLayers.map((raw, index) => {
     const category = assets.get(raw.assetId)?.category ?? migrateCategory(raw.category)
     return {
@@ -244,12 +311,13 @@ function migrateLayers(rawLayers: V4Layer[], groups: EditorGroup[], assets: Map<
       name: raw.name,
       category,
       groupId: groups.some((group) => group.id === raw.groupId)
-        ? raw.groupId as string
+        ? (raw.groupId as string)
         : fallbackGroupId(category, groups),
       zIndex: raw.zIndex ?? 0,
       order: raw.order ?? index,
       muted: Boolean(raw.muted),
       locked: Boolean(raw.locked),
+      depthRole: 'auto',
       transform: transformOf({
         x: raw.transform?.x ?? raw.localX,
         y: raw.transform?.y ?? raw.localY,
@@ -269,6 +337,7 @@ export function migrateV4Document(raw: V4Document, assets: Map<string, Asset>): 
     projectId: raw.projectId,
     name: raw.name,
     camera: raw.camera,
+    depthOfField: { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS },
     groups,
     layers: migrateLayers(raw.layers, groups, assets),
     createdAt: raw.createdAt,
@@ -283,6 +352,7 @@ function migrateV4Snapshot(raw: V4Snapshot, assets: Map<string, Asset>): Viewpor
     name: raw.name,
     thumbnailDataUrl: raw.thumbnailDataUrl,
     camera: raw.camera,
+    depthOfField: { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS },
     groups,
     layers: migrateLayers(raw.layers, groups, assets),
     createdAt: raw.createdAt,
@@ -322,26 +392,31 @@ export class BerluDatabase extends Dexie {
         characters: null
       })
       .upgrade(async (transaction) => {
-        const migratedAssets = (await transaction.table('assets').toArray() as V4Asset[]).map(migrateV4Asset)
+        const migratedAssets = ((await transaction.table('assets').toArray()) as V4Asset[]).map(
+          migrateV4Asset
+        )
         const assetMap = new Map(migratedAssets.map((asset) => [asset.id, asset]))
         await transaction.table('assets').bulkPut(migratedAssets)
 
-        const documents = await transaction.table('editorDocuments').toArray() as V4Document[]
+        const documents = (await transaction.table('editorDocuments').toArray()) as V4Document[]
         if (documents.length > 0) {
-          await transaction.table('editorDocuments').bulkPut(
-            documents.map((document) => migrateV4Document(document, assetMap))
-          )
+          await transaction
+            .table('editorDocuments')
+            .bulkPut(documents.map((document) => migrateV4Document(document, assetMap)))
         }
 
-        const snapshots = await transaction.table('viewportSnapshots').toArray() as V4Snapshot[]
+        const snapshots = (await transaction.table('viewportSnapshots').toArray()) as V4Snapshot[]
         if (snapshots.length > 0) {
-          await transaction.table('viewportSnapshots').bulkPut(
-            snapshots.map((snapshot) => migrateV4Snapshot(snapshot, assetMap))
-          )
+          await transaction
+            .table('viewportSnapshots')
+            .bulkPut(snapshots.map((snapshot) => migrateV4Snapshot(snapshot, assetMap)))
         }
 
-        const workspace = await transaction.table('workspaceSnapshots').get('manual') as
-          | (Omit<WorkspaceSnapshot, 'schemaVersion' | 'assets' | 'editorDocuments' | 'viewportSnapshots'> & {
+        const workspace = (await transaction.table('workspaceSnapshots').get('manual')) as
+          | (Omit<
+              WorkspaceSnapshot,
+              'schemaVersion' | 'assets' | 'editorDocuments' | 'viewportSnapshots'
+            > & {
               schemaVersion: number
               assets?: V4Asset[]
               editorDocuments?: V4Document[]
@@ -359,21 +434,30 @@ export class BerluDatabase extends Dexie {
             projects: workspace.projects,
             assets: workspaceAssets,
             assetBlobs: workspace.assetBlobs,
-            editorDocuments: (workspace.editorDocuments ?? []).map((document) => migrateV4Document(document, workspaceAssetMap)),
-            viewportSnapshots: (workspace.viewportSnapshots ?? []).map((snapshot) => migrateV4Snapshot(snapshot, workspaceAssetMap))
+            editorDocuments: (workspace.editorDocuments ?? []).map((document) =>
+              migrateV4Document(document, workspaceAssetMap)
+            ),
+            viewportSnapshots: (workspace.viewportSnapshots ?? []).map((snapshot) =>
+              migrateV4Snapshot(snapshot, workspaceAssetMap)
+            )
           } satisfies WorkspaceSnapshot)
         } else if (workspace) {
           await transaction.table('workspaceSnapshots').delete('manual')
         }
 
-        const projects = await transaction.table('projects').toArray() as Project[]
-        await transaction.table('projects').bulkPut(projects.map((project) => ({
-          id: project.id,
-          stage: project.stage,
-          editorDocumentId: project.editorDocumentId || 'doc_default',
-          createdAt: project.createdAt,
-          updatedAt: project.updatedAt
-        } satisfies Project)))
+        const projects = (await transaction.table('projects').toArray()) as Project[]
+        await transaction.table('projects').bulkPut(
+          projects.map(
+            (project) =>
+              ({
+                id: project.id,
+                stage: project.stage,
+                editorDocumentId: project.editorDocumentId || 'doc_default',
+                createdAt: project.createdAt,
+                updatedAt: project.updatedAt
+              }) satisfies Project
+          )
+        )
       })
   }
 }

@@ -16,6 +16,7 @@
 | Bibliothèque d’assets              | Disponible         | Navigation par personnage et décor, recherche, miniatures et comptages                    |
 | Import d’images                    | Disponible         | Import multiple PNG/JPEG/WebP/SVG, un asset par fichier                                   |
 | Composition sur canvas             | Disponible         | Ajout, remplacement, sélection, déplacement, redimensionnement et suppression             |
+| Flou de profondeur MVP             | Disponible         | Focus draggable et flou sélectif de l’arrière-plan, désactivable                          |
 | Personnage complet et rig          | Disponible         | Deux représentations conservées, une seule visible à la fois                              |
 | Historique                         | Disponible         | Undo/redo de 50 mutations, gestes regroupés                                               |
 | Cadrage caméra                     | Disponible         | Cadre éditable, facultatif à l’export                                                     |
@@ -162,6 +163,31 @@ Toutes les pièces visibles du rig sont manipulées comme un personnage indivisi
 - La caméra est persistée, mais volontairement exclue de l’historique.
 - Charger une composition vide les piles undo/redo.
 
+### Flou de profondeur — MVP disponible
+
+- L’effet est désactivé par défaut afin de conserver le chemin de rendu direct pendant
+  la construction de la scène.
+- Une commande du viewport permet de l’activer ou de le désactiver à tout moment.
+- La catégorie `background` rejoint automatiquement le décor floutable. Les personnages,
+  bureaux, objets du bureau et premiers plans restent automatiquement dans le sujet net.
+- Un accessoire de plateau sélectionné peut être placé dans `Décor` ou `Sujet` depuis le
+  HUD. Ce choix appartient à l’instance du calque et non à l’asset réutilisable.
+- L’état est conservé dans le document, l’historique et les compositions sauvegardées.
+- Le viewport, les miniatures et l’export PNG utilisent le même pipeline.
+- L’activation de l’effet et l’affichage de ses réglages sont deux commandes distinctes :
+  le rendu peut rester actif dans un viewport sans aides d’édition.
+- Lorsque les réglages sont visibles et la caméra inactive, une limite horizontale de
+  netteté se déplace à la souris, au tactile ou au clavier.
+- `Intensité` règle le rayon entre 0 et 32 px ; `Douceur` règle le fondu entre 0 et 600 px.
+- Chaque geste continu produit une seule entrée d’historique et au plus une mise à jour
+  réactive par frame.
+- La passe floutée est réutilisée lorsque seuls les personnages, le mobilier ou les aides
+  d’édition changent.
+
+L’overlay est une aide DOM et n’apparaît jamais dans les miniatures ou les exports. La
+validation visuelle automatisée reste à exécuter dès qu’un navigateur contrôlable est
+disponible dans l’environnement de développement.
+
 ### Organisation avancée — Interne
 
 Le modèle métier sait créer et supprimer des groupes, changer la profondeur, masquer, verrouiller, replier et ordonner des calques. Les anciens composants de hiérarchie et de réglage ont cependant été retirés du shell simplifié. Ces opérations ne doivent donc pas être considérées comme un parcours utilisateur livré tant qu’une interface dédiée n’est pas réintroduite.
@@ -255,7 +281,7 @@ Le fichier contient :
 - document courant avec caméra, groupes, calques et transforms ;
 - métadonnées de tous les assets ;
 - date d’export ;
-- version de format `3.0.0`.
+- version de format `3.2.0`.
 
 Les blobs image ne sont pas inclus. Le JSON décrit la scène mais ne constitue pas à lui seul une sauvegarde portable et autonome.
 

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { Asset } from '@core/types/asset.types'
 import type { CharacterGroup, ViewportSnapshot } from '@core/types/editor.types'
-import { DEFAULT_TRANSFORM } from '@core/constants/editor'
+import { DEFAULT_DEPTH_OF_FIELD_SETTINGS, DEFAULT_TRANSFORM } from '@core/constants/editor'
 import { editorDocumentRepository } from '@infrastructure/db/repositories/editor-document.repository'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useEditorStore } from './useEditorStore'
@@ -25,7 +25,11 @@ function characterAsset(id: string, name: string, key: string, category: Asset['
     blobId: `blob-${id}`,
     width: 840,
     height: 908,
-    character: { key, name: key === 'berlu' ? 'Berlu' : 'Pedro', form: category === 'character_full' ? 'full' : 'rig' },
+    character: {
+      key,
+      name: key === 'berlu' ? 'Berlu' : 'Pedro',
+      form: category === 'character_full' ? 'full' : 'rig'
+    },
     isMovable: false,
     createdAt: 1,
     updatedAt: 1
@@ -44,6 +48,7 @@ describe('useEditorStore', () => {
     expect(berlu).toMatchObject({ kind: 'character', activeMode: 'rig', muted: false })
     expect(berlu?.transform).toEqual(DEFAULT_TRANSFORM)
     expect(store.currentDocument).not.toHaveProperty('character')
+    expect(store.currentDocument.depthOfField).toEqual(DEFAULT_DEPTH_OF_FIELD_SETTINGS)
   })
 
   it('conserve le sprite complet et le rig tout en basculant le mode actif', () => {
@@ -56,7 +61,9 @@ describe('useEditorStore', () => {
 
     const full = store.assignAssetToGroup('full', 'character_full')
     const head = store.assignAssetToGroup('head', 'head')
-    const berlu = store.currentDocument.groups.find((group): group is CharacterGroup => group.id === full.groupId && group.kind === 'character')
+    const berlu = store.currentDocument.groups.find(
+      (group): group is CharacterGroup => group.id === full.groupId && group.kind === 'character'
+    )
 
     expect(store.currentDocument.layers.map((layer) => layer.id)).toEqual([full.id, head.id])
     expect(berlu?.activeMode).toBe('rig')
@@ -78,7 +85,9 @@ describe('useEditorStore', () => {
 
     expect(store.currentDocument.layers).toHaveLength(2)
     expect(berluHead.groupId).not.toBe(pedroHead.groupId)
-    expect(store.currentDocument.groups.filter((group) => group.kind === 'character')).toHaveLength(2)
+    expect(store.currentDocument.groups.filter((group) => group.kind === 'character')).toHaveLength(
+      2
+    )
   })
 
   it('annule et rétablit une mutation structurelle et une gesture', async () => {
@@ -102,10 +111,55 @@ describe('useEditorStore', () => {
   it('ne remet pas la caméra en arrière lors d’un undo studio', () => {
     const store = useEditorStore()
     store.assignAssetToGroup('prop', 'props_set')
-    store.updateCamera({ enabled: true, x: 12, y: 18, width: 800, height: 600, aspectRatio: 'custom' })
+    store.updateCamera({
+      enabled: true,
+      x: 12,
+      y: 18,
+      width: 800,
+      height: 600,
+      aspectRatio: 'custom'
+    })
     store.undo()
     expect(store.currentDocument.layers).toHaveLength(0)
     expect(store.currentDocument.camera).toMatchObject({ enabled: true, x: 12, y: 18 })
+  })
+
+  it('active la profondeur de champ comme une mutation annulable', () => {
+    const store = useEditorStore()
+    store.updateDepthOfField({ enabled: true })
+    expect(store.currentDocument.depthOfField.enabled).toBe(true)
+    store.undo()
+    expect(store.currentDocument.depthOfField.enabled).toBe(false)
+    store.redo()
+    expect(store.currentDocument.depthOfField.enabled).toBe(true)
+  })
+
+  it('regroupe un réglage continu de profondeur de champ en une seule entrée', () => {
+    const store = useEditorStore()
+    store.beginGesture('Déplacer la ligne de focus')
+    store.updateDepthOfField({ focusY: 0.55 })
+    store.updateDepthOfField({ focusY: 0.48 })
+    store.updateDepthOfField({ focusY: 0.42 })
+    store.endGesture()
+
+    expect(store.currentDocument.depthOfField.focusY).toBe(0.42)
+    store.undo()
+    expect(store.currentDocument.depthOfField.focusY).toBe(DEFAULT_DEPTH_OF_FIELD_SETTINGS.focusY)
+    expect(store.canUndo).toBe(false)
+  })
+
+  it('classe un accessoire dans le décor ou le sujet avec undo/redo', () => {
+    const store = useEditorStore()
+    const layer = store.assignAssetToGroup('prop', 'props_set')
+
+    expect(layer.depthRole).toBe('auto')
+    store.setLayerDepthRole(layer.id, 'background')
+    expect(layer.depthRole).toBe('background')
+
+    store.undo()
+    expect(store.currentDocument.layers[0]?.depthRole).toBe('auto')
+    store.redo()
+    expect(store.currentDocument.layers[0]?.depthRole).toBe('background')
   })
 
   it('historise le mode, le verrouillage et l’ordre des calques', () => {
@@ -127,9 +181,21 @@ describe('useEditorStore', () => {
     const group = store.currentDocument.groups.find((candidate) => candidate.kind === 'character')!
     store.setCharacterMode(group.id, 'full')
     store.undo()
-    expect((store.currentDocument.groups.find((candidate) => candidate.id === group.id) as CharacterGroup).activeMode).toBe('rig')
+    expect(
+      (
+        store.currentDocument.groups.find(
+          (candidate) => candidate.id === group.id
+        ) as CharacterGroup
+      ).activeMode
+    ).toBe('rig')
     store.redo()
-    expect((store.currentDocument.groups.find((candidate) => candidate.id === group.id) as CharacterGroup).activeMode).toBe('full')
+    expect(
+      (
+        store.currentDocument.groups.find(
+          (candidate) => candidate.id === group.id
+        ) as CharacterGroup
+      ).activeMode
+    ).toBe('full')
   })
 
   it('rebascule vers le rig après suppression du sprite complet actif et vide l’historique', () => {
@@ -142,7 +208,8 @@ describe('useEditorStore', () => {
     const full = store.assignAssetToGroup('full', 'character_full')
     store.assignAssetToGroup('head', 'head')
     const group = store.currentDocument.groups.find(
-      (candidate): candidate is CharacterGroup => candidate.id === full.groupId && candidate.kind === 'character'
+      (candidate): candidate is CharacterGroup =>
+        candidate.id === full.groupId && candidate.kind === 'character'
     )!
     store.setCharacterMode(group.id, 'full')
 
@@ -161,6 +228,7 @@ describe('useEditorStore', () => {
       name: 'Vue',
       thumbnailDataUrl: '',
       camera: { enabled: true, x: 10, y: 20, width: 800, height: 600, aspectRatio: 'custom' },
+      depthOfField: { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS, enabled: true },
       groups: store.currentDocument.groups,
       layers: [],
       createdAt: 1,
@@ -169,6 +237,7 @@ describe('useEditorStore', () => {
     expect(store.applyViewportSnapshot(snapshot)).toBe(0)
     expect(store.canUndo).toBe(false)
     expect(store.currentDocument.camera.enabled).toBe(true)
+    expect(store.currentDocument.depthOfField.enabled).toBe(true)
   })
 
   it('ajoute, remplace puis retire un slot de rig par clic', () => {
@@ -189,11 +258,15 @@ describe('useEditorStore', () => {
 
     const replacement = store.toggleAssetInViewport('head-b', 'head')
     expect(replacement?.id).toBe(first?.id)
-    expect(store.currentDocument.layers.filter((layer) => layer.category === 'head')).toHaveLength(1)
+    expect(store.currentDocument.layers.filter((layer) => layer.category === 'head')).toHaveLength(
+      1
+    )
     expect(store.currentDocument.layers[0].assetId).toBe('head-b')
 
     expect(store.toggleAssetInViewport('head-b', 'head')).toBeNull()
-    expect(store.currentDocument.layers.filter((layer) => layer.category === 'head')).toHaveLength(0)
+    expect(store.currentDocument.layers.filter((layer) => layer.category === 'head')).toHaveLength(
+      0
+    )
   })
 
   it('réactive une représentation inactive avant de la retirer au clic suivant', () => {
@@ -207,7 +280,8 @@ describe('useEditorStore', () => {
     const full = store.toggleAssetInViewport('full', 'character_full')!
     store.toggleAssetInViewport('head', 'head')
     const group = store.currentDocument.groups.find(
-      (candidate): candidate is CharacterGroup => candidate.id === full.groupId && candidate.kind === 'character'
+      (candidate): candidate is CharacterGroup =>
+        candidate.id === full.groupId && candidate.kind === 'character'
     )!
     expect(group.activeMode).toBe('rig')
     expect(store.currentDocument.layers).toHaveLength(2)
@@ -248,6 +322,10 @@ describe('useEditorStore', () => {
     expect(store.selectedGroupId).toBeNull()
 
     store.undo()
-    expect(store.currentDocument.layers.map((layer) => layer.assetId)).toEqual(['full', 'body', 'head'])
+    expect(store.currentDocument.layers.map((layer) => layer.assetId)).toEqual([
+      'full',
+      'body',
+      'head'
+    ])
   })
 })

@@ -85,11 +85,16 @@ Cette séquence explique pourquoi les premières données sont disponibles sans 
 `EditorDocument` est la source de vérité de la scène courante :
 
 - une caméra ;
+- des paramètres de profondeur de champ sélective ;
 - des groupes ;
 - des calques ;
 - les dates et l’appartenance au projet.
 
-Un calque référence un asset sans recopier son blob. Il possède sa catégorie, son groupe, sa profondeur, son ordre, ses états et son transform local.
+Un calque référence un asset sans recopier son blob. Il possède sa catégorie, son groupe,
+sa profondeur d’affichage, son ordre, ses états, son transform local et un rôle optique
+facultatif `auto | background | subject`. Le mode `auto` conserve la compatibilité des
+anciens documents : `background` rejoint le décor, toutes les autres catégories restent
+dans le sujet net.
 
 ### Groupe
 
@@ -137,6 +142,22 @@ Le store conserve des snapshots `before/after` des groupes et calques pour un ma
 
 `useCanvasRenderer` dessine les calques triés sur Canvas 2D et produit également les captures propres utilisées par les miniatures et l’export PNG.
 
+Le pipeline de profondeur de champ sépare les calques résolus en deux bandes : décor
+floutable puis sujet net. Les accessoires de plateau peuvent changer de bande sans changer
+de catégorie d’asset ; leur ordre de hit-test suit le même ordre que le rendu. Le pipeline
+est court-circuité avant toute allocation de buffer lorsque l’effet est désactivé, que son
+rayon est nul ou qu’aucun décor n’est visible. Les buffers sont réutilisés tant que la
+résolution du plateau reste identique. La passe gaussienne est indexée séparément par le
+décor et le rayon : déplacer le focus ou modifier la transition ne reconstruit que le
+masque alpha, tandis que les changements de sujets protégés ne touchent aucun de ces
+buffers. Le décor est rendu dans un buffer paddé dont les pixels périphériques sont
+étendus avant le filtre, afin d’éviter les halos transparents aux bords.
+
+`DepthOfFieldOverlay` reste dans le DOM d’édition. Il regroupe une limite de netteté au
+rôle `slider` et deux contrôles Reka UI. L’effet peut rester actif lorsque cet overlay est
+masqué. Les événements continus sont ramenés à une mise à jour par frame avec
+`requestAnimationFrame`, puis validés comme une seule mutation d’historique.
+
 Les moteurs isolés couvrent notamment les matrices, le hit-test alpha, la sélection de cible et le comportement `cover` des arrière-plans.
 
 ## Persistance et portabilité
@@ -160,7 +181,7 @@ Les fichiers sont validés dans le navigateur puis écrits dans une transaction 
 - PNG : capture du rendu actif, avec caméra facultative et résolution native ou normalisée 1080p.
 - JSON : plateau, document, métadonnées d’assets, date et version de format.
 
-Le format JSON d’export (`3.0.0`) et le schéma de sauvegarde interne (`4`) répondent à des besoins différents et ne doivent pas être confondus.
+Le format JSON d’export (`3.2.0`) et le schéma de sauvegarde interne (`5`) répondent à des besoins différents et ne doivent pas être confondus.
 
 ## Qualité
 
