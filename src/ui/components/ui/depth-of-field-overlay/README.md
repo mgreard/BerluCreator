@@ -1,7 +1,8 @@
 # DepthOfFieldOverlay
 
 Overlay d’édition de la profondeur de champ. Il affiche une limite de netteté horizontale
-déplaçable, ainsi que les réglages d’intensité et de douceur.
+déplaçable, ainsi que les réglages d’intensité et de douceur. Les plans lointains se
+floutent au-dessus de cette limite et les plans proches sous celle-ci.
 
 ## Contrat
 

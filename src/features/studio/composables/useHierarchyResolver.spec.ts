@@ -94,9 +94,12 @@ describe('useHierarchyResolver', () => {
     const layer = editor.assignAssetToGroup('prop', 'props_set')
     const { activeLayers } = useHierarchyResolver()
 
-    expect(activeLayers.value[0]?.depthRole).toBe('subject')
+    expect(activeLayers.value[0]).toMatchObject({ depthRole: 'subject', opticalDepth: 0.5 })
     editor.setLayerDepthRole(layer.id, 'background')
-    expect(activeLayers.value[0]?.depthRole).toBe('background')
+    expect(activeLayers.value[0]).toMatchObject({ depthRole: 'background', opticalDepth: 0 })
+
+    editor.setLayerOpticalDepth(layer.id, 0.65)
+    expect(activeLayers.value[0]).toMatchObject({ depthRole: 'background', opticalDepth: 0.65 })
   })
 
   it('conserve le rôle optique indépendant de l’ordre de rendu et de hit-test', () => {
@@ -157,7 +160,16 @@ describe('useHierarchyResolver', () => {
     expect(activeLayers.value.at(-1)).toMatchObject({
       layerId: foreground.id,
       category: 'foreground',
-      depthRole: 'subject'
+      depthRole: 'subject',
+      opticalDepth: 0.5
+    })
+
+    editor.setLayerOpticalDepth(foreground.id, 0.65)
+    expect(activeLayers.value.at(-1)).toMatchObject({
+      layerId: foreground.id,
+      category: 'foreground',
+      depthRole: 'subject',
+      opticalDepth: 0.65
     })
   })
 

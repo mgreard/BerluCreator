@@ -126,6 +126,12 @@ Le transform global d’un groupe personnage permet de manipuler un rig entier c
 - `character-anchored` : l’asset est rattaché au groupe du personnage ;
 - `free-transform` : l’asset est rattaché à un groupe de plateau et peut être manipulé indépendamment.
 
+La sélection directe suit le type réel du groupe touché, jamais le scope précédent ni une
+touche modificatrice. Un groupe `character` devient une cible indivisible ; pour un groupe
+`stage`, `selectedGroupId` conserve seulement le contexte parent et `selectedLayerId` reste
+la cible de toute transformation. Le store refuse une sélection globale d’un groupe `stage`.
+Le mode de calibration constitue un parcours explicite séparé qui peut cibler une pièce du rig.
+
 ### Historique
 
 Le store conserve des snapshots `before/after` des groupes et calques pour un maximum de 50 mutations. Les gestes continus sont ouverts puis validés comme une seule entrée. La persistance du document est sérialisée afin d’éviter qu’une écriture lente n’écrase un état plus récent.
@@ -140,33 +146,40 @@ Le store conserve des snapshots `before/after` des groupes et calques pour un ma
 - normalise les échelles pour préserver les ratios ;
 - applique les règles spécifiques d’arrière-plan et de mobilier legacy.
 
-Pour les groupes de plateau, le z-index du calque est global à la scène : un `props_set`
-peut donc passer individuellement juste avant ou juste après le bureau, même si les deux
-assets appartiennent à des groupes différents. Les pièces d’un personnage restent d’abord
-ordonnées par le z-index de leur groupe, puis par leur z-index interne. Le `foreground`
-conserve une bande finale forcée.
+Pour les groupes de plateau, le z-index du calque est global à la scène. Le placement
+`Derrière` d’un `props_set` utilise une valeur sous le minimum des z-index du bureau et des
+groupes de personnages ; `Devant` utilise une valeur au-dessus de leur maximum. Les pièces
+d’un personnage restent d’abord ordonnées par le z-index de leur groupe, puis par leur
+z-index interne. Le `foreground` conserve une bande finale forcée. Ce placement ne change
+jamais la distance optique du calque.
 
 `useCanvasRenderer` dessine les calques triés sur Canvas 2D et produit également les captures propres utilisées par les miniatures et l’export PNG.
 
-Le pipeline de profondeur de champ classe les calques en décor floutable ou sujet net,
-puis conserve le `foreground` au premier plan. Les accessoires de plateau peuvent changer
-de rôle optique sans changer de catégorie d’asset ni de z-index. Lorsque les deux rôles
-sont intercalés dans l’ordre de scène, le rendu traite des séquences successives afin de
-préserver exactement le même ordre que le hit-test. La bande `foreground` ignore tout rôle
-optique accidentel et reste finale même lorsqu’un personnage dynamique possède un `zIndex`
-de groupe supérieur. Le pipeline est court-circuité avant toute allocation de buffer
-lorsque l’effet est désactivé, que son rayon est nul ou qu’aucun décor n’est visible. Les
+Le pipeline de profondeur de champ résout une distance optique par instance, indépendante
+du z-index : `0` est lointain, `0,5` appartient au plan net et `1` est proche. Les rôles
+`Décor` et `Sujet` restent les préréglages simples ; une valeur `opticalDepth` optionnelle
+les surcharge pour l’instance. Les anciens foregrounds restent nets par défaut, tandis
+qu’un foreground personnalisé peut être flouté sans quitter sa bande de rendu finale.
+Les distances sont quantifiées en cinq intensités internes afin de limiter le nombre de
+passes Canvas. Les plans lointains utilisent le masque historique au-dessus de la ligne et
+les plans proches son inverse sous la ligne. Lorsque plusieurs profils sont intercalés dans
+l’ordre de scène, le rendu traite des séquences successives afin de préserver exactement le
+même ordre que le hit-test. Le pipeline est court-circuité avant toute allocation de buffer
+lorsque l’effet est désactivé, que son rayon est nul ou qu’aucun plan n’est à flouter. Les
 buffers sont réutilisés tant que la résolution du plateau reste identique. La passe
-gaussienne est indexée séparément par le décor et le rayon : déplacer le focus ou modifier
+gaussienne est indexée séparément par la séquence optique et son rayon : déplacer le focus ou modifier
 la transition ne reconstruit que le masque alpha, tandis que les changements de sujets
-protégés ne touchent aucun de ces buffers. Le décor est rendu dans un buffer paddé dont les
+protégés ne touchent aucun de ces buffers. Chaque séquence est rendue dans un buffer paddé dont les
 pixels périphériques sont étendus avant le filtre, afin d’éviter les halos transparents aux
 bords.
 
 `DepthOfFieldOverlay` reste dans le DOM d’édition. Il regroupe une limite de netteté au
 rôle `slider` et deux contrôles Reka UI. L’effet peut rester actif lorsque cet overlay est
-masqué. Les événements continus sont ramenés à une mise à jour par frame avec
-`requestAnimationFrame`, puis validés comme une seule mutation d’historique.
+masqué. Ses réglages, le panneau `Distance caméra` et le HUD emploient un positionnement
+flottant borné au viewport, avec drag souris/tactile et déplacement au clavier. Aucun portal
+n’est requis pour le réglage par instance. Les événements continus sont ramenés à une mise
+à jour par frame avec `requestAnimationFrame`, puis validés comme une seule mutation
+d’historique.
 
 Les moteurs isolés couvrent notamment les matrices, le hit-test alpha, la sélection de cible et le comportement `cover` des arrière-plans.
 

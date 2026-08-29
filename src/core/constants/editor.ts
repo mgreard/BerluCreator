@@ -27,6 +27,12 @@ export const DEFAULT_DEPTH_OF_FIELD_SETTINGS: DepthOfFieldSettings = {
   blurRadius: 12
 }
 
+export const OPTICAL_DEPTH_PRESETS = {
+  far: 0,
+  focus: 0.5,
+  near: 0.65
+} as const
+
 export const CHARACTER_CATEGORIES = [
   'character_full',
   'body',

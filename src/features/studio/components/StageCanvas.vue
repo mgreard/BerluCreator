@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, useTemplateRef, computed, onMounted, onUnmounted } from 'vue'
+import { ref, useTemplateRef, computed, onMounted, onUnmounted, watch, nextTick, useId } from 'vue'
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
@@ -8,6 +8,7 @@ import { getCachedAssetImage, useCanvasRenderer } from '../composables/useCanvas
 import { isLayerPointOpaque } from '../engine/alpha-hit-test'
 import { isActiveSelectionHit, shouldTargetWholeGroup } from '../engine/selection-target'
 import { clampBackgroundCover } from '../engine/background-cover.engine'
+import { resolveStagePlacementZIndexes } from '../engine/stage-layer-placement'
 import {
   computeResizeScales,
   computeTransformedBounds,
@@ -19,15 +20,21 @@ import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
 import { Badge } from '@/components/ui/badge'
 import { SegmentedControl, type SegmentOption } from '@/components/ui/segmented-control'
+import { Slider } from '@/components/ui/slider'
+import { Button } from '@/components/ui/button'
+import { Heading } from '@/components/ui/heading'
+import { Text } from '@/components/ui/text'
 import { CameraFrameOverlay } from '@/components/ui/camera-frame-overlay'
 import {
   DepthOfFieldOverlay,
   type DepthOfFieldOverlayValue
 } from '@/components/ui/depth-of-field-overlay'
 import type { CameraFrame, CharacterGroup } from '@core/types/editor.types'
+import { OPTICAL_DEPTH_PRESETS } from '@core/constants/editor'
 import { toast } from '@/ui/shared/services/toast.service'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
 import { useRigRuntime } from '../rig-calibration/useRigRuntime'
+import { useBoundedFloatingPanel } from '@/shared/composables/useBoundedFloatingPanel'
 
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
@@ -37,8 +44,25 @@ const rigRuntime = useRigRuntime()
 
 const stage = computed(() => projectStore.currentProject.stage)
 const canvasRef = useTemplateRef<HTMLCanvasElement>('canvas')
+const stageViewportRef = useTemplateRef<HTMLDivElement>('stageViewport')
+const viewportHudRef = useTemplateRef<HTMLDivElement>('viewportHud')
+const opticalDepthPanelRef = useTemplateRef<HTMLElement>('opticalDepthPanel')
+const opticalDepthPanelTitleId = useId()
 const { activeLayers } = useHierarchyResolver()
 const isRigCalibrationOpen = computed(() => rigCatalog.isCalibrationOpen)
+
+const viewportHudFloating = useBoundedFloatingPanel(
+  stageViewportRef,
+  viewportHudRef,
+  { left: '12px', bottom: '12px' },
+  8
+)
+const opticalDepthFloating = useBoundedFloatingPanel(
+  stageViewportRef,
+  opticalDepthPanelRef,
+  { right: '12px', bottom: '72px' },
+  8
+)
 
 const activeCalibrationGroup = computed<CharacterGroup | null>(() => {
   const selected = editorStore.currentDocument.groups.find(
@@ -54,17 +78,8 @@ const activeCalibrationGroup = computed<CharacterGroup | null>(() => {
   )
 })
 
-// Mode d'édition : 'group' (déplace/scale tout le groupe) vs 'layer' (positionne/scale ce calque spécifique)
-const editScope = computed({
-  get: () => editorStore.editScope,
-  set: (scope: 'group' | 'layer') => {
-    if (scope === 'group' && activeSelectedGroup.value) {
-      editorStore.selectGroupForEditing(activeSelectedGroup.value.id)
-    } else if (scope === 'layer' && activeSelectedLayer.value) {
-      editorStore.selectLayerForEditing(activeSelectedLayer.value.layerId)
-    }
-  }
-})
+// Les personnages utilisent le scope groupe ; tous les éléments de plateau restent atomiques.
+const editScope = computed(() => editorStore.editScope)
 
 const selectedLayerId = computed(() => editorStore.selectedLayerId)
 
@@ -76,7 +91,7 @@ const activeSelectedLayer = computed(() => {
     if (selected) return selected
   }
 
-  if (editorStore.selectedGroupId) {
+  if (editorStore.editScope === 'group' && editorStore.selectedGroupId) {
     return activeLayers.value.find((layer) => layer.groupId === editorStore.selectedGroupId) ?? null
   }
 
@@ -177,15 +192,25 @@ const activeCamera = computed<CameraFrame>({
 
 const depthOfField = computed(() => editorStore.currentDocument.depthOfField)
 const isDepthOfFieldEditorOpen = ref(false)
+const isOpticalDepthEditorOpen = ref(false)
 let depthOfFieldFrame: number | null = null
 let pendingDepthOfField: DepthOfFieldOverlayValue | null = null
 let hasDepthOfFieldGesture = false
+let opticalDepthFrame: number | null = null
+let pendingOpticalDepth: { layerId: string; value: number } | null = null
+let hasOpticalDepthGesture = false
 
 const showSelection = computed(() => !activeCamera.value.enabled)
 
 const deskPlacementOptions: SegmentOption[] = [
   { value: 'behind', label: 'Derrière', icon: 'flip_to_back' },
   { value: 'front', label: 'Devant', icon: 'flip_to_front' }
+]
+
+const opticalDepthPresetOptions: SegmentOption[] = [
+  { value: 'far', label: 'Décor', icon: 'landscape' },
+  { value: 'focus', label: 'Sujet', icon: 'center_focus_strong' },
+  { value: 'near', label: 'Proche', icon: 'filter_frames' }
 ]
 
 const deskReferenceZIndex = computed(() => {
@@ -199,42 +224,149 @@ const deskReferenceZIndex = computed(() => {
   return visibleDesk?.zIndex ?? ASSET_CATEGORIES.desk.defaultZIndex
 })
 
+const stagePlacementZIndexes = computed(() => {
+  return resolveStagePlacementZIndexes(
+    deskReferenceZIndex.value,
+    editorStore.currentDocument.groups
+  )
+})
+
 const canEditSelectedDeskPlacement = computed(
   () => editScope.value === 'layer' && editorStore.selectedLayer?.category === 'props_set'
 )
 
 const selectedDeskPlacement = computed<string>({
   get: () =>
-    (editorStore.selectedLayer?.zIndex ?? ASSET_CATEGORIES.props_set.defaultZIndex) <
-    deskReferenceZIndex.value
+    (editorStore.selectedLayer?.zIndex ?? ASSET_CATEGORIES.props_set.defaultZIndex) <=
+    stagePlacementZIndexes.value.behind
       ? 'behind'
       : 'front',
   set: (value) => {
     const layer = editorStore.selectedLayer
     if (!layer || (value !== 'behind' && value !== 'front')) return
-    editorStore.updateLayerZIndex(
-      layer.id,
-      deskReferenceZIndex.value + (value === 'behind' ? -1 : 1)
-    )
+    editorStore.updateLayerZIndex(layer.id, stagePlacementZIndexes.value[value])
   }
 })
 
-const canEditSelectedDepthRole = computed(
-  () =>
+const canEditSelectedOpticalDepth = computed(() => {
+  const category = editorStore.selectedLayer?.category
+  return (
     depthOfField.value.enabled &&
     editScope.value === 'layer' &&
-    editorStore.selectedLayer?.category === 'props_set'
+    (category === 'props_set' || category === 'foreground')
+  )
+})
+
+function resolvedSelectedOpticalDepth(): number {
+  const layer = editorStore.selectedLayer
+  if (!layer) return OPTICAL_DEPTH_PRESETS.focus
+  if (Number.isFinite(layer.opticalDepth)) {
+    return Math.max(0, Math.min(1, layer.opticalDepth!))
+  }
+  return layer.category !== 'foreground' && layer.depthRole === 'background'
+    ? OPTICAL_DEPTH_PRESETS.far
+    : OPTICAL_DEPTH_PRESETS.focus
+}
+
+const selectedOpticalDepthPercent = computed(() =>
+  Math.round(resolvedSelectedOpticalDepth() * 100)
 )
 
-const isSelectedBlurred = computed(
-  () => editorStore.selectedLayer?.depthRole === 'background'
-)
+const selectedOpticalDepthLabel = computed(() => {
+  const percent = selectedOpticalDepthPercent.value
+  if (Math.abs(percent - 50) <= 5) return 'Plan net'
+  if (percent < 50) return percent <= 10 ? 'Arrière-plan' : 'Plan intermédiaire'
+  return percent >= 90 ? 'Très proche' : 'Premier plan'
+})
 
-function toggleSelectedBlur() {
+const selectedOpticalPreset = computed<string>({
+  get: () => {
+    const depth = resolvedSelectedOpticalDepth()
+    if (Math.abs(depth - OPTICAL_DEPTH_PRESETS.far) < 0.001) return 'far'
+    if (Math.abs(depth - OPTICAL_DEPTH_PRESETS.focus) < 0.001) return 'focus'
+    if (Math.abs(depth - OPTICAL_DEPTH_PRESETS.near) < 0.001) return 'near'
+    return 'custom'
+  },
+  set: (preset) => {
+    const layer = editorStore.selectedLayer
+    if (!layer) return
+    if (preset === 'far') editorStore.setLayerDepthRole(layer.id, 'background')
+    else if (preset === 'focus') editorStore.setLayerDepthRole(layer.id, 'subject')
+    else if (preset === 'near') {
+      editorStore.setLayerOpticalDepth(layer.id, OPTICAL_DEPTH_PRESETS.near)
+    }
+  }
+})
+
+function scalarValue(value: number | number[]): number {
+  return Array.isArray(value) ? (value[0] ?? 50) : value
+}
+
+function beginOpticalDepthInteraction() {
+  if (hasOpticalDepthGesture) return
+  hasOpticalDepthGesture = true
+  editorStore.beginGesture('Régler la distance caméra')
+}
+
+function flushOpticalDepthUpdate() {
+  opticalDepthFrame = null
+  const pending = pendingOpticalDepth
+  pendingOpticalDepth = null
+  if (pending) editorStore.setLayerOpticalDepth(pending.layerId, pending.value)
+}
+
+function scheduleOpticalDepthUpdate(value: number | number[]) {
   const layer = editorStore.selectedLayer
   if (!layer) return
-  editorStore.setLayerDepthRole(layer.id, isSelectedBlurred.value ? 'subject' : 'background')
+  pendingOpticalDepth = {
+    layerId: layer.id,
+    value: Math.max(0, Math.min(100, scalarValue(value))) / 100
+  }
+  if (opticalDepthFrame !== null) return
+  opticalDepthFrame = window.requestAnimationFrame(flushOpticalDepthUpdate)
 }
+
+function finishOpticalDepthInteraction() {
+  if (opticalDepthFrame !== null) {
+    window.cancelAnimationFrame(opticalDepthFrame)
+    opticalDepthFrame = null
+  }
+  flushOpticalDepthUpdate()
+  if (hasOpticalDepthGesture) {
+    hasOpticalDepthGesture = false
+    editorStore.endGesture()
+  }
+}
+
+function beginOpticalDepthKeyboard(event: KeyboardEvent) {
+  if (
+    ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(
+      event.key
+    )
+  ) {
+    beginOpticalDepthInteraction()
+  }
+}
+
+function resetSelectedOpticalDepth() {
+  const layer = editorStore.selectedLayer
+  if (!layer) return
+  editorStore.setLayerDepthRole(layer.id, 'auto')
+}
+
+function toggleOpticalDepthEditor() {
+  isOpticalDepthEditorOpen.value = !isOpticalDepthEditorOpen.value
+  if (isOpticalDepthEditorOpen.value) {
+    void nextTick(() => opticalDepthFloating.constrain())
+  } else {
+    finishOpticalDepthInteraction()
+  }
+}
+
+watch(selectedLayerId, () => {
+  finishOpticalDepthInteraction()
+  isOpticalDepthEditorOpen.value = false
+})
 
 function toggleCameraFrame() {
   const current = activeCamera.value
@@ -511,6 +643,9 @@ onUnmounted(() => {
   if (depthOfFieldFrame !== null) window.cancelAnimationFrame(depthOfFieldFrame)
   if (pendingDepthOfField) editorStore.updateDepthOfField(pendingDepthOfField)
   if (hasDepthOfFieldGesture) editorStore.endGesture()
+  if (opticalDepthFrame !== null) window.cancelAnimationFrame(opticalDepthFrame)
+  flushOpticalDepthUpdate()
+  if (hasOpticalDepthGesture) editorStore.endGesture()
 })
 
 const isSelectedFlippedHorizontally = computed(() => {
@@ -698,9 +833,11 @@ function onCanvasPointerDown(e: PointerEvent) {
   // 3. Sélection au clic sur un calque
   const hit = hitTestLayer(pos)
   if (hit) {
+    const hitGroup = editorStore.currentDocument.groups.find(
+      (candidate) => candidate.id === hit.groupId
+    )
     const selectWholeGroup =
-      !isRigCalibrationOpen.value &&
-      shouldTargetWholeGroup(hit.groupId, hit.category, editScope.value, e.shiftKey)
+      !isRigCalibrationOpen.value && shouldTargetWholeGroup(hitGroup?.kind)
     if (hit.groupId && selectWholeGroup) {
       editorStore.selectGroupForEditing(hit.groupId)
     } else if (isRigCalibrationOpen.value && hit.groupId === activeCalibrationGroup.value?.id) {
@@ -839,9 +976,12 @@ function onCanvasDoubleClick(e: MouseEvent) {
   }
 
   if (hit && hit.groupId) {
+    const hitGroup = editorStore.currentDocument.groups.find(
+      (candidate) => candidate.id === hit.groupId
+    )
     if (isRigCalibrationOpen.value && hit.groupId === activeCalibrationGroup.value?.id) {
       editorStore.selectRigLayerForCalibration(hit.layerId)
-    } else if (e.shiftKey) {
+    } else if (shouldTargetWholeGroup(hitGroup?.kind)) {
       editorStore.selectGroupForEditing(hit.groupId)
     } else {
       editorStore.selectLayerForEditing(hit.layerId)
@@ -861,6 +1001,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
     @pointerdown.self="editorStore.clearStudioSelection()"
   >
     <div
+      ref="stageViewport"
       class="relative shadow-glass-2xl rounded-xl overflow-hidden border transition-all duration-200 bg-black/90 border-border-subtle/80 ring-1 ring-white/5"
       :class="resizeCursorClass"
       :style="{
@@ -990,15 +1131,138 @@ function onCanvasDoubleClick(e: MouseEvent) {
         />
       </div>
 
+      <section
+        v-if="canEditSelectedOpticalDepth && isOpticalDepthEditorOpen"
+        :id="`${opticalDepthPanelTitleId}-panel`"
+        ref="opticalDepthPanel"
+        class="viewport-glass absolute z-50 flex w-80 max-w-[calc(100%-1rem)] flex-col overflow-hidden rounded-2xl border text-white/90 shadow-glass-xl animate-in fade-in zoom-in-95 duration-200"
+        :class="!opticalDepthFloating.isDragging.value && 'transition-all duration-300 ease-out'"
+        :style="opticalDepthFloating.style.value"
+        role="region"
+        :aria-labelledby="opticalDepthPanelTitleId"
+        @pointerdown.stop
+        @dblclick.stop
+      >
+        <header
+          class="flex items-center gap-2 border-b border-white/15 bg-black/15 px-3 py-2.5"
+        >
+          <IconButton
+            icon="drag_indicator"
+            size="xs"
+            variant="ghost"
+            class="viewport-action shrink-0 touch-none"
+            :class="opticalDepthFloating.isDragging.value ? 'cursor-grabbing' : 'cursor-grab'"
+            aria-label="Déplacer le panneau Distance caméra"
+            aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
+            title="Déplacer le panneau"
+            @pointerdown="opticalDepthFloating.beginDrag"
+            @pointermove="opticalDepthFloating.moveDrag"
+            @pointerup="opticalDepthFloating.endDrag"
+            @pointercancel="opticalDepthFloating.endDrag"
+            @keydown="opticalDepthFloating.nudge"
+          />
+          <div class="min-w-0 flex-1">
+            <Heading
+              :id="opticalDepthPanelTitleId"
+              as="h3"
+              variant="sm"
+              class="text-xs font-semibold text-white"
+            >
+              Distance caméra
+            </Heading>
+            <Text
+              as="p"
+              variant="caption"
+              class="mt-0.5 text-[10px] leading-snug text-white/60"
+            >
+              Affecte le flou, jamais l’ordre des calques.
+            </Text>
+          </div>
+          <IconButton
+            icon="close"
+            size="xs"
+            variant="ghost"
+            class="viewport-action shrink-0"
+            aria-label="Fermer les réglages de distance caméra"
+            title="Fermer"
+            @click="toggleOpticalDepthEditor"
+          />
+        </header>
+
+        <div class="flex flex-col gap-4 p-3">
+          <SegmentedControl
+            v-model="selectedOpticalPreset"
+            :options="opticalDepthPresetOptions"
+            size="sm"
+            variant="primary"
+            class="w-full justify-center"
+            aria-label="Préréglage de distance caméra"
+          />
+
+          <div
+            @pointerdown.capture="beginOpticalDepthInteraction"
+            @pointerup.capture="finishOpticalDepthInteraction"
+            @pointercancel.capture="finishOpticalDepthInteraction"
+            @keydown.capture="beginOpticalDepthKeyboard"
+            @keyup.capture="finishOpticalDepthInteraction"
+          >
+            <Slider
+              :model-value="selectedOpticalDepthPercent"
+              :min="0"
+              :max="100"
+              :step="5"
+              size="sm"
+              variant="gradient"
+              label="Ajustement fin"
+              show-value
+              show-ticks
+              :ticks="[
+                { value: 0, label: 'Loin' },
+                { value: 50, label: 'Net' },
+                { value: 100, label: 'Proche' }
+              ]"
+              :formatter="(value) => `${value} %`"
+              @update:model-value="scheduleOpticalDepthUpdate"
+            />
+          </div>
+
+          <div class="flex items-center justify-between gap-3 text-[11px]">
+            <span class="text-white/60">
+              {{ selectedOpticalDepthLabel }} · {{ selectedOpticalDepthPercent }} %
+            </span>
+            <Button size="xs" variant="ghost" @click="resetSelectedOpticalDepth"> Auto </Button>
+          </div>
+        </div>
+      </section>
+
       <!-- HUD contextuel d'Édition Directe (Bannière Inférieure) -->
       <div
         v-if="activeSelectedLayer && !isRigCalibrationOpen"
-        class="absolute bottom-3 left-3 z-30 flex items-center gap-2 pointer-events-auto animate-in fade-in duration-200"
+        ref="viewportHud"
+        class="absolute z-40 flex max-w-[calc(100%-1rem)] items-center gap-2 pointer-events-auto animate-in fade-in duration-200"
+        :class="!viewportHudFloating.isDragging.value && 'transition-all duration-300 ease-out'"
+        :style="viewportHudFloating.style.value"
         @pointerdown.stop
       >
         <div
-          class="viewport-glass flex items-center gap-3 rounded-xl border px-3 py-1.5 text-xs transition-all duration-300 ease-out"
+          class="viewport-glass flex items-center gap-2 rounded-xl border px-2 py-1.5 text-xs"
         >
+          <IconButton
+            icon="drag_indicator"
+            size="xs"
+            variant="ghost"
+            class="viewport-action shrink-0 touch-none"
+            :class="viewportHudFloating.isDragging.value ? 'cursor-grabbing' : 'cursor-grab'"
+            aria-label="Déplacer la barre d’outils du calque"
+            aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
+            title="Déplacer la barre"
+            @pointerdown="viewportHudFloating.beginDrag"
+            @pointermove="viewportHudFloating.moveDrag"
+            @pointerup="viewportHudFloating.endDrag"
+            @pointercancel="viewportHudFloating.endDrag"
+            @keydown="viewportHudFloating.nudge"
+          />
+
           <!-- Nom & Icône du calque sélectionné -->
           <span class="flex items-center gap-1.5 font-semibold text-white/90">
             <Icon
@@ -1017,31 +1281,31 @@ function onCanvasDoubleClick(e: MouseEvent) {
             v-if="canEditSelectedDeskPlacement"
             class="flex items-center gap-2 border-l border-white/15 pl-2"
           >
-            <span class="text-[10px] font-semibold text-white/60">Bureau</span>
+            <span class="text-[10px] font-semibold text-white/60">Scène</span>
             <SegmentedControl
               v-model="selectedDeskPlacement"
               :options="deskPlacementOptions"
               size="sm"
               variant="primary"
               class="bg-bg-surface/30"
-              aria-label="Position de l’accessoire par rapport au bureau"
+              aria-label="Position de l’accessoire par rapport au bureau et aux personnages"
             />
           </div>
 
           <IconButton
-            v-if="canEditSelectedDepthRole"
-            icon="blur_on"
+            v-if="canEditSelectedOpticalDepth"
+            icon="tune"
             size="xs"
             variant="ghost"
             class="viewport-action"
-            :active="isSelectedBlurred"
+            :active="isOpticalDepthEditorOpen"
             :aria-label="
-              isSelectedBlurred
-                ? 'Désactiver le flou (Placer au premier plan)'
-                : 'Activer le flou (Placer en arrière-plan)'
+              isOpticalDepthEditorOpen
+                ? 'Fermer les réglages de distance caméra'
+                : 'Régler la distance caméra du calque'
             "
-            :title="isSelectedBlurred ? 'Désactiver le flou' : 'Activer le flou'"
-            @click="toggleSelectedBlur"
+            :title="isOpticalDepthEditorOpen ? 'Fermer Distance caméra' : 'Distance caméra'"
+            @click="toggleOpticalDepthEditor"
           />
 
           <IconButton

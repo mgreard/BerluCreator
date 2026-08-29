@@ -1,5 +1,4 @@
-import { ASSET_CATEGORIES } from '@core/constants/categories'
-import type { AssetCategory } from '@core/types/asset.types'
+import type { EditorGroup } from '@core/types/editor.types'
 
 export interface StudioSelectionTarget {
   selectedLayerId: string | null
@@ -29,19 +28,11 @@ export function isActiveSelectionHit(
 }
 
 /**
- * Les pièces d'un personnage sont toujours manipulées via leur groupe afin que le rig
- * reste indivisible. Les assets de plateau restent manipulables individuellement.
+ * Seuls les personnages sont manipulés via leur groupe afin que leur sprite complet ou
+ * leur rig reste indivisible. Un groupe de plateau n'est jamais une cible de sélection.
  */
 export function shouldTargetWholeGroup(
-  groupId: string | undefined,
-  category: AssetCategory | undefined,
-  editScope: 'group' | 'layer' = 'layer',
-  shiftKey = false
+  groupKind: EditorGroup['kind'] | undefined
 ): boolean {
-  if (!groupId) return false
-
-  const isCharacterAsset = category
-    ? ASSET_CATEGORIES[category].placementMode === 'character-anchored'
-    : false
-  return isCharacterAsset || editScope === 'group' || shiftKey
+  return groupKind === 'character'
 }

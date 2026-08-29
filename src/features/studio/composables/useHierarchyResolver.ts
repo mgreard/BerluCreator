@@ -12,6 +12,7 @@ import type {
 import { clampBackgroundCover } from '../engine/background-cover.engine'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
 import { DEFAULT_RIG_CANVAS } from '../rig-calibration/rig-catalog.service'
+import { OPTICAL_DEPTH_PRESETS } from '@core/constants/editor'
 
 export interface RenderableLayer {
   id: string
@@ -44,6 +45,7 @@ export interface RenderableLayer {
   locked: boolean
   isMovable: boolean
   depthRole: Exclude<LayerDepthRole, 'auto'>
+  opticalDepth: number
 }
 
 interface CharacterGeometry {
@@ -174,7 +176,22 @@ function commonLayer(
   | 'locked'
   | 'isMovable'
   | 'depthRole'
+  | 'opticalDepth'
 > {
+  const depthRole: Exclude<LayerDepthRole, 'auto'> =
+    layer.category === 'foreground'
+      ? 'subject'
+      : layer.depthRole === 'background' || layer.depthRole === 'subject'
+        ? layer.depthRole
+        : layer.category === 'background'
+          ? 'background'
+          : 'subject'
+  const opticalDepth = Number.isFinite(layer.opticalDepth)
+    ? Math.max(0, Math.min(1, layer.opticalDepth!))
+    : depthRole === 'background'
+      ? OPTICAL_DEPTH_PRESETS.far
+      : OPTICAL_DEPTH_PRESETS.focus
+
   return {
     id: layer.id,
     layerId: layer.id,
@@ -190,14 +207,8 @@ function commonLayer(
     zIndex: layer.zIndex,
     muted: layer.muted,
     locked: layer.locked || group.locked,
-    depthRole:
-      layer.category === 'foreground'
-        ? 'subject'
-        : layer.depthRole === 'background' || layer.depthRole === 'subject'
-          ? layer.depthRole
-          : layer.category === 'background'
-            ? 'background'
-            : 'subject',
+    depthRole,
+    opticalDepth,
     // Les anciens bureaux peuvent encore porter isMovable=false en IndexedDB.
     // La catégorie desk est désormais toujours manipulable, sans migration destructive.
     isMovable: group.kind === 'character' || asset.category === 'desk' || asset.isMovable

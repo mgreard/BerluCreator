@@ -2,24 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { isActiveSelectionHit, shouldTargetWholeGroup } from './selection-target'
 
 describe('canvas selection target', () => {
-  it('targets the whole character for every full or rig sprite', () => {
-    expect(shouldTargetWholeGroup('character-1', 'head', 'layer', false)).toBe(true)
-    expect(shouldTargetWholeGroup('character-1', 'body', 'layer', false)).toBe(true)
-    expect(shouldTargetWholeGroup('character-1', 'character_full', 'layer', false)).toBe(true)
-    expect(shouldTargetWholeGroup('character-1', 'arms_left', 'layer', false)).toBe(true)
+  it('targets every hit belonging to a character group as one indivisible selection', () => {
+    expect(shouldTargetWholeGroup('character')).toBe(true)
   })
 
-  it('keeps the parent group as target while whole-group mode is active', () => {
-    expect(shouldTargetWholeGroup('group-1', 'props_set', 'group', false)).toBe(true)
-  })
-
-  it('keeps shift-click as an explicit group-selection shortcut', () => {
-    expect(shouldTargetWholeGroup('group-1', 'props_set', 'layer', true)).toBe(true)
-  })
-
-  it('targets the sprite in layer mode without shift for free-transform elements', () => {
-    expect(shouldTargetWholeGroup('group-1', 'props_set', 'layer', false)).toBe(false)
-    expect(shouldTargetWholeGroup(undefined, 'props_set', 'group', false)).toBe(false)
+  it('never targets a stage group as a whole', () => {
+    expect(shouldTargetWholeGroup('stage')).toBe(false)
+    expect(shouldTargetWholeGroup(undefined)).toBe(false)
   })
 
   it('recognizes the selected free sprite by its layer', () => {

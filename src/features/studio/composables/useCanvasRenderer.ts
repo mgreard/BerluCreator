@@ -24,6 +24,16 @@ interface DepthOfFieldBuffers {
 
 let depthOfFieldBuffers: DepthOfFieldBuffers | null = null
 
+type DepthEffectSide = 'far' | 'near'
+
+interface DepthEffectProfile {
+  side: DepthEffectSide
+  blurRadius: number
+}
+
+const OPTICAL_FOCUS_DEPTH = 0.5
+const OPTICAL_BLUR_STEPS = 4
+
 export function getCachedAssetImage(blobId: string): HTMLImageElement | undefined {
   const image = globalImageCache.get(blobId)
   return image?.complete && image.naturalWidth > 0 ? image : undefined
@@ -97,15 +107,46 @@ export function shouldApplyDepthOfField(
   settings?: DepthOfFieldSettings
 ): boolean {
   return Boolean(
-    settings?.enabled && settings.blurRadius > 0 && layers.some(isDepthBackgroundLayer)
+    settings?.enabled &&
+      settings.blurRadius > 0 &&
+      layers.some((layer) => depthEffectProfile(layer, settings) !== null)
   )
 }
 
-function isDepthBackgroundLayer(layer: RenderableLayer): boolean {
-  return (
-    layer.category !== 'foreground' &&
-    (layer.depthRole === 'background' || (!layer.depthRole && layer.category === 'background'))
-  )
+function resolvedOpticalDepth(layer: RenderableLayer): number {
+  if (Number.isFinite(layer.opticalDepth)) {
+    return Math.max(0, Math.min(1, layer.opticalDepth))
+  }
+  if (layer.category === 'foreground' || layer.depthRole === 'subject') {
+    return OPTICAL_FOCUS_DEPTH
+  }
+  return layer.depthRole === 'background' || layer.category === 'background'
+    ? 0
+    : OPTICAL_FOCUS_DEPTH
+}
+
+function depthEffectProfile(
+  layer: RenderableLayer,
+  settings: DepthOfFieldSettings
+): DepthEffectProfile | null {
+  const opticalDepth = resolvedOpticalDepth(layer)
+  const signedDistance = opticalDepth - OPTICAL_FOCUS_DEPTH
+  const normalizedDistance = Math.min(1, Math.abs(signedDistance) / OPTICAL_FOCUS_DEPTH)
+  const quantizedDistance =
+    Math.round(normalizedDistance * OPTICAL_BLUR_STEPS) / OPTICAL_BLUR_STEPS
+  const blurRadius = settings.blurRadius * quantizedDistance
+  if (blurRadius <= 0) return null
+  return {
+    side: signedDistance < 0 ? 'far' : 'near',
+    blurRadius
+  }
+}
+
+function sameDepthEffect(
+  left: DepthEffectProfile | null,
+  right: DepthEffectProfile | null
+): boolean {
+  return left?.side === right?.side && left?.blurRadius === right?.blurRadius
 }
 
 function getDepthOfFieldBuffers(
@@ -174,11 +215,11 @@ function extendCanvasEdges(
 
 function depthOfFieldSceneKey(
   layers: RenderableLayer[],
-  settings: DepthOfFieldSettings,
+  blurRadius: number,
   imageCache: Map<string, HTMLImageElement>
 ): string {
   return JSON.stringify({
-    blurRadius: settings.blurRadius,
+    blurRadius,
     layers: layers.map((layer) => {
       const image = imageCache.get(layer.asset.blobId)
       return {
@@ -201,12 +242,13 @@ function depthOfFieldSceneKey(
   })
 }
 
-function drawDepthBackgroundLayersOnContext(
+function drawDepthLayersOnContext(
   ctx: CanvasRenderingContext2D,
   layers: RenderableLayer[],
   width: number,
   height: number,
   settings: DepthOfFieldSettings,
+  profile: DepthEffectProfile,
   imageCache: Map<string, HTMLImageElement>,
   buffers: DepthOfFieldBuffers
 ): void {
@@ -221,7 +263,7 @@ function drawDepthBackgroundLayersOnContext(
     maskedContext,
     padding
   } = buffers
-  const sceneKey = depthOfFieldSceneKey(layers, settings, imageCache)
+  const sceneKey = depthOfFieldSceneKey(layers, profile.blurRadius, imageCache)
 
   if (buffers.sceneKey !== sceneKey) {
     sharpContext.clearRect(0, 0, sharpCanvas.width, sharpCanvas.height)
@@ -234,7 +276,7 @@ function drawDepthBackgroundLayersOnContext(
     extendCanvasEdges(sharpContext, sharpCanvas, width, height, padding)
 
     blurredContext.save()
-    blurredContext.filter = `blur(${settings.blurRadius}px)`
+    blurredContext.filter = `blur(${profile.blurRadius}px)`
     blurredContext.drawImage(sharpCanvas, 0, 0)
     blurredContext.filter = 'none'
     blurredContext.restore()
@@ -242,7 +284,7 @@ function drawDepthBackgroundLayersOnContext(
     buffers.maskKey = null
   }
 
-  const maskKey = `${sceneKey}:${settings.focusY}:${settings.feather}`
+  const maskKey = `${sceneKey}:${profile.side}:${settings.focusY}:${settings.feather}`
   if (buffers.maskKey !== maskKey) {
     maskedContext.clearRect(0, 0, maskedCanvas.width, maskedCanvas.height)
     maskedContext.save()
@@ -253,18 +295,29 @@ function drawDepthBackgroundLayersOnContext(
     const splitY = padding + settings.focusY * height
     const feather = settings.feather
     if (feather <= 0) {
-      maskedContext.fillRect(
-        0,
-        0,
-        maskedCanvas.width,
-        Math.max(0, Math.min(maskedCanvas.height, splitY))
-      )
+      const clampedSplitY = Math.max(0, Math.min(maskedCanvas.height, splitY))
+      if (profile.side === 'far') {
+        maskedContext.fillRect(0, 0, maskedCanvas.width, clampedSplitY)
+      } else {
+        maskedContext.fillRect(
+          0,
+          clampedSplitY,
+          maskedCanvas.width,
+          maskedCanvas.height - clampedSplitY
+        )
+      }
     } else {
       const startY = Math.max(0, splitY - feather / 2)
       const endY = Math.min(maskedCanvas.height, splitY + feather / 2)
       const gradient = maskedContext.createLinearGradient(0, startY, 0, endY)
-      gradient.addColorStop(0, 'rgba(0, 0, 0, 1)')
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
+      gradient.addColorStop(
+        0,
+        profile.side === 'far' ? 'rgba(0, 0, 0, 1)' : 'rgba(0, 0, 0, 0)'
+      )
+      gradient.addColorStop(
+        1,
+        profile.side === 'far' ? 'rgba(0, 0, 0, 0)' : 'rgba(0, 0, 0, 1)'
+      )
       maskedContext.fillStyle = gradient
       maskedContext.fillRect(0, 0, maskedCanvas.width, maskedCanvas.height)
     }
@@ -276,20 +329,8 @@ function drawDepthBackgroundLayersOnContext(
   ctx.drawImage(maskedCanvas, padding, padding, width, height, 0, 0, width, height)
 }
 
-function hasInterleavedDepthLayers(layers: RenderableLayer[]): boolean {
-  let protectedLayerSeen = false
-  for (const layer of layers) {
-    if (isDepthBackgroundLayer(layer)) {
-      if (protectedLayerSeen) return true
-    } else {
-      protectedLayerSeen = true
-    }
-  }
-  return false
-}
-
 /**
- * Dessine la scène avec un flou limité aux calques d'arrière-plan.
+ * Dessine la scène par plans optiques, sans modifier l'ordre z des calques.
  * Lorsque l'effet est désactivé, le chemin direct n'alloue aucun buffer temporaire.
  */
 export function drawSceneLayersOnContext(
@@ -312,47 +353,38 @@ export function drawSceneLayersOnContext(
     return
   }
 
-  if (hasInterleavedDepthLayers(layers)) {
-    let backgroundRun: RenderableLayer[] = []
-    const flushBackgroundRun = () => {
-      drawDepthBackgroundLayersOnContext(
-        ctx,
-        backgroundRun,
-        width,
-        height,
-        settings!,
-        imageCache,
-        buffers
-      )
-      backgroundRun = []
-    }
-
-    for (const layer of layers) {
-      if (isDepthBackgroundLayer(layer)) {
-        backgroundRun.push(layer)
-      } else {
-        flushBackgroundRun()
-        drawLayersOnContext(ctx, [layer], imageCache)
-      }
-    }
-    flushBackgroundRun()
-    return
+  let depthRun: RenderableLayer[] = []
+  let activeProfile: DepthEffectProfile | null = null
+  const flushDepthRun = () => {
+    if (!activeProfile || depthRun.length === 0) return
+    drawDepthLayersOnContext(
+      ctx,
+      depthRun,
+      width,
+      height,
+      settings!,
+      activeProfile,
+      imageCache,
+      buffers
+    )
+    depthRun = []
+    activeProfile = null
   }
 
-  drawDepthBackgroundLayersOnContext(
-    ctx,
-    layers.filter(isDepthBackgroundLayer),
-    width,
-    height,
-    settings!,
-    imageCache,
-    buffers
-  )
-  drawLayersOnContext(
-    ctx,
-    layers.filter((layer) => !isDepthBackgroundLayer(layer)),
-    imageCache
-  )
+  for (const layer of layers) {
+    const profile = depthEffectProfile(layer, settings!)
+    if (!profile) {
+      flushDepthRun()
+      drawLayersOnContext(ctx, [layer], imageCache)
+    } else if (sameDepthEffect(activeProfile, profile)) {
+      depthRun.push(layer)
+    } else {
+      flushDepthRun()
+      activeProfile = profile
+      depthRun.push(layer)
+    }
+  }
+  flushDepthRun()
 }
 
 /**

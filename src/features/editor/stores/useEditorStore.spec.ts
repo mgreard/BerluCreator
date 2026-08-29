@@ -90,6 +90,36 @@ describe('useEditorStore', () => {
     )
   })
 
+  it('réserve la sélection de groupe aux personnages et garde les props atomiques', () => {
+    const store = useEditorStore()
+    const assets = useAssetStore()
+    assets.assets = [characterAsset('head', 'Tête Berlu', 'berlu', 'head')]
+
+    const characterLayer = store.assignAssetToGroup('head', 'head')
+    const propLayer = store.assignAssetToGroup('prop', 'props_set')
+
+    store.selectGroupForEditing(characterLayer.groupId)
+    expect(store.editScope).toBe('group')
+    expect(store.selectedGroupId).toBe(characterLayer.groupId)
+    expect(store.selectedLayerId).toBeNull()
+
+    store.selectLayerForEditing(propLayer.id)
+    expect(store.editScope).toBe('layer')
+    expect(store.selectedGroupId).toBe(propLayer.groupId)
+    expect(store.selectedLayerId).toBe(propLayer.id)
+
+    store.selectGroupForEditing(propLayer.groupId)
+    expect(store.editScope).toBe('layer')
+    expect(store.selectedGroupId).toBeNull()
+    expect(store.selectedLayerId).toBeNull()
+
+    store.selectLayerForEditing(propLayer.id)
+    store.removeLayer(propLayer.id)
+    expect(store.editScope).toBe('layer')
+    expect(store.selectedGroupId).toBeNull()
+    expect(store.selectedLayerId).toBeNull()
+  })
+
   it('annule et rétablit une mutation structurelle et une gesture', async () => {
     const store = useEditorStore()
     const layer = store.assignAssetToGroup('prop', 'props_set')
@@ -160,6 +190,25 @@ describe('useEditorStore', () => {
     expect(store.currentDocument.layers[0]?.depthRole).toBe('auto')
     store.redo()
     expect(store.currentDocument.layers[0]?.depthRole).toBe('background')
+  })
+
+  it('historise et normalise une distance optique personnalisée sans changer le z-index', () => {
+    const store = useEditorStore()
+    const layer = store.assignAssetToGroup('prop', 'props_set')
+    const initialZIndex = layer.zIndex
+
+    store.setLayerOpticalDepth(layer.id, 1.4)
+    expect(layer.opticalDepth).toBe(1)
+    expect(layer.zIndex).toBe(initialZIndex)
+
+    store.undo()
+    expect(store.currentDocument.layers[0]?.opticalDepth).toBeUndefined()
+    store.redo()
+    expect(store.currentDocument.layers[0]?.opticalDepth).toBe(1)
+
+    store.setLayerDepthRole(layer.id, 'subject')
+    expect(store.currentDocument.layers[0]).toMatchObject({ depthRole: 'subject' })
+    expect(store.currentDocument.layers[0]?.opticalDepth).toBeUndefined()
   })
 
   it('historise le mode, le verrouillage et l’ordre des calques', () => {

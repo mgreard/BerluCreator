@@ -82,6 +82,8 @@ export interface EditorLayer {
   locked: boolean
   /** Rôle optique de cette instance. Absent dans les anciens documents = auto. */
   depthRole?: LayerDepthRole
+  /** Distance optique indépendante du z-index : 0 = lointain, 0.5 = net, 1 = proche. */
+  opticalDepth?: number
   transform: Transform2D
 }
 

@@ -88,6 +88,10 @@ function normalizeLayerDepthRole(role?: LayerDepthRole): LayerDepthRole {
   return role === 'background' || role === 'subject' ? role : 'auto'
 }
 
+function normalizeOpticalDepth(depth?: number): number | undefined {
+  return Number.isFinite(depth) ? Math.max(0, Math.min(1, depth!)) : undefined
+}
+
 function mergeUniformTransform(current: Transform2D, changes: Partial<Transform2D>): Transform2D {
   let nextScaleX = current.scaleX
   let nextScaleY = current.scaleY
@@ -134,6 +138,7 @@ function normalizeDocument(document: EditorDocument): EditorDocument {
     layers: document.layers.map((layer) => ({
       ...layer,
       depthRole: normalizeLayerDepthRole(layer.depthRole),
+      opticalDepth: normalizeOpticalDepth(layer.opticalDepth),
       transform: normalizeTransform(layer.transform)
     }))
   }
@@ -308,7 +313,7 @@ export const useEditorStore = defineStore('editor', () => {
       selectedLayerId.value &&
       !currentDocument.value.layers.some((l) => l.id === selectedLayerId.value)
     ) {
-      selectedLayerId.value = null
+      clearStudioSelection()
     }
     if (
       selectedGroupId.value &&
@@ -597,6 +602,7 @@ export const useEditorStore = defineStore('editor', () => {
         ...layer,
         id: layer.id || generateId('layer'),
         depthRole: normalizeLayerDepthRole(layer.depthRole),
+        opticalDepth: normalizeOpticalDepth(layer.opticalDepth),
         transform: normalizeTransform(layer.transform)
       } as EditorLayer
       currentDocument.value.layers.push(created)
@@ -609,7 +615,7 @@ export const useEditorStore = defineStore('editor', () => {
       currentDocument.value.layers = currentDocument.value.layers.filter(
         (layer) => layer.id !== layerId
       )
-      if (selectedLayerId.value === layerId) selectedLayerId.value = null
+      if (selectedLayerId.value === layerId) clearStudioSelection()
     })
   }
 
@@ -695,8 +701,20 @@ export const useEditorStore = defineStore('editor', () => {
     const normalizedRole = normalizeLayerDepthRole(depthRole)
     updateLayer(
       layerId,
-      { depthRole: normalizedRole },
-      normalizedRole === 'background' ? 'Placer dans le décor' : 'Garder le sujet net'
+      { depthRole: normalizedRole, opticalDepth: undefined },
+      normalizedRole === 'background'
+        ? 'Placer dans le décor'
+        : normalizedRole === 'subject'
+          ? 'Garder le sujet net'
+          : 'Rétablir la distance automatique'
+    )
+  }
+
+  function setLayerOpticalDepth(layerId: string, opticalDepth: number): void {
+    updateLayer(
+      layerId,
+      { opticalDepth: normalizeOpticalDepth(opticalDepth) },
+      'Régler la distance caméra'
     )
   }
 
@@ -740,7 +758,7 @@ export const useEditorStore = defineStore('editor', () => {
         isDefault: false
       }
       currentDocument.value.groups.push(group)
-      selectGroupForEditing(group.id)
+      clearStudioSelection()
       return group
     })
   }
@@ -882,7 +900,12 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function selectGroupForEditing(groupId: string): void {
-    if (!currentDocument.value.groups.some((group) => group.id === groupId)) return
+    const group = currentDocument.value.groups.find((candidate) => candidate.id === groupId)
+    if (!group) return
+    if (group.kind !== 'character') {
+      clearStudioSelection()
+      return
+    }
     selectedGroupId.value = groupId
     selectedLayerId.value = null
     editScope.value = 'group'
@@ -891,6 +914,7 @@ export const useEditorStore = defineStore('editor', () => {
   function clearStudioSelection(): void {
     selectedLayerId.value = null
     selectedGroupId.value = null
+    editScope.value = 'layer'
   }
 
   function applyViewportSnapshot(snapshot: ViewportSnapshot): number {
@@ -965,6 +989,7 @@ export const useEditorStore = defineStore('editor', () => {
     setLayerMuted,
     setLayerLocked,
     setLayerDepthRole,
+    setLayerOpticalDepth,
     moveLayer,
     createGroup,
     updateGroup,

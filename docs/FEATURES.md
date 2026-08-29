@@ -135,13 +135,17 @@ Les catégories singleton comprennent notamment l’arrière-plan, le bureau et 
 
 ### Manipulation directe — Disponible
 
-- Clic pour sélectionner.
+- Clic pour sélectionner une instance de plateau, même si plusieurs éléments appartiennent
+  au même groupe ou à la même catégorie. Il n’existe plus de raccourci de sélection globale
+  pour les groupes de plateau.
 - Glisser-déposer pour déplacer les éléments autorisés.
 - Poignées de redimensionnement autour de la sélection.
 - Redimensionnement uniforme uniquement, afin de conserver le ratio naturel.
-- HUD contextuel avec nom, dimensions, suppression et désélection.
-- Pour chaque accessoire de plateau, choix individuel `Derrière` ou `Devant` le bureau ;
-  cette action ajuste son z-index, suit undo/redo et ne modifie pas son flou.
+- HUD contextuel avec nom, dimensions, suppression et désélection. Sa poignée permet de
+  le déplacer dans les limites du viewport, à la souris, au tactile ou au clavier.
+- Pour chaque accessoire de plateau, choix individuel `Derrière` ou `Devant` la scène :
+  `Derrière` le place sous le bureau et tous les personnages, tandis que `Devant` le place
+  au-dessus. Cette action ajuste son z-index, suit undo/redo et ne modifie pas son flou.
 - Double-clic sur le personnage actif pour désélectionner sans supprimer.
 - Clic dans l’espace vide pour vider la sélection.
 
@@ -156,7 +160,9 @@ Un personnage peut mémoriser simultanément :
 
 Une seule représentation est rendue à la fois. Sélectionner un asset complet active le mode complet ; sélectionner un slot de rig active le rig. Basculer de mode ne détruit pas la configuration inactive.
 
-Toutes les pièces visibles du rig sont manipulées comme un personnage indivisible. La position et l’échelle appartiennent au groupe ; les ajustements internes servent seulement à l’assemblage.
+Toutes les pièces visibles du rig sont manipulées comme un personnage indivisible. C’est la
+seule sélection de groupe autorisée dans le viewport. La position et l’échelle appartiennent
+au groupe ; les ajustements internes servent seulement à l’assemblage.
 
 ### Historique — Disponible
 
@@ -168,7 +174,7 @@ Toutes les pièces visibles du rig sont manipulées comme un personnage indivisi
 - La caméra est persistée, mais volontairement exclue de l’historique.
 - Charger une composition vide les piles undo/redo.
 
-### Flou de profondeur — MVP disponible
+### Flou de profondeur — Profondeur optique par instance
 
 - L’effet est désactivé par défaut afin de conserver le chemin de rendu direct pendant
   la construction de la scène.
@@ -177,15 +183,25 @@ Toutes les pièces visibles du rig sont manipulées comme un personnage indivisi
   bureaux, objets du bureau et premiers plans restent automatiquement dans le sujet net.
 - Les assets `foreground` forment une bande finale toujours dessinée et sélectionnée
   devant les personnages, y compris ceux ajoutés dynamiquement.
-- Un accessoire de plateau sélectionné peut être placé dans `Décor` ou `Sujet` depuis le
-  HUD. Ce choix appartient à l’instance du calque et non à l’asset réutilisable ; il ne
-  modifie pas sa position devant ou derrière le bureau.
+- Un accessoire de plateau sélectionné peut être placé dans `Décor` ou `Sujet` depuis
+  l’unique commande `Distance caméra` du HUD. Ce choix appartient à l’instance du calque
+  et non à l’asset réutilisable ; il ne modifie pas sa position devant ou derrière la scène.
+- Les accessoires de plateau et les premiers plans exposent un réglage avancé `Distance
+  caméra`, indépendant du z-index : `0` correspond au lointain, `0,5` au plan net et `1`
+  au très proche. Les préréglages `Décor`, `Sujet` et `Proche` couvrent les cas usuels.
+- Le panneau `Distance caméra` et les réglages globaux restent dans le viewport, sans
+  portal. Ils sont redimensionnés si nécessaire et déplaçables avec une poignée afin de
+  ne pas masquer durablement la zone travaillée.
+- Les anciens documents restent identiques : sans distance personnalisée, le foreground
+  reste net. Un premier plan proche est flouté progressivement sous la ligne de netteté,
+  tout en conservant sa bande de rendu finale devant les personnages.
 - L’état est conservé dans le document, l’historique et les compositions sauvegardées.
 - Le viewport, les miniatures et l’export PNG utilisent le même pipeline.
 - L’activation de l’effet et l’affichage de ses réglages sont deux commandes distinctes :
   le rendu peut rester actif dans un viewport sans aides d’édition.
 - Lorsque les réglages sont visibles et la caméra inactive, une limite horizontale de
-  netteté se déplace à la souris, au tactile ou au clavier.
+  netteté se déplace à la souris, au tactile ou au clavier. Elle atténue les plans
+  lointains au-dessus et les plans proches au-dessous.
 - `Intensité` règle le rayon entre 0 et 32 px ; `Douceur` règle le fondu entre 0 et 600 px.
 - Chaque geste continu produit une seule entrée d’historique et au plus une mise à jour
   réactive par frame.
