@@ -201,6 +201,93 @@ function depthOfFieldSceneKey(
   })
 }
 
+function drawDepthBackgroundLayersOnContext(
+  ctx: CanvasRenderingContext2D,
+  layers: RenderableLayer[],
+  width: number,
+  height: number,
+  settings: DepthOfFieldSettings,
+  imageCache: Map<string, HTMLImageElement>,
+  buffers: DepthOfFieldBuffers
+): void {
+  if (layers.length === 0) return
+
+  const {
+    sharpCanvas,
+    sharpContext,
+    blurredCanvas,
+    blurredContext,
+    maskedCanvas,
+    maskedContext,
+    padding
+  } = buffers
+  const sceneKey = depthOfFieldSceneKey(layers, settings, imageCache)
+
+  if (buffers.sceneKey !== sceneKey) {
+    sharpContext.clearRect(0, 0, sharpCanvas.width, sharpCanvas.height)
+    blurredContext.clearRect(0, 0, blurredCanvas.width, blurredCanvas.height)
+
+    sharpContext.save()
+    sharpContext.translate(padding, padding)
+    drawLayersOnContext(sharpContext, layers, imageCache)
+    sharpContext.restore()
+    extendCanvasEdges(sharpContext, sharpCanvas, width, height, padding)
+
+    blurredContext.save()
+    blurredContext.filter = `blur(${settings.blurRadius}px)`
+    blurredContext.drawImage(sharpCanvas, 0, 0)
+    blurredContext.filter = 'none'
+    blurredContext.restore()
+    buffers.sceneKey = sceneKey
+    buffers.maskKey = null
+  }
+
+  const maskKey = `${sceneKey}:${settings.focusY}:${settings.feather}`
+  if (buffers.maskKey !== maskKey) {
+    maskedContext.clearRect(0, 0, maskedCanvas.width, maskedCanvas.height)
+    maskedContext.save()
+    maskedContext.drawImage(blurredCanvas, 0, 0)
+    maskedContext.globalCompositeOperation = 'destination-in'
+    maskedContext.fillStyle = '#000'
+
+    const splitY = padding + settings.focusY * height
+    const feather = settings.feather
+    if (feather <= 0) {
+      maskedContext.fillRect(
+        0,
+        0,
+        maskedCanvas.width,
+        Math.max(0, Math.min(maskedCanvas.height, splitY))
+      )
+    } else {
+      const startY = Math.max(0, splitY - feather / 2)
+      const endY = Math.min(maskedCanvas.height, splitY + feather / 2)
+      const gradient = maskedContext.createLinearGradient(0, startY, 0, endY)
+      gradient.addColorStop(0, 'rgba(0, 0, 0, 1)')
+      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
+      maskedContext.fillStyle = gradient
+      maskedContext.fillRect(0, 0, maskedCanvas.width, maskedCanvas.height)
+    }
+    maskedContext.restore()
+    buffers.maskKey = maskKey
+  }
+
+  ctx.drawImage(sharpCanvas, padding, padding, width, height, 0, 0, width, height)
+  ctx.drawImage(maskedCanvas, padding, padding, width, height, 0, 0, width, height)
+}
+
+function hasInterleavedDepthLayers(layers: RenderableLayer[]): boolean {
+  let protectedLayerSeen = false
+  for (const layer of layers) {
+    if (isDepthBackgroundLayer(layer)) {
+      if (protectedLayerSeen) return true
+    } else {
+      protectedLayerSeen = true
+    }
+  }
+  return false
+}
+
 /**
  * Dessine la scène avec un flou limité aux calques d'arrière-plan.
  * Lorsque l'effet est désactivé, le chemin direct n'alloue aucun buffer temporaire.
@@ -225,71 +312,47 @@ export function drawSceneLayersOnContext(
     return
   }
 
-  const backgroundLayers = layers.filter(isDepthBackgroundLayer)
-  const protectedLayers = layers.filter((layer) => !isDepthBackgroundLayer(layer))
-  const {
-    sharpCanvas,
-    sharpContext,
-    blurredCanvas,
-    blurredContext,
-    maskedCanvas,
-    maskedContext,
-    padding
-  } = buffers
-  const sceneKey = depthOfFieldSceneKey(backgroundLayers, settings!, imageCache)
-
-  if (buffers.sceneKey !== sceneKey) {
-    sharpContext.clearRect(0, 0, sharpCanvas.width, sharpCanvas.height)
-    blurredContext.clearRect(0, 0, blurredCanvas.width, blurredCanvas.height)
-
-    sharpContext.save()
-    sharpContext.translate(padding, padding)
-    drawLayersOnContext(sharpContext, backgroundLayers, imageCache)
-    sharpContext.restore()
-    extendCanvasEdges(sharpContext, sharpCanvas, width, height, padding)
-
-    blurredContext.save()
-    blurredContext.filter = `blur(${settings!.blurRadius}px)`
-    blurredContext.drawImage(sharpCanvas, 0, 0)
-    blurredContext.filter = 'none'
-    blurredContext.restore()
-    buffers.sceneKey = sceneKey
-    buffers.maskKey = null
-  }
-
-  const maskKey = `${sceneKey}:${settings!.focusY}:${settings!.feather}`
-  if (buffers.maskKey !== maskKey) {
-    maskedContext.clearRect(0, 0, maskedCanvas.width, maskedCanvas.height)
-    maskedContext.save()
-    maskedContext.drawImage(blurredCanvas, 0, 0)
-    maskedContext.globalCompositeOperation = 'destination-in'
-    maskedContext.fillStyle = '#000'
-
-    const splitY = padding + settings!.focusY * height
-    const feather = settings!.feather
-    if (feather <= 0) {
-      maskedContext.fillRect(
-        0,
-        0,
-        maskedCanvas.width,
-        Math.max(0, Math.min(maskedCanvas.height, splitY))
+  if (hasInterleavedDepthLayers(layers)) {
+    let backgroundRun: RenderableLayer[] = []
+    const flushBackgroundRun = () => {
+      drawDepthBackgroundLayersOnContext(
+        ctx,
+        backgroundRun,
+        width,
+        height,
+        settings!,
+        imageCache,
+        buffers
       )
-    } else {
-      const startY = Math.max(0, splitY - feather / 2)
-      const endY = Math.min(maskedCanvas.height, splitY + feather / 2)
-      const gradient = maskedContext.createLinearGradient(0, startY, 0, endY)
-      gradient.addColorStop(0, 'rgba(0, 0, 0, 1)')
-      gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
-      maskedContext.fillStyle = gradient
-      maskedContext.fillRect(0, 0, maskedCanvas.width, maskedCanvas.height)
+      backgroundRun = []
     }
-    maskedContext.restore()
-    buffers.maskKey = maskKey
+
+    for (const layer of layers) {
+      if (isDepthBackgroundLayer(layer)) {
+        backgroundRun.push(layer)
+      } else {
+        flushBackgroundRun()
+        drawLayersOnContext(ctx, [layer], imageCache)
+      }
+    }
+    flushBackgroundRun()
+    return
   }
 
-  ctx.drawImage(sharpCanvas, padding, padding, width, height, 0, 0, width, height)
-  ctx.drawImage(maskedCanvas, padding, padding, width, height, 0, 0, width, height)
-  drawLayersOnContext(ctx, protectedLayers, imageCache)
+  drawDepthBackgroundLayersOnContext(
+    ctx,
+    layers.filter(isDepthBackgroundLayer),
+    width,
+    height,
+    settings!,
+    imageCache,
+    buffers
+  )
+  drawLayersOnContext(
+    ctx,
+    layers.filter((layer) => !isDepthBackgroundLayer(layer)),
+    imageCache
+  )
 }
 
 /**

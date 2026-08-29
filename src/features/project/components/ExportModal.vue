@@ -28,7 +28,7 @@ const { activeLayers } = useHierarchyResolver()
 const stage = computed(() => projectStore.currentProject.stage)
 const isExporting = ref(false)
 const applyCameraFrames = ref(true)
-const resolutionMode = ref<'native' | '1080p'>('native')
+const resolutionMode = ref<'native' | '1080p'>('1080p')
 
 const resolutionOptions: SelectOption[] = [
   { value: 'native', label: 'Résolution native du cadrage' },
@@ -127,9 +127,7 @@ async function captureCurrentFrame() {
           <Badge variant="accent" size="sm">PNG</Badge>
         </div>
 
-        <div
-          class="grid gap-3 rounded-lg border border-border-subtle bg-bg-surface/50 p-3 sm:grid-cols-[1fr_190px] sm:items-center"
-        >
+        <div class="grid gap-3 rounded-lg border border-border-subtle bg-bg-surface/50 p-3">
           <Switch
             v-model="applyCameraFrames"
             size="sm"

@@ -140,12 +140,19 @@ Le store conserve des snapshots `before/after` des groupes et calques pour un ma
 - normalise les échelles pour préserver les ratios ;
 - applique les règles spécifiques d’arrière-plan et de mobilier legacy.
 
+Pour les groupes de plateau, le z-index du calque est global à la scène : un `props_set`
+peut donc passer individuellement juste avant ou juste après le bureau, même si les deux
+assets appartiennent à des groupes différents. Les pièces d’un personnage restent d’abord
+ordonnées par le z-index de leur groupe, puis par leur z-index interne. Le `foreground`
+conserve une bande finale forcée.
+
 `useCanvasRenderer` dessine les calques triés sur Canvas 2D et produit également les captures propres utilisées par les miniatures et l’export PNG.
 
-Le pipeline de profondeur de champ sépare les calques résolus en trois bandes : décor
-floutable, sujet net, puis `foreground` toujours au premier plan. Les accessoires de
-plateau peuvent changer entre les deux premières bandes sans changer de catégorie d’asset ;
-l’ordre de hit-test suit le même ordre que le rendu. La bande `foreground` ignore tout rôle
+Le pipeline de profondeur de champ classe les calques en décor floutable ou sujet net,
+puis conserve le `foreground` au premier plan. Les accessoires de plateau peuvent changer
+de rôle optique sans changer de catégorie d’asset ni de z-index. Lorsque les deux rôles
+sont intercalés dans l’ordre de scène, le rendu traite des séquences successives afin de
+préserver exactement le même ordre que le hit-test. La bande `foreground` ignore tout rôle
 optique accidentel et reste finale même lorsqu’un personnage dynamique possède un `zIndex`
 de groupe supérieur. Le pipeline est court-circuité avant toute allocation de buffer
 lorsque l’effet est désactivé, que son rayon est nul ou qu’aucun décor n’est visible. Les

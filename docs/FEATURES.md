@@ -140,6 +140,8 @@ Les catégories singleton comprennent notamment l’arrière-plan, le bureau et 
 - Poignées de redimensionnement autour de la sélection.
 - Redimensionnement uniforme uniquement, afin de conserver le ratio naturel.
 - HUD contextuel avec nom, dimensions, suppression et désélection.
+- Pour chaque accessoire de plateau, choix individuel `Derrière` ou `Devant` le bureau ;
+  cette action ajuste son z-index, suit undo/redo et ne modifie pas son flou.
 - Double-clic sur le personnage actif pour désélectionner sans supprimer.
 - Clic dans l’espace vide pour vider la sélection.
 
@@ -176,7 +178,8 @@ Toutes les pièces visibles du rig sont manipulées comme un personnage indivisi
 - Les assets `foreground` forment une bande finale toujours dessinée et sélectionnée
   devant les personnages, y compris ceux ajoutés dynamiquement.
 - Un accessoire de plateau sélectionné peut être placé dans `Décor` ou `Sujet` depuis le
-  HUD. Ce choix appartient à l’instance du calque et non à l’asset réutilisable.
+  HUD. Ce choix appartient à l’instance du calque et non à l’asset réutilisable ; il ne
+  modifie pas sa position devant ou derrière le bureau.
 - L’état est conservé dans le document, l’historique et les compositions sauvegardées.
 - Le viewport, les miniatures et l’export PNG utilisent le même pipeline.
 - L’activation de l’effet et l’affichage de ses réglages sont deux commandes distinctes :

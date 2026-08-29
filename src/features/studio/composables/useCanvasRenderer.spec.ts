@@ -188,6 +188,7 @@ describe('profondeur de champ', () => {
     const blurredContext = contextFactory()
     const maskedContext = contextFactory()
     const mainContext = contextFactory()
+    const mainDrawImage = vi.mocked(mainContext.drawImage)
     const canvases = [
       { width: 0, height: 0, getContext: vi.fn(() => sharpContext) },
       { width: 0, height: 0, getContext: vi.fn(() => blurredContext) },
@@ -270,5 +271,17 @@ describe('profondeur de champ', () => {
       123
     )
     expect(mainContext.drawImage).toHaveBeenCalledWith(image, 0, 0, 100, 100)
+
+    mainDrawImage.mockClear()
+    drawSceneLayersOnContext(
+      mainContext,
+      [protectedLayer, renderable],
+      321,
+      123,
+      settings,
+      imageCache
+    )
+
+    expect(mainDrawImage.mock.calls[0]?.[0]).toBe(image)
   })
 })

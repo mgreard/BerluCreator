@@ -22,6 +22,7 @@ export interface RenderableLayer {
   groupName: string
   groupZIndex: number
   layerZIndex: number
+  sceneZIndex: number
   order: number
   asset: Asset
   x: number
@@ -91,8 +92,8 @@ export function useHierarchyResolver() {
 
     return result.sort(
       (left, right) =>
-        depthBand(left) - depthBand(right) ||
-        left.groupZIndex - right.groupZIndex ||
+        sceneBand(left) - sceneBand(right) ||
+        left.sceneZIndex - right.sceneZIndex ||
         left.layerZIndex - right.layerZIndex ||
         left.order - right.order
     )
@@ -101,9 +102,8 @@ export function useHierarchyResolver() {
   return { activeLayers }
 }
 
-function depthBand(layer: RenderableLayer): number {
-  if (layer.category === 'foreground') return 2
-  return layer.depthRole === 'background' ? 0 : 1
+function sceneBand(layer: RenderableLayer): number {
+  return layer.category === 'foreground' ? 1 : 0
 }
 
 function resolveCharacterGeometries(
@@ -166,6 +166,7 @@ function commonLayer(
   | 'groupName'
   | 'groupZIndex'
   | 'layerZIndex'
+  | 'sceneZIndex'
   | 'order'
   | 'asset'
   | 'zIndex'
@@ -183,6 +184,7 @@ function commonLayer(
     groupName: group.name,
     groupZIndex: group.zIndex,
     layerZIndex: layer.zIndex,
+    sceneZIndex: group.kind === 'character' ? group.zIndex : layer.zIndex,
     order: layer.order,
     asset,
     zIndex: layer.zIndex,

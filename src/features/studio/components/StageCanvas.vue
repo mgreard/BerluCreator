@@ -183,10 +183,41 @@ let hasDepthOfFieldGesture = false
 
 const showSelection = computed(() => !activeCamera.value.enabled)
 
-const depthPlanOptions: SegmentOption[] = [
-  { value: 'background', label: 'Décor', icon: 'landscape' },
-  { value: 'subject', label: 'Sujet', icon: 'person' }
+const deskPlacementOptions: SegmentOption[] = [
+  { value: 'behind', label: 'Derrière', icon: 'flip_to_back' },
+  { value: 'front', label: 'Devant', icon: 'flip_to_front' }
 ]
+
+const deskReferenceZIndex = computed(() => {
+  const visibleDesk = editorStore.currentDocument.layers.find((layer) => {
+    if (layer.category !== 'desk' || layer.muted) return false
+    const group = editorStore.currentDocument.groups.find(
+      (candidate) => candidate.id === layer.groupId
+    )
+    return !group?.muted
+  })
+  return visibleDesk?.zIndex ?? ASSET_CATEGORIES.desk.defaultZIndex
+})
+
+const canEditSelectedDeskPlacement = computed(
+  () => editScope.value === 'layer' && editorStore.selectedLayer?.category === 'props_set'
+)
+
+const selectedDeskPlacement = computed<string>({
+  get: () =>
+    (editorStore.selectedLayer?.zIndex ?? ASSET_CATEGORIES.props_set.defaultZIndex) <
+    deskReferenceZIndex.value
+      ? 'behind'
+      : 'front',
+  set: (value) => {
+    const layer = editorStore.selectedLayer
+    if (!layer || (value !== 'behind' && value !== 'front')) return
+    editorStore.updateLayerZIndex(
+      layer.id,
+      deskReferenceZIndex.value + (value === 'behind' ? -1 : 1)
+    )
+  }
+})
 
 const canEditSelectedDepthRole = computed(
   () =>
@@ -195,14 +226,15 @@ const canEditSelectedDepthRole = computed(
     editorStore.selectedLayer?.category === 'props_set'
 )
 
-const selectedDepthPlan = computed<string>({
-  get: () => (editorStore.selectedLayer?.depthRole === 'background' ? 'background' : 'subject'),
-  set: (value) => {
-    const layer = editorStore.selectedLayer
-    if (!layer || (value !== 'background' && value !== 'subject')) return
-    editorStore.setLayerDepthRole(layer.id, value)
-  }
-})
+const isSelectedBlurred = computed(
+  () => editorStore.selectedLayer?.depthRole === 'background'
+)
+
+function toggleSelectedBlur() {
+  const layer = editorStore.selectedLayer
+  if (!layer) return
+  editorStore.setLayerDepthRole(layer.id, isSelectedBlurred.value ? 'subject' : 'background')
+}
 
 function toggleCameraFrame() {
   const current = activeCamera.value
@@ -486,8 +518,7 @@ const isSelectedFlippedHorizontally = computed(() => {
     return activeSelectedGroup.value.transform.scaleX < 0
   }
   if (activeSelectedLayer.value) {
-    const rawScaleX =
-      activeSelectedLayer.value.localScaleX ?? activeSelectedLayer.value.scaleX ?? 1
+    const rawScaleX = activeSelectedLayer.value.localScaleX ?? activeSelectedLayer.value.scaleX ?? 1
     return rawScaleX < 0
   }
   return false
@@ -982,28 +1013,36 @@ function onCanvasDoubleClick(e: MouseEvent) {
             }}</span>
           </span>
 
-          <!-- Dimensions en direct -->
-          <span
-            v-if="selectedBounds"
-            class="border-l border-white/15 pl-1 font-mono text-[10px] text-white/60"
-          >
-            {{ selectedBounds.width }}&times;{{ selectedBounds.height }}px
-          </span>
-
           <div
-            v-if="canEditSelectedDepthRole"
+            v-if="canEditSelectedDeskPlacement"
             class="flex items-center gap-2 border-l border-white/15 pl-2"
           >
-            <span class="text-[10px] font-semibold text-white/60">Plan de mise au point</span>
+            <span class="text-[10px] font-semibold text-white/60">Bureau</span>
             <SegmentedControl
-              v-model="selectedDepthPlan"
-              :options="depthPlanOptions"
+              v-model="selectedDeskPlacement"
+              :options="deskPlacementOptions"
               size="sm"
               variant="primary"
               class="bg-bg-surface/30"
-              aria-label="Plan de mise au point de l’accessoire"
+              aria-label="Position de l’accessoire par rapport au bureau"
             />
           </div>
+
+          <IconButton
+            v-if="canEditSelectedDepthRole"
+            icon="blur_on"
+            size="xs"
+            variant="ghost"
+            class="viewport-action"
+            :active="isSelectedBlurred"
+            :aria-label="
+              isSelectedBlurred
+                ? 'Désactiver le flou (Placer au premier plan)'
+                : 'Activer le flou (Placer en arrière-plan)'
+            "
+            :title="isSelectedBlurred ? 'Désactiver le flou' : 'Activer le flou'"
+            @click="toggleSelectedBlur"
+          />
 
           <IconButton
             icon="flip"

@@ -99,7 +99,7 @@ describe('useHierarchyResolver', () => {
     expect(activeLayers.value[0]?.depthRole).toBe('background')
   })
 
-  it('place les éléments du décor avant les sujets dans l’ordre de rendu et de hit-test', () => {
+  it('conserve le rôle optique indépendant de l’ordre de rendu et de hit-test', () => {
     const editor = useEditorStore()
     const assets = useAssetStore()
     assets.assets = [asset('desk', 'desk'), asset('prop', 'props_set')]
@@ -109,6 +109,29 @@ describe('useHierarchyResolver', () => {
 
     expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([desk.id, prop.id])
     editor.setLayerDepthRole(prop.id, 'background')
+    expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([desk.id, prop.id])
+    expect(activeLayers.value.find((layer) => layer.layerId === prop.id)?.depthRole).toBe(
+      'background'
+    )
+  })
+
+  it('place individuellement un accessoire devant ou derrière le bureau selon son z-index', () => {
+    const editor = useEditorStore()
+    const assets = useAssetStore()
+    assets.assets = [asset('desk', 'desk'), asset('prop', 'props_set')]
+    const desk = editor.assignAssetToGroup('desk', 'desk')
+    const prop = editor.assignAssetToGroup('prop', 'props_set')
+    const { activeLayers } = useHierarchyResolver()
+
+    expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([desk.id, prop.id])
+
+    editor.updateLayerZIndex(prop.id, desk.zIndex - 1)
+    expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([prop.id, desk.id])
+
+    editor.undo()
+    expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([desk.id, prop.id])
+
+    editor.redo()
     expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([prop.id, desk.id])
   })
 
