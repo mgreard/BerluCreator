@@ -30,6 +30,8 @@ export * from './lightbox-modal'
 export * from './camera-frame-overlay'
 export * from './depth-of-field-overlay'
 export * from './rig-calibration-panel'
+export * from './rig-calibration-viewport'
+export * from './selection-transform-box'
 
 // Data Display
 export * from './avatar'

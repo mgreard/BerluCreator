@@ -2,14 +2,13 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { AssetCalibration } from '@core/types/asset.types'
 import type { CharacterGroup } from '@core/types/editor.types'
-import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import {
   DuplicateRigModal,
   RigCalibrationPanel,
+  type RigCalibrationCategoryConfig,
   type RigCalibrationHeritageState,
-  type RigCalibrationPanelCategory,
   type RigCalibrationPanelItem,
   type RigCalibrationPanelRig,
   type RigCalibrationPanelValue
@@ -22,14 +21,16 @@ import {
   effectiveCalibration,
   identityCalibration,
   isRigConfigurableCategory,
-  rigAssetIdentity,
+  partCalibrationToAbsolute,
   rigAssetKey
 } from '../rig-calibration/rig-catalog.service'
 import {
   RIG_CONFIGURABLE_CATEGORIES,
+  type DuplicateRigOptions,
   type RigConfigurableCategory,
   type RigDefinition
 } from '../rig-calibration/rig-catalog.types'
+import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { suggestRigCalibration } from '../rig-calibration/rig-auto-calibration'
 
 interface RigCalibrationDraft {
@@ -44,12 +45,13 @@ const editorStore = useEditorStore()
 const rigCatalog = useRigCatalogStore()
 const rigRuntime = useRigRuntime()
 
-const selectedCategory = ref<RigConfigurableCategory>('head')
-const selectedAssetId = ref<string>()
 const isDuplicateModalOpen = ref(false)
+const isEditingOrigin = ref(false)
 const busy = ref(false)
 
-const draft = ref<RigCalibrationDraft | null>(null)
+// Sélection d'asset par catégorie (ex: { head: 'id-1', eyes: 'id-2', ... })
+const selectedAssetByCat = ref<Record<string, string>>({})
+const drafts = ref<Record<string, RigCalibrationDraft>>({})
 
 const activeGroup = computed<CharacterGroup | null>(() => {
   const selected = editorStore.currentDocument.groups.find(
@@ -89,38 +91,6 @@ const characterAssets = computed(() =>
   )
 )
 
-const categoryAssets = computed(() =>
-  characterAssets.value.filter((asset) => asset.category === selectedCategory.value)
-)
-
-const selectedAsset = computed(() =>
-  assetStore.assets.find((asset) => asset.id === selectedAssetId.value)
-)
-
-const categoryDef = computed(() =>
-  selectedRig.value?.categories.find((c) => c.category === selectedCategory.value)
-)
-
-const categoryEnabled = computed(() => categoryDef.value?.enabled ?? true)
-
-const selectedPart = computed(() => {
-  const rig = selectedRig.value
-  const asset = selectedAsset.value
-  return rig && asset ? rigCatalog.partForAsset(rig, asset) : undefined
-})
-
-const heritageState = computed<RigCalibrationHeritageState>(() => {
-  const rig = selectedRig.value
-  const part = selectedPart.value
-  const cat = categoryDef.value
-  if (!rig || !part || !cat || !cat.enabled) return 'undefined'
-  const key = rigAssetKey(part.asset)
-  if (cat.defaultPartKey === key) return 'template'
-  if (part.calibrationOverride) return 'custom'
-  if (cat.template) return 'inherited'
-  return 'undefined'
-})
-
 const rigOptions = computed<RigCalibrationPanelRig[]>(() =>
   rigCatalog.rigsForCharacter(characterKey.value).map((rig) => ({
     id: rig.id,
@@ -130,72 +100,86 @@ const rigOptions = computed<RigCalibrationPanelRig[]>(() =>
   }))
 )
 
-const categoryOptions = computed<RigCalibrationPanelCategory[]>(() =>
-  RIG_CONFIGURABLE_CATEGORIES.map((category) => {
-    const cat = selectedRig.value?.categories.find((c) => c.category === category)
-    return {
-      value: category,
-      label: ASSET_CATEGORIES[category].label,
-      enabled: cat?.enabled ?? true
-    }
-  })
-)
-
-const assetItems = computed<RigCalibrationPanelItem[]>(() => {
-  const rig = selectedRig.value
-  const cat = categoryDef.value
-  return categoryAssets.value.map((asset) => {
-    const part = rig ? rigCatalog.partForAsset(rig, asset) : undefined
-    const isDefault = Boolean(cat?.defaultPartKey && part && rigAssetKey(part.asset) === cat.defaultPartKey)
-    return {
-      id: asset.id,
-      label: asset.name,
-      categoryLabel: ASSET_CATEGORIES[asset.category].label,
-      dimensions: `${asset.width} × ${asset.height} px`,
-      compatible: Boolean(part),
-      isDefault,
-      hasOverride: Boolean(part?.calibrationOverride)
-    }
-  })
+// Catégories configurables disponibles pour le personnage
+const configurableCategories = computed<RigConfigurableCategory[]>(() => {
+  const available = new Set(characterAssets.value.map((a) => a.category as RigConfigurableCategory))
+  return RIG_CONFIGURABLE_CATEGORIES.filter((c) => available.has(c))
 })
 
-const selectedLayer = computed(() => {
-  const asset = selectedAsset.value
-  const group = activeGroup.value
-  if (!asset || !group) return null
-  return (
-    editorStore.currentDocument.layers.find(
-      (layer) => layer.groupId === group.id && layer.assetId === asset.id
-    ) ?? null
-  )
-})
-
-const value = computed<RigCalibrationPanelValue>(() => {
-  if (draft.value?.dirty) {
-    return {
-      x: draft.value.value.x,
-      y: draft.value.value.y,
-      scale: draft.value.value.scaleX,
-      rotation: draft.value.value.rotation ?? 0,
-      zIndex: draft.value.value.zIndex ?? ASSET_CATEGORIES[selectedCategory.value].defaultZIndex
-    }
-  }
-
-  const layer = selectedLayer.value
+// Configuration des catégories avec leurs sprites et valeurs
+const categoriesConfig = computed<RigCalibrationCategoryConfig[]>(() => {
   const rig = selectedRig.value
-  const part = selectedPart.value
-  const calibration =
-    (rig && part ? effectiveCalibration(rig, part, selectedAsset.value) : undefined) ??
-    identityCalibration(selectedAsset.value)
+  if (!rig) return []
 
-  return {
-    x: layer?.transform.x ?? calibration.x,
-    y: layer?.transform.y ?? calibration.y,
-    scale: layer?.transform.scaleX ?? calibration.scaleX,
-    rotation: layer?.transform.rotation ?? calibration.rotation ?? 0,
-    zIndex:
-      layer?.zIndex ?? calibration.zIndex ?? ASSET_CATEGORIES[selectedCategory.value].defaultZIndex
-  }
+  return configurableCategories.value.map((catKey) => {
+    const catMeta = ASSET_CATEGORIES[catKey]
+    const catDef = rig.categories.find((c) => c.category === catKey)
+    const catAssets = characterAssets.value.filter((a) => a.category === catKey)
+
+    const items: RigCalibrationPanelItem[] = catAssets.map((asset) => {
+      const part = rigCatalog.partForAsset(rig, asset)
+      const isDefault = Boolean(catDef?.defaultPartKey && part && rigAssetKey(part.asset) === catDef.defaultPartKey)
+      return {
+        id: asset.id,
+        label: asset.name,
+        categoryLabel: catMeta?.label ?? catKey,
+        dimensions: `${asset.width} × ${asset.height} px`,
+        compatible: Boolean(part),
+        isDefault,
+        hasOverride: Boolean(part?.calibrationOverride)
+      }
+    })
+
+    const selectedId = selectedAssetByCat.value[catKey] ?? items[0]?.id
+    const selectedAsset = catAssets.find((a) => a.id === selectedId)
+    const selectedPart = selectedAsset ? rigCatalog.partForAsset(rig, selectedAsset) : undefined
+
+    let heritageState: RigCalibrationHeritageState = 'undefined'
+    if (catDef && catDef.enabled && selectedPart) {
+      const key = rigAssetKey(selectedPart.asset)
+      if (catDef.defaultPartKey === key) heritageState = 'template'
+      else if (selectedPart.calibrationOverride) heritageState = 'custom'
+      else if (catDef.template) heritageState = 'inherited'
+    }
+
+    const draft = selectedAsset ? drafts.value[selectedAsset.id] : undefined
+    let value: RigCalibrationPanelValue
+
+    if (draft?.dirty) {
+      value = {
+        x: draft.value.x,
+        y: draft.value.y,
+        scale: draft.value.scaleX,
+        rotation: draft.value.rotation ?? 0,
+        zIndex: draft.value.zIndex ?? catMeta?.defaultZIndex ?? 10
+      }
+    } else {
+      const calibration =
+        (selectedPart ? effectiveCalibration(rig, selectedPart, selectedAsset) : undefined) ??
+        catDef?.template ??
+        identityCalibration(selectedAsset)
+
+      value = {
+        x: calibration.x,
+        y: calibration.y,
+        scale: calibration.scaleX,
+        rotation: calibration.rotation ?? 0,
+        zIndex: calibration.zIndex ?? catMeta?.defaultZIndex ?? 10
+      }
+    }
+
+    return {
+      category: catKey,
+      label: catMeta?.label ?? catKey,
+      icon: catMeta?.icon ?? 'category',
+      color: catMeta?.color ?? '#6366f1',
+      enabled: catDef?.enabled ?? true,
+      items,
+      selectedItemId: selectedId,
+      heritageState,
+      value
+    }
+  })
 })
 
 const canDuplicate = computed(
@@ -213,81 +197,62 @@ const duplicateRigs = computed(() =>
     }))
 )
 
-function activeLayerForCategory(category: RigConfigurableCategory) {
-  const group = activeGroup.value
-  return group
-    ? editorStore.currentDocument.layers.find(
-        (layer) => layer.groupId === group.id && layer.category === category && !layer.muted
-      )
-    : undefined
+function chooseDefaultAssets(): void {
+  const rig = selectedRig.value
+  if (!rig) return
+
+  for (const catKey of configurableCategories.value) {
+    const cat = rig.categories.find((c) => c.category === catKey)
+    const activeLayer = activeGroup.value
+      ? editorStore.currentDocument.layers.find(
+          (layer) => layer.groupId === activeGroup.value?.id && layer.category === catKey && !layer.muted
+        )
+      : undefined
+    const activeAsset = activeLayer
+      ? assetStore.assets.find((asset) => asset.id === activeLayer.assetId)
+      : undefined
+    const defaultPart = cat?.defaultPartKey
+      ? rig.parts.find((part) => rigAssetKey(part.asset) === cat.defaultPartKey)
+      : undefined
+
+    const catAssets = characterAssets.value.filter((a) => a.category === catKey)
+    selectedAssetByCat.value[catKey] =
+      activeAsset?.id ??
+      (defaultPart ? rigCatalog.resolvePartAsset(defaultPart, assetStore.assets)?.id : undefined) ??
+      catAssets[0]?.id
+  }
+  const preferred = selectedAssetByCat.value.head ?? Object.values(selectedAssetByCat.value)[0]
+  if (preferred) rigCatalog.calibrationTargetId = preferred
 }
 
-function chooseAssetForCategory(category: RigConfigurableCategory): void {
+async function persistAllDrafts(): Promise<void> {
   const rig = selectedRig.value
-  const cat = rig?.categories.find((c) => c.category === category)
-  const activeLayer = activeLayerForCategory(category)
-  const activeAsset = activeLayer
-    ? assetStore.assets.find((asset) => asset.id === activeLayer.assetId)
-    : undefined
-  const defaultPart = cat?.defaultPartKey
-    ? rig?.parts.find((part) => rigAssetKey(part.asset) === cat.defaultPartKey)
-    : undefined
+  if (!rig) return
 
-  selectedAssetId.value =
-    activeAsset?.id ??
-    (defaultPart ? rigCatalog.resolvePartAsset(defaultPart, assetStore.assets)?.id : undefined) ??
-    categoryAssets.value[0]?.id
-
-  if (activeLayer && activeAsset) editorStore.selectRigLayerForCalibration(activeLayer.id)
-}
-
-async function persistDraft(): Promise<void> {
-  if (!draft.value || !draft.value.dirty) return
-  const rig = selectedRig.value
-  const asset = selectedAsset.value
-  if (!rig || !asset) return
-  rigCatalog.savePartCalibration(rig.id, asset, draft.value.value)
-  draft.value.dirty = false
+  for (const [assetId, draft] of Object.entries(drafts.value)) {
+    if (!draft.dirty) continue
+    const asset = assetStore.assets.find((a) => a.id === assetId)
+    if (!asset) continue
+    rigCatalog.savePartCalibration(rig.id, asset, draft.value)
+    draft.dirty = false
+  }
 }
 
 async function selectRig(rigId: string): Promise<void> {
-  await persistDraft()
+  await persistAllDrafts()
   const rig = rigCatalog.rigById(rigId)
   if (!rig) return
   rigCatalog.selectedRigId = rig.id
   rigRuntime.activateRig(rig)
-  chooseAssetForCategory(selectedCategory.value)
+  chooseDefaultAssets()
 }
 
-async function selectCategory(category: string): Promise<void> {
-  if (!isRigConfigurableCategory(category as RigConfigurableCategory)) return
-  await persistDraft()
-  selectedCategory.value = category as RigConfigurableCategory
-  chooseAssetForCategory(selectedCategory.value)
-}
+async function selectPart(category: RigConfigurableCategory, assetId: string): Promise<void> {
+  await persistAllDrafts()
+  selectedAssetByCat.value[category] = assetId
+  rigCatalog.calibrationTargetId = assetId
+  isEditingOrigin.value = false
 
-async function toggleCategory(enabled: boolean): Promise<void> {
-  await persistDraft()
-  const rig = selectedRig.value
-  if (!rig) return
-  rigCatalog.setCategoryEnabled(rig.id, selectedCategory.value, enabled)
-
-  const group = activeGroup.value
-  if (!group) return
-
-  if (!enabled) {
-    const layer = activeLayerForCategory(selectedCategory.value)
-    if (layer) editorStore.removeLayer(layer.id)
-  } else {
-    chooseAssetForCategory(selectedCategory.value)
-    if (selectedAsset.value) {
-      await selectAsset(selectedAsset.value.id)
-    }
-  }
-}
-
-async function selectAsset(assetId: string): Promise<void> {
-  await persistDraft()
   const rig = selectedRig.value
   const group = activeGroup.value
   const asset = assetStore.assets.find((candidate) => candidate.id === assetId)
@@ -299,55 +264,69 @@ async function selectAsset(assetId: string): Promise<void> {
 
   const part = rigCatalog.partForAsset(rig, asset)
   if (!part) return
-  const calibration = effectiveCalibration(rig, part, asset) ?? identityCalibration(asset)
+  const relativeCalibration = effectiveCalibration(rig, part, asset) ?? identityCalibration(asset)
+  const absoluteCalibration = partCalibrationToAbsolute(rig, relativeCalibration)
 
   const layer = editorStore.assignAssetToGroup(
     asset.id,
     asset.category,
     group.id,
     asset.name,
-    calibration
+    absoluteCalibration
   )
-  selectedAssetId.value = asset.id
   editorStore.selectRigLayerForCalibration(layer.id)
   assetStore.selectAsset(asset.id)
 }
 
-async function toggleCompatibility(compatible: boolean): Promise<void> {
+function toggleCategoryEnabled(category: RigConfigurableCategory, enabled: boolean): void {
   const rig = selectedRig.value
-  const asset = selectedAsset.value
-  if (!rig || !asset || asset.category === 'body') return
-  await persistDraft()
+  if (!rig) return
+  rigCatalog.setCategoryEnabled(rig.id, category, enabled)
+}
+
+async function toggleCompatibility(category: RigConfigurableCategory, compatible: boolean): Promise<void> {
+  const rig = selectedRig.value
+  const assetId = selectedAssetByCat.value[category]
+  const asset = assetStore.assets.find((a) => a.id === assetId)
+  if (!rig || !asset) return
+  await persistAllDrafts()
 
   rigCatalog.setPartCompatibility(rig.id, asset, compatible)
 
   if (compatible) {
-    await selectAsset(asset.id)
+    await selectPart(category, asset.id)
   } else {
-    const cat = categoryDef.value
+    const cat = rig.categories.find((c) => c.category === category)
     const defaultPart = cat?.defaultPartKey
       ? rig.parts.find((p) => rigAssetKey(p.asset) === cat.defaultPartKey)
       : undefined
     const replacementAsset = defaultPart
       ? rigCatalog.resolvePartAsset(defaultPart, assetStore.assets)
       : undefined
-    const layer = selectedLayer.value
+
+    const layer = activeGroup.value
+      ? editorStore.currentDocument.layers.find(
+          (l) => l.groupId === activeGroup.value?.id && l.assetId === asset.id
+        )
+      : undefined
 
     if (replacementAsset) {
-      await selectAsset(replacementAsset.id)
+      await selectPart(category, replacementAsset.id)
     } else if (layer) {
       editorStore.removeLayer(layer.id)
-      selectedAssetId.value = categoryAssets.value[0]?.id
+      const catAssets = characterAssets.value.filter((a) => a.category === category)
+      selectedAssetByCat.value[category] = catAssets[0]?.id
     }
   }
 }
 
-function setDefaultPart(): void {
+function setDefaultPart(category: RigConfigurableCategory): void {
   const rig = selectedRig.value
-  const asset = selectedAsset.value
+  const assetId = selectedAssetByCat.value[category]
+  const asset = assetStore.assets.find((a) => a.id === assetId)
   if (rig && asset) {
     rigCatalog.setDefaultPart(rig.id, asset)
-    toast.info('Élément par défaut mis à jour', `Définit le template de la catégorie ${ASSET_CATEGORIES[selectedCategory.value].label}.`)
+    toast.info('Pièce par défaut définie', `Définit la position commune pour ${ASSET_CATEGORIES[category]?.label ?? category}.`)
   }
 }
 
@@ -355,23 +334,31 @@ function setDefaultRig(): void {
   const rig = selectedRig.value
   if (!rig) return
   rigCatalog.setDefaultRig(rig.characterKey, rig.id)
-  toast.success('Configuration de base mise à jour', `${rig.name} sera utilisé par défaut.`)
+  toast.success('Rig par défaut mis à jour', `${rig.name} sera utilisé pour ce personnage.`)
 }
 
-function handleDuplicate(sourceRigId: string): void {
+function toggleOriginEditing(): void {
+  isEditingOrigin.value = !isEditingOrigin.value
+  rigCatalog.calibrationTargetId = isEditingOrigin.value ? 'origin' : selectedAssetByCat.value.head ?? null
+}
+
+function handleDuplicate(payload: { sourceRigId: string; options: DuplicateRigOptions }): void {
   const targetRig = selectedRig.value
   if (!targetRig) return
-  rigCatalog.duplicateRigConfiguration(sourceRigId, targetRig.id)
+  rigCatalog.duplicateRigConfiguration(payload.sourceRigId, targetRig.id, payload.options)
   rigRuntime.activateRig(targetRig)
-  chooseAssetForCategory(selectedCategory.value)
-  toast.success('Configuration copiée', 'Les compatibilités et templates ont été importés.')
+  chooseDefaultAssets()
+  toast.success('Configuration copiée', 'Les éléments sélectionnés ont été transférés.')
 }
 
-async function updateValue(next: RigCalibrationPanelValue): Promise<void> {
+async function updateValue(
+  category: RigConfigurableCategory,
+  next: RigCalibrationPanelValue
+): Promise<void> {
   const rig = selectedRig.value
-  const asset = selectedAsset.value
-  const layer = selectedLayer.value
-  if (!rig || !asset || !layer) return
+  const assetId = selectedAssetByCat.value[category]
+  const asset = assetStore.assets.find((a) => a.id === assetId)
+  if (!rig || !asset) return
 
   const nextCalibration: AssetCalibration = {
     x: Math.round(next.x),
@@ -379,46 +366,196 @@ async function updateValue(next: RigCalibrationPanelValue): Promise<void> {
     scaleX: Math.max(0.01, next.scale),
     scaleY: Math.max(0.01, next.scale),
     rotation: next.rotation,
-    zIndex: Math.round(next.zIndex)
+    zIndex: next.zIndex !== undefined ? Math.round(next.zIndex) : 10
   }
 
-  draft.value = {
-    rigId: rig.id,
-    assetKey: rigAssetKey(rigAssetIdentity(asset)),
-    value: nextCalibration,
-    dirty: true
-  }
+  // Persistance directe dans le catalogue de rigs
+  rigCatalog.savePartCalibration(rig.id, asset, nextCalibration)
 
-  editorStore.updateLayerSettings(
-    layer.id,
-    {
-      x: nextCalibration.x,
-      y: nextCalibration.y,
-      scaleX: nextCalibration.scaleX,
-      scaleY: nextCalibration.scaleY,
-      rotation: nextCalibration.rotation
-    },
-    nextCalibration.zIndex ?? layer.zIndex
-  )
+  const layer = activeGroup.value
+    ? editorStore.currentDocument.layers.find(
+        (l) => l.groupId === activeGroup.value?.id && l.assetId === asset.id
+      )
+    : undefined
+
+  if (layer) {
+    const abs = partCalibrationToAbsolute(rig, nextCalibration)
+    editorStore.updateLayerSettings(
+      layer.id,
+      {
+        x: abs.x,
+        y: abs.y,
+        scaleX: abs.scaleX,
+        scaleY: abs.scaleY,
+        rotation: abs.rotation
+      },
+      nextCalibration.zIndex ?? layer.zIndex
+    )
+  }
 }
 
-async function autoCalibrate(): Promise<void> {
+function savePart(category: RigConfigurableCategory): void {
   const rig = selectedRig.value
-  const asset = selectedAsset.value
-  const layer = selectedLayer.value
-  if (!rig || !asset || !layer) return
+  const catConfig = categoriesConfig.value.find((c) => c.category === category)
+  const assetId = selectedAssetByCat.value[category]
+  const asset = assetStore.assets.find((a) => a.id === assetId)
+  if (!rig || !catConfig || !asset) return
+
+  const nextRel: AssetCalibration = {
+    x: catConfig.value.x,
+    y: catConfig.value.y,
+    scaleX: catConfig.value.scale,
+    scaleY: catConfig.value.scale,
+    rotation: catConfig.value.rotation,
+    zIndex: catConfig.value.zIndex ?? 10
+  }
+
+  rigCatalog.savePartSpecificPosition(rig.id, asset, nextRel)
+  toast.success('Configuration sauvegardée', `Position enregistrée pour « ${asset.name} ».`)
+
+  const layer = activeGroup.value
+    ? editorStore.currentDocument.layers.find(
+        (l) => l.groupId === activeGroup.value?.id && l.assetId === asset.id
+      )
+    : undefined
+
+  if (layer) {
+    const abs = partCalibrationToAbsolute(rig, nextRel)
+    editorStore.updateLayerSettings(
+      layer.id,
+      { x: abs.x, y: abs.y, scaleX: abs.scaleX, scaleY: abs.scaleY, rotation: abs.rotation },
+      nextRel.zIndex ?? layer.zIndex
+    )
+  }
+}
+
+function setCommonPosition(category: RigConfigurableCategory): void {
+  const rig = selectedRig.value
+  const catConfig = categoriesConfig.value.find((c) => c.category === category)
+  const assetId = selectedAssetByCat.value[category]
+  const asset = assetStore.assets.find((a) => a.id === assetId)
+  if (!rig || !catConfig || !asset) return
+
+  const nextRel: AssetCalibration = {
+    x: catConfig.value.x,
+    y: catConfig.value.y,
+    scaleX: catConfig.value.scale,
+    scaleY: catConfig.value.scale,
+    rotation: catConfig.value.rotation,
+    zIndex: catConfig.value.zIndex ?? 10
+  }
+
+  rigCatalog.savePartCommonPosition(rig.id, category, nextRel)
+  const part = rigCatalog.partForAsset(rig, asset)
+  if (part?.calibrationOverride) {
+    rigCatalog.resetPartToCommon(rig.id, asset)
+  }
+
+  const layer = activeGroup.value
+    ? editorStore.currentDocument.layers.find(
+        (l) => l.groupId === activeGroup.value?.id && l.assetId === asset.id
+      )
+    : undefined
+
+  if (layer) {
+    const abs = partCalibrationToAbsolute(rig, nextRel)
+    editorStore.updateLayerSettings(
+      layer.id,
+      { x: abs.x, y: abs.y, scaleX: abs.scaleX, scaleY: abs.scaleY, rotation: abs.rotation },
+      nextRel.zIndex ?? layer.zIndex
+    )
+  }
+  toast.success('Position commune enregistrée', `Appliquée par défaut à la catégorie ${catConfig.label}.`)
+}
+
+function setSpecificPosition(category: RigConfigurableCategory): void {
+  const rig = selectedRig.value
+  const catConfig = categoriesConfig.value.find((c) => c.category === category)
+  const assetId = selectedAssetByCat.value[category]
+  const asset = assetStore.assets.find((a) => a.id === assetId)
+  if (!rig || !catConfig || !asset) return
+
+  const nextRel: AssetCalibration = {
+    x: catConfig.value.x,
+    y: catConfig.value.y,
+    scaleX: catConfig.value.scale,
+    scaleY: catConfig.value.scale,
+    rotation: catConfig.value.rotation,
+    zIndex: catConfig.value.zIndex ?? 10
+  }
+
+  rigCatalog.savePartSpecificPosition(rig.id, asset, nextRel)
+
+  const layer = activeGroup.value
+    ? editorStore.currentDocument.layers.find(
+        (l) => l.groupId === activeGroup.value?.id && l.assetId === asset.id
+      )
+    : undefined
+
+  if (layer) {
+    const abs = partCalibrationToAbsolute(rig, nextRel)
+    editorStore.updateLayerSettings(
+      layer.id,
+      { x: abs.x, y: abs.y, scaleX: abs.scaleX, scaleY: abs.scaleY, rotation: abs.rotation },
+      nextRel.zIndex ?? layer.zIndex
+    )
+  }
+  toast.info('Position spécifique enregistrée', `Définie uniquement pour « ${asset.name} ».`)
+}
+
+function applyToAllParts(category: RigConfigurableCategory): void {
+  const rig = selectedRig.value
+  const catConfig = categoriesConfig.value.find((c) => c.category === category)
+  const assetId = selectedAssetByCat.value[category]
+  const asset = assetStore.assets.find((a) => a.id === assetId)
+  if (!rig || !catConfig) return
+
+  const nextRel: AssetCalibration = {
+    x: catConfig.value.x,
+    y: catConfig.value.y,
+    scaleX: catConfig.value.scale,
+    scaleY: catConfig.value.scale,
+    rotation: catConfig.value.rotation,
+    zIndex: catConfig.value.zIndex ?? 10
+  }
+
+  rigCatalog.applyPartCalibrationToAll(rig.id, category, nextRel)
+
+  if (asset) {
+    const layer = activeGroup.value
+      ? editorStore.currentDocument.layers.find(
+          (l) => l.groupId === activeGroup.value?.id && l.assetId === asset.id
+        )
+      : undefined
+    if (layer) {
+      const abs = partCalibrationToAbsolute(rig, nextRel)
+      editorStore.updateLayerSettings(
+        layer.id,
+        { x: abs.x, y: abs.y, scaleX: abs.scaleX, scaleY: abs.scaleY, rotation: abs.rotation },
+        nextRel.zIndex ?? layer.zIndex
+      )
+    }
+  }
+  toast.success('Position appliquée', `Toutes les pièces de ${catConfig.label} utilisent désormais cette position.`)
+}
+
+async function autoCalibrate(category: RigConfigurableCategory): Promise<void> {
+  const rig = selectedRig.value
+  const assetId = selectedAssetByCat.value[category]
+  const asset = assetStore.assets.find((a) => a.id === assetId)
+  if (!rig || !asset) return
   busy.value = true
   try {
     const calibration = await suggestRigCalibration(asset, {
       canvasWidth: rig.canvasWidth,
       canvasHeight: rig.canvasHeight
     })
-    await updateValue({
+    await updateValue(category, {
       x: calibration.x,
       y: calibration.y,
       scale: calibration.scaleX,
       rotation: calibration.rotation ?? 0,
-      zIndex: calibration.zIndex ?? layer.zIndex
+      zIndex: calibration.zIndex ?? 10
     })
     toast.info('Suggestion appliquée', 'Ajustez si nécessaire puis enregistrez.')
   } finally {
@@ -426,86 +563,48 @@ async function autoCalibrate(): Promise<void> {
   }
 }
 
-async function resetCalibration(): Promise<void> {
+async function resetPart(category: RigConfigurableCategory): Promise<void> {
   const rig = selectedRig.value
-  const asset = selectedAsset.value
+  const assetId = selectedAssetByCat.value[category]
+  const asset = assetStore.assets.find((a) => a.id === assetId)
   if (!rig || !asset) return
-  rigCatalog.resetPartCalibration(rig.id, asset)
-  draft.value = null
+  rigCatalog.resetPartToCommon(rig.id, asset)
+  if (drafts.value[asset.id]) {
+    delete drafts.value[asset.id]
+  }
 
   const part = rigCatalog.partForAsset(rig, asset)
-  const calibration =
+  const relCal =
     (part ? effectiveCalibration(rig, part, asset) : undefined) ?? identityCalibration(asset)
 
-  const layer = selectedLayer.value
+  const layer = activeGroup.value
+    ? editorStore.currentDocument.layers.find(
+        (l) => l.groupId === activeGroup.value?.id && l.assetId === asset.id
+      )
+    : undefined
+
   if (layer) {
+    const abs = partCalibrationToAbsolute(rig, relCal)
     editorStore.updateLayerSettings(
       layer.id,
       {
-        x: calibration.x,
-        y: calibration.y,
-        scaleX: calibration.scaleX,
-        scaleY: calibration.scaleY,
-        rotation: calibration.rotation ?? 0
+        x: abs.x,
+        y: abs.y,
+        scaleX: abs.scaleX,
+        scaleY: abs.scaleY,
+        rotation: abs.rotation
       },
-      calibration.zIndex ?? layer.zIndex
+      relCal.zIndex ?? layer.zIndex
     )
   }
-  toast.info('Surcharge réinitialisée', 'L’élément hérite désormais du template de sa catégorie.')
+  toast.info('Position réinitialisée', 'La pièce hérite désormais de la position commune.')
 }
 
-const FIELD_LABELS: Record<keyof RigCalibrationPanelValue, string> = {
-  x: 'X',
-  y: 'Y',
-  scale: 'Échelle',
-  rotation: 'Rotation',
-  zIndex: 'Z-index'
-}
-
-async function duplicateField(field: keyof RigCalibrationPanelValue): Promise<void> {
+function resetBodyOrigin(): void {
   const rig = selectedRig.value
-  const asset = selectedAsset.value
-  if (!rig || !asset) return
-
-  const currentValue = value.value[field]
-  rigCatalog.propagateFieldToCategory(rig.id, selectedCategory.value, field, currentValue)
-
-  if (draft.value) {
-    draft.value.dirty = false
-  }
-
-  const layer = selectedLayer.value
-  if (layer) {
-    const part = rigCatalog.partForAsset(rig, asset)
-    const cal =
-      (part ? effectiveCalibration(rig, part, asset) : undefined) ?? identityCalibration(asset)
-    editorStore.updateLayerSettings(
-      layer.id,
-      {
-        x: cal.x,
-        y: cal.y,
-        scaleX: cal.scaleX,
-        scaleY: cal.scaleY,
-        rotation: cal.rotation ?? 0
-      },
-      cal.zIndex ?? layer.zIndex
-    )
-  }
-
-  toast.success(
-    'Champ dupliqué',
-    `La valeur de « ${FIELD_LABELS[field]} » a été appliquée à tous les sprites de la catégorie ${ASSET_CATEGORIES[selectedCategory.value].label}.`
-  )
-}
-
-async function saveCalibration(): Promise<void> {
-  busy.value = true
-  try {
-    await persistDraft()
-    toast.success('Rig sauvegardé', 'La configuration a été enregistrée.')
-  } finally {
-    busy.value = false
-  }
+  if (!rig) return
+  rigCatalog.resetRigBodyOrigin(rig.id)
+  toast.info('Origine recentrée', 'L’origine du corps a été réinitialisée à son centre.')
 }
 
 function exportCatalog(): void {
@@ -535,7 +634,7 @@ async function importCatalog(file: File): Promise<void> {
 }
 
 async function close(): Promise<void> {
-  await persistDraft()
+  await persistAllDrafts()
   rigCatalog.closeCalibration()
   const group = activeGroup.value
   if (group) editorStore.selectGroupForEditing(group.id)
@@ -549,9 +648,11 @@ watch(
   () => editorStore.selectedLayer,
   (layer) => {
     if (!rigCatalog.isCalibrationOpen || !layer || layer.groupId !== activeGroup.value?.id) return
-    if (!isRigConfigurableCategory(layer.category as RigConfigurableCategory)) return
-    selectedCategory.value = layer.category as RigConfigurableCategory
-    selectedAssetId.value = layer.assetId
+    if (isRigConfigurableCategory(layer.category)) {
+      selectedAssetByCat.value[layer.category] = layer.assetId
+      rigCatalog.calibrationTargetId = layer.assetId
+      isEditingOrigin.value = false
+    }
   }
 )
 
@@ -560,12 +661,11 @@ onMounted(() => {
   const rig = selectedRig.value
   if (!rig) return
   rigCatalog.selectedRigId = rig.id
-  selectedCategory.value = 'head'
-  chooseAssetForCategory('head')
+  chooseDefaultAssets()
 })
 
 onBeforeUnmount(() => {
-  void persistDraft()
+  void persistAllDrafts()
 })
 </script>
 
@@ -575,28 +675,27 @@ onBeforeUnmount(() => {
     :canvas-label="`${selectedRig?.canvasWidth ?? DEFAULT_RIG_CANVAS.width} × ${selectedRig?.canvasHeight ?? DEFAULT_RIG_CANVAS.height}`"
     :rigs="rigOptions"
     :selected-rig-id="selectedRig?.id"
-    :categories="categoryOptions"
-    :selected-category="selectedCategory"
-    :category-enabled="categoryEnabled"
-    :items="assetItems"
-    :selected-item-id="selectedAssetId"
-    :heritage-state="heritageState"
-    :value="value"
+    :body-origin="selectedRig?.bodyOrigin"
+    :is-editing-origin="isEditingOrigin"
+    :categories="categoriesConfig"
     :busy="busy"
     :can-duplicate="canDuplicate"
     @select-rig="selectRig"
-    @select-category="selectCategory"
-    @toggle-category="toggleCategory"
-    @select="selectAsset"
+    @set-default-rig="setDefaultRig"
+    @edit-origin="toggleOriginEditing"
+    @reset-origin="resetBodyOrigin"
+    @toggle-category-enabled="toggleCategoryEnabled"
+    @select-part="selectPart"
     @toggle-compatible="toggleCompatibility"
     @set-default-part="setDefaultPart"
-    @set-default-rig="setDefaultRig"
-    @open-duplicate="isDuplicateModalOpen = true"
-    @duplicate-field="duplicateField"
     @update:value="updateValue"
+    @set-common-position="setCommonPosition"
+    @set-specific-position="setSpecificPosition"
+    @save-part="savePart"
+    @reset-part="resetPart"
+    @apply-all="applyToAllParts"
     @auto="autoCalibrate"
-    @reset="resetCalibration"
-    @save="saveCalibration"
+    @open-duplicate="isDuplicateModalOpen = true"
     @export="exportCatalog"
     @import="importCatalog"
     @close="close"

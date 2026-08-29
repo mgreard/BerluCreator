@@ -34,6 +34,7 @@ export const useViewportSnapshotStore = defineStore('viewportSnapshots', () => {
       depthOfField: { ...document.depthOfField },
       groups: JSON.parse(JSON.stringify(document.groups)),
       layers: JSON.parse(JSON.stringify(document.layers)),
+      rigCatalogSnapshot: document.rigCatalogSnapshot,
       createdAt: now,
       updatedAt: now
     }

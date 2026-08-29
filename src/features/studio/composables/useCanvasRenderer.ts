@@ -531,16 +531,50 @@ export function useCanvasRenderer(
       const isGroup = isGroupScope?.value ?? false
       const primaryColor = isGroup ? '#6366f1' : '#38bdf8' // Indigo pour groupe, Cyan pour sprite individuel
       const handleSize = 10
+      const centerX = bounds.x + bounds.width / 2
+      const centerY = bounds.y + bounds.height / 2
+      const rotY = bounds.y - 24
 
-      // Cadre de sélection
+      // 1. Tige verticale reliant le haut de la boîte à la poignée de rotation
+      ctx.beginPath()
+      ctx.strokeStyle = primaryColor
+      ctx.lineWidth = 1.5
+      ctx.moveTo(centerX, bounds.y)
+      ctx.lineTo(centerX, rotY)
+      ctx.stroke()
+
+      // 2. Poignée de rotation circulaire déportée
+      // Ombre
+      ctx.beginPath()
+      ctx.arc(centerX, rotY + 1, 7, 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
+      ctx.fill()
+
+      // Fond blanc
+      ctx.beginPath()
+      ctx.arc(centerX, rotY, 7, 0, Math.PI * 2)
+      ctx.fillStyle = '#ffffff'
+      ctx.fill()
+
+      // Contour accentué
+      ctx.strokeStyle = primaryColor
+      ctx.lineWidth = 2
+      ctx.stroke()
+
+      // Point central
+      ctx.beginPath()
+      ctx.arc(centerX, rotY, 2, 0, Math.PI * 2)
+      ctx.fillStyle = primaryColor
+      ctx.fill()
+
+      // 3. Cadre de sélection
       ctx.strokeStyle = primaryColor
       ctx.lineWidth = 2
       ctx.setLineDash([6, 4])
       ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height)
       ctx.setLineDash([])
 
-      const centerX = bounds.x + bounds.width / 2
-      const centerY = bounds.y + bounds.height / 2
+      // 4. 8 Poignées de redimensionnement carrées
       const handles = [
         { x: bounds.x, y: bounds.y, size: handleSize },
         { x: bounds.x + bounds.width, y: bounds.y, size: handleSize },
@@ -568,7 +602,7 @@ export function useCanvasRenderer(
         ctx.strokeRect(handle.x - halfSize, handle.y - halfSize, handle.size, handle.size)
       }
 
-      // Étiquette informative au-dessus de la sélection
+      // 5. Étiquette informative au-dessus de la sélection (badge à gauche)
       if (targetLabel?.value) {
         ctx.font = 'bold 11px sans-serif'
         const labelText = targetLabel.value
@@ -577,6 +611,9 @@ export function useCanvasRenderer(
         const badgeH = 20
         const badgeX = bounds.x
         const badgeY = Math.max(4, bounds.y - badgeH - 4)
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)'
+        ctx.fillRect(badgeX + 1, badgeY + 1, badgeW, badgeH)
 
         ctx.fillStyle = primaryColor
         ctx.fillRect(badgeX, badgeY, badgeW, badgeH)

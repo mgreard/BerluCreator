@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
+import { FREE_ACCESSORY_CATEGORIES } from '@core/constants/editor'
 import { useAssetStore } from '../stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import AssetCard from './AssetCard.vue'
@@ -26,7 +27,6 @@ interface CharacterCategory {
   label: string
   icon: string
   category: AssetCategory
-  filterTag?: string
 }
 
 interface CharacterSummary {
@@ -37,17 +37,13 @@ interface CharacterSummary {
 const CHARACTER_CATEGORIES: CharacterCategory[] = [
   { id: 'full', label: 'Sprites complets', icon: 'person', category: 'character_full' },
   { id: 'body', label: 'Corps', icon: 'body_system', category: 'body' },
-  { id: 'head', label: 'Têtes', icon: 'face', category: 'head' },
-  { id: 'eyes', label: 'Yeux', icon: 'visibility', category: 'eyes' },
-  { id: 'mouth', label: 'Bouches', icon: 'mood', category: 'mouth' },
-  { id: 'arms_left', label: 'Bras gauches', icon: 'front_hand', category: 'arms_left' },
-  { id: 'arms_right', label: 'Bras droits', icon: 'waving_hand', category: 'arms_right' },
-  { id: 'outfit', label: 'Tenues', icon: 'styler', category: 'props_host', filterTag: 'tenue' },
-  { id: 'props_host', label: 'Accessoires', icon: 'apparel', category: 'props_host' }
+  { id: 'head', label: 'Têtes', icon: 'face', category: 'head' }
 ]
 
 const STAGE_CATEGORIES: Array<{ category: AssetCategory; label: string; icon: string }> = [
   { category: 'background', label: 'Arrière-plans', icon: 'tv_gen' },
+  { category: 'eyes', label: 'Accessoires visage', icon: 'visibility' },
+  { category: 'props_host', label: 'Accessoires', icon: 'apparel' },
   { category: 'desk', label: 'Bureaux', icon: 'desk' },
   { category: 'props_desk', label: 'Objets du bureau', icon: 'inventory_2' },
   { category: 'props_set', label: 'Accessoires plateau', icon: 'category' },
@@ -148,16 +144,25 @@ watch(
   { deep: true }
 )
 
-function hasOutfitTag(asset: Asset): boolean {
-  return (
-    asset.tags.some((tag) => ['tenue', 'outfit'].includes(tag.toLowerCase())) ||
-    /tenue|outfit/i.test(asset.name)
-  )
-}
+watch(
+  () => rigCatalog.isCalibrationOpen,
+  (isOpen) => {
+    if (isOpen) {
+      const selectedRig = rigCatalog.rigById(rigCatalog.selectedRigId) ?? rigCatalog.rigs[0]
+      const charKey = selectedRig?.characterKey ?? availableCharacters.value[0]?.key
+      if (charKey) {
+        activeSelection.value = {
+          type: 'character',
+          characterKey: charKey,
+          categoryId: 'head'
+        }
+      }
+    }
+  },
+  { immediate: true }
+)
 
 function matchesCharacterCategory(asset: Asset, definition: CharacterCategory): boolean {
-  if (definition.id === 'outfit') return asset.category === 'props_host' && hasOutfitTag(asset)
-  if (definition.id === 'props_host') return asset.category === 'props_host' && !hasOutfitTag(asset)
   return asset.category === definition.category
 }
 
@@ -167,7 +172,7 @@ function characterAssets(key: string): Asset[] {
     (asset) =>
       ASSET_CATEGORIES[asset.category].placementMode === 'character-anchored' &&
       characterKey(asset) === key &&
-      isAssetAvailableInRig(asset, activeRig)
+      (rigCatalog.isCalibrationOpen ? true : isAssetAvailableInRig(asset, activeRig))
   )
 }
 
@@ -221,6 +226,24 @@ const displayedAssets = computed(() => {
         asset.tags.some((tag) => tag.toLowerCase().includes(query))
     )
   }
+
+  if (
+    rigCatalog.isCalibrationOpen &&
+    selection.type === 'character' &&
+    selection.categoryId === 'head'
+  ) {
+    const activeRig =
+      rigCatalog.rigById(rigCatalog.selectedRigId) ??
+      activeRigForCharacterKey(selection.characterKey)
+    return [...assets].sort((left, right) => {
+      const compA = activeRig ? Boolean(rigCatalog.partForAsset(activeRig, left)) : false
+      const compB = activeRig ? Boolean(rigCatalog.partForAsset(activeRig, right)) : false
+      if (compA && !compB) return -1
+      if (!compA && compB) return 1
+      return left.name.localeCompare(right.name, 'fr')
+    })
+  }
+
   return [...assets].sort((left, right) => left.name.localeCompare(right.name, 'fr'))
 })
 
@@ -276,6 +299,17 @@ const visibleAssetIds = computed(() => {
 })
 
 function onSelectAsset(asset: Asset): void {
+  if (FREE_ACCESSORY_CATEGORIES.includes(asset.category as 'eyes' | 'props_host')) {
+    const existing = editorStore.currentDocument.layers
+      .filter((layer) => layer.assetId === asset.id && !layer.muted)
+      .sort((left, right) => right.order - left.order)[0]
+    const layer =
+      existing ?? editorStore.assignAssetToGroup(asset.id, asset.category, null, asset.name)
+    editorStore.selectLayerForEditing(layer.id)
+    assetStore.selectAsset(asset.id)
+    return
+  }
+
   const usesRigCatalog = Boolean(asset.character && isRigSlotCategory(asset.category))
   const layer = usesRigCatalog
     ? rigRuntime.selectCharacterAsset(asset)
@@ -291,6 +325,12 @@ function onSelectAsset(asset: Asset): void {
     editorStore.selectGroupForEditing(layer.groupId)
   }
   assetStore.selectAsset(layer?.assetId ?? null)
+}
+
+function onDuplicateAsset(asset: Asset): void {
+  const layer = editorStore.assignAssetToGroup(asset.id, asset.category, null, asset.name)
+  editorStore.selectLayerForEditing(layer.id)
+  assetStore.selectAsset(asset.id)
 }
 
 async function onDeleteAsset(asset: Asset): Promise<void> {
@@ -470,7 +510,9 @@ onMounted(() => assetStore.loadAssets())
             :key="asset.id"
             :asset="asset"
             :selected="visibleAssetIds.has(asset.id)"
+            :allow-duplicate="FREE_ACCESSORY_CATEGORIES.includes(asset.category as 'eyes' | 'props_host')"
             @select="onSelectAsset"
+            @duplicate="onDuplicateAsset"
             @delete="onDeleteAsset"
           />
         </div>

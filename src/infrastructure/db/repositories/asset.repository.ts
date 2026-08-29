@@ -11,6 +11,10 @@ export class AssetRepository {
     return await db.assets.toArray()
   }
 
+  async list(): Promise<Asset[]> {
+    return await this.getAll()
+  }
+
   async getById(id: string): Promise<Asset | undefined> {
     return await db.assets.get(id)
   }

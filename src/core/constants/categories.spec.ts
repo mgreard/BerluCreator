@@ -20,4 +20,17 @@ describe('asset categories', () => {
     expect(resolveSpriteConfig('desk1', 'desk').isMovable).toBe(true)
     expect(SPRITES_CONFIG.categoryDefaults.desk.isMovable).toBe(true)
   })
+
+  it('déclare lunettes et accessoires comme calques libres multi-instances', () => {
+    expect(ASSET_CATEGORIES.eyes).toMatchObject({
+      placementMode: 'free-transform',
+      layerCardinality: 'multi'
+    })
+    expect(ASSET_CATEGORIES.props_host).toMatchObject({
+      placementMode: 'free-transform',
+      layerCardinality: 'multi'
+    })
+    expect(SPRITES_CONFIG.categoryDefaults.eyes.isMovable).toBe(true)
+    expect(SPRITES_CONFIG.categoryDefaults.props_host.isMovable).toBe(true)
+  })
 })

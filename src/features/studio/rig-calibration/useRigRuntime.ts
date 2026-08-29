@@ -11,9 +11,10 @@ import {
   effectiveCalibration,
   findAssetByRigIdentity,
   isRigSlotCategory,
+  partCalibrationToAbsolute,
   rigAssetKey
 } from './rig-catalog.service'
-import type { RigDefinition, RigPartDefinition } from './rig-catalog.types'
+import type { RigDefinition } from './rig-catalog.types'
 
 export function useRigRuntime() {
   const assetStore = useAssetStore()
@@ -57,20 +58,20 @@ export function useRigRuntime() {
       })
     }
 
-    // 2. Pièces configurables actives
+    // 2. Pièces configurables actives (Têtes, etc.)
     for (const categoryDef of rig.categories) {
       if (!categoryDef.enabled) continue
 
       if (selectedAsset && selectedAsset.category === categoryDef.category) {
         const selectedPart = rigCatalog.partForAsset(rig, selectedAsset)
         if (selectedPart) {
-          const calibration = effectiveCalibration(rig, selectedPart, selectedAsset)
-          if (calibration) {
+          const relativeCalibration = effectiveCalibration(rig, selectedPart, selectedAsset)
+          if (relativeCalibration) {
             presets.push({
               assetId: selectedAsset.id,
               category: selectedAsset.category,
               name: selectedAsset.name,
-              calibration
+              calibration: partCalibrationToAbsolute(rig, relativeCalibration)
             })
             continue
           }
@@ -84,13 +85,13 @@ export function useRigRuntime() {
         if (defaultPart) {
           const defaultAsset = rigCatalog.resolvePartAsset(defaultPart, assetStore.assets)
           if (defaultAsset) {
-            const calibration = effectiveCalibration(rig, defaultPart, defaultAsset)
-            if (calibration) {
+            const relativeCalibration = effectiveCalibration(rig, defaultPart, defaultAsset)
+            if (relativeCalibration) {
               presets.push({
                 assetId: defaultAsset.id,
                 category: defaultAsset.category,
                 name: defaultAsset.name,
-                calibration
+                calibration: partCalibrationToAbsolute(rig, relativeCalibration)
               })
             }
           }
@@ -160,8 +161,8 @@ export function useRigRuntime() {
     if (group && hasActiveBody && currentRig?.id === targetRig.id) {
       const part = rigCatalog.partForAsset(targetRig, asset)
       if (!part) return null
-      const calibration = effectiveCalibration(targetRig, part, asset)
-      if (!calibration) return null
+      const relativeCalibration = effectiveCalibration(targetRig, part, asset)
+      if (!relativeCalibration) return null
 
       if (group.activeRigId !== targetRig.id) {
         editorStore.updateGroup(group.id, { activeRigId: targetRig.id })
@@ -171,22 +172,19 @@ export function useRigRuntime() {
         asset.category,
         group.id,
         asset.name,
-        calibration
+        partCalibrationToAbsolute(targetRig, relativeCalibration)
       )
     }
 
     return activateRig(targetRig, asset)
   }
 
-  function activePartForAsset(rig: RigDefinition, asset: Asset): RigPartDefinition | undefined {
-    return rigCatalog.partForAsset(rig, asset)
-  }
-
   return {
+    characterGroup,
     activeRigForGroup,
     presetsForRig,
     activateRig,
-    selectCharacterAsset,
-    activePartForAsset
+    targetRigForAsset,
+    selectCharacterAsset
   }
 }

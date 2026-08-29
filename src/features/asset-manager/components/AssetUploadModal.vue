@@ -70,17 +70,14 @@ const newCharacterName = ref('')
 const selectedCategory = ref<AssetCategory>('character_full')
 
 const CHARACTER_SKELETON_SLOTS: { id: AssetCategory; label: string; icon: string; description: string }[] = [
-  { id: 'head', label: 'Tête & Visage', icon: 'face', description: 'Expressions faciales et regards' },
-  { id: 'eyes', label: 'Yeux / Regard', icon: 'visibility', description: 'Regard, clignements, lunettes' },
-  { id: 'mouth', label: 'Bouche & Phonèmes', icon: 'lips', description: 'Expressions labiales et phonèmes' },
-  { id: 'arms_left', label: 'Bras Gauche', icon: 'front_hand', description: 'Gestuelle et postures gauches' },
-  { id: 'arms_right', label: 'Bras Droit', icon: 'waving_hand', description: 'Gestuelle et postures droites' },
   { id: 'body', label: 'Corps & Buste', icon: 'body_system', description: 'Tronc et vêtements de base' },
-  { id: 'props_host', label: 'Accessoire Porté', icon: 'apparel', description: 'Chapeaux, objets tenus en main' }
+  { id: 'head', label: 'Tête & Visage', icon: 'face', description: 'Expressions faciales et regards' }
 ]
 
 const STAGE_SLOTS: { id: AssetCategory; label: string; icon: string; description: string }[] = [
   { id: 'background', label: 'Arrière-plan', icon: 'tv_gen', description: 'Décors et fonds de plateau' },
+  { id: 'eyes', label: 'Accessoires Visage', icon: 'visibility', description: 'Lunettes et effets de visage libres' },
+  { id: 'props_host', label: 'Accessoires Personnage', icon: 'apparel', description: 'Chapeaux, objets tenus' },
   { id: 'desk', label: 'Bureau', icon: 'desk', description: 'Comptoir et mobilier' },
   { id: 'props_desk', label: 'Objets du Bureau', icon: 'inventory_2', description: 'Objets posés sur la table' },
   { id: 'props_set', label: 'Accessoires Plateau', icon: 'category', description: 'Éléments de décor plateau' },

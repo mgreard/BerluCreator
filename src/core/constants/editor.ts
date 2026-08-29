@@ -4,6 +4,7 @@ import type {
   EditorGroup,
   Transform2D
 } from '../types/editor.types'
+import type { AssetCategory } from '../types/asset.types'
 
 export const DEFAULT_STAGE_RESOLUTION = {
   width: 1792,
@@ -36,13 +37,16 @@ export const OPTICAL_DEPTH_PRESETS = {
 export const CHARACTER_CATEGORIES = [
   'character_full',
   'body',
-  'head',
-  'mouth',
-  'eyes',
-  'arms_left',
-  'arms_right',
-  'props_host'
+  'head'
 ] as const
+
+export const FREE_ACCESSORY_CATEGORIES = [
+  'eyes',
+  'props_host',
+  'props_set',
+  'props_desk',
+  'foreground'
+] as const satisfies readonly AssetCategory[]
 
 export const DEFAULT_CHARACTER_GROUP: CharacterGroup = {
   id: 'grp_berlu',
@@ -75,6 +79,19 @@ export const DEFAULT_EDITOR_GROUPS: EditorGroup[] = [
     isDefault: true
   },
   DEFAULT_CHARACTER_GROUP,
+  {
+    id: 'grp_accessories',
+    name: 'Accessoires',
+    kind: 'stage',
+    zIndex: 27,
+    transform: { ...DEFAULT_TRANSFORM },
+    muted: false,
+    locked: false,
+    collapsed: false,
+    color: 'purple',
+    allowedCategories: ['eyes', 'props_host'],
+    isDefault: true
+  },
   {
     id: 'grp_desk',
     name: 'Bureau',

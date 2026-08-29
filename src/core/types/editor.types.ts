@@ -95,6 +95,7 @@ export interface EditorDocument {
   depthOfField: DepthOfFieldSettings
   layers: EditorLayer[]
   groups: EditorGroup[]
+  rigCatalogSnapshot?: string
   createdAt: number
   updatedAt: number
 }
@@ -107,6 +108,7 @@ export interface ViewportSnapshot {
   depthOfField: DepthOfFieldSettings
   layers: EditorLayer[]
   groups: EditorGroup[]
+  rigCatalogSnapshot?: string
   createdAt: number
   updatedAt: number
 }

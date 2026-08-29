@@ -64,14 +64,11 @@ describe('AssetLibraryPanel - Filtrage par rig actif', () => {
     const bodyA = mockAsset('body-a', 'Buste', 'body')
     const bodyB = mockAsset('body-b', 'Corps complet', 'body')
     const head1 = mockAsset('head-1', 'Tête A', 'head')
-    const armLeft = mockAsset('arm-1', 'Bras gauche', 'arms_left')
 
-    assetStore.assets = [bodyA, bodyB, head1, armLeft]
+    assetStore.assets = [bodyA, bodyB, head1]
     rigCatalog.initialize(assetStore.assets)
 
     const [bustRig] = rigCatalog.rigs
-    // Désactiver arms_left sur le buste
-    rigCatalog.setCategoryEnabled(bustRig!.id, 'arms_left', false)
 
     // Activer bustRig dans l'éditeur sur le groupe Berlu par défaut
     const group = editorStore.currentDocument.groups.find(
@@ -84,10 +81,8 @@ describe('AssetLibraryPanel - Filtrage par rig actif', () => {
       props: { open: true }
     })
 
-    // Vérifier que la catégorie "Bras gauches" n'apparaît pas sous Berlu car désactivée sur le buste
     expect(wrapper.text()).toContain('Corps')
     expect(wrapper.text()).toContain('Têtes')
-    expect(wrapper.text()).not.toContain('Bras gauches')
 
     // Les 2 corps restent toujours disponibles pour permettre le switch de rig
     const navItems = wrapper.findAllComponents({ name: 'NavigationItem' })

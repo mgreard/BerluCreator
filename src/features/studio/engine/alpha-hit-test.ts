@@ -1,4 +1,14 @@
-import type { RenderableLayer } from '../composables/useHierarchyResolver'
+export interface TransformGeometry {
+  x: number
+  y: number
+  width: number
+  height: number
+  scaleX?: number
+  scaleY?: number
+  rotation?: number
+  transformOriginX?: number
+  transformOriginY?: number
+}
 
 interface AlphaMask {
   width: number
@@ -8,51 +18,55 @@ interface AlphaMask {
 
 const alphaMaskCache = new WeakMap<HTMLImageElement, AlphaMask | null>()
 
-export function mapStagePointToImagePixel(
-  layer: RenderableLayer,
+export function mapPointToImagePixel(
+  geometry: TransformGeometry,
   point: { x: number; y: number },
   imageWidth: number,
   imageHeight: number
 ): { x: number; y: number } | null {
-  const scaleX = layer.scaleX || 1
-  const scaleY = layer.scaleY || 1
-  const radians = (layer.rotation * Math.PI) / 180
+  const scaleX = geometry.scaleX || 1
+  const scaleY = geometry.scaleY || 1
+  const rotation = geometry.rotation || 0
+  const transformOriginX = geometry.transformOriginX ?? geometry.x + geometry.width / 2
+  const transformOriginY = geometry.transformOriginY ?? geometry.y + geometry.height / 2
+
+  const radians = (rotation * Math.PI) / 180
   const cos = Math.cos(radians)
   const sin = Math.sin(radians)
-  const deltaX = point.x - layer.transformOriginX
-  const deltaY = point.y - layer.transformOriginY
+  const deltaX = point.x - transformOriginX
+  const deltaY = point.y - transformOriginY
 
   const unrotatedX = cos * deltaX + sin * deltaY
   const unrotatedY = -sin * deltaX + cos * deltaY
-  const localX = layer.transformOriginX + unrotatedX / scaleX
-  const localY = layer.transformOriginY + unrotatedY / scaleY
+  const localX = transformOriginX + unrotatedX / scaleX
+  const localY = transformOriginY + unrotatedY / scaleY
 
   if (
-    localX < layer.x ||
-    localX >= layer.x + layer.width ||
-    localY < layer.y ||
-    localY >= layer.y + layer.height
+    localX < geometry.x ||
+    localX >= geometry.x + geometry.width ||
+    localY < geometry.y ||
+    localY >= geometry.y + geometry.height
   ) {
     return null
   }
 
   return {
-    x: Math.min(imageWidth - 1, Math.floor(((localX - layer.x) / layer.width) * imageWidth)),
-    y: Math.min(imageHeight - 1, Math.floor(((localY - layer.y) / layer.height) * imageHeight))
+    x: Math.min(imageWidth - 1, Math.floor(((localX - geometry.x) / geometry.width) * imageWidth)),
+    y: Math.min(imageHeight - 1, Math.floor(((localY - geometry.y) / geometry.height) * imageHeight))
   }
 }
 
-export function isLayerPointOpaque(
-  layer: RenderableLayer,
+export function isGeometryPointOpaque(
+  geometry: TransformGeometry,
   point: { x: number; y: number },
   image: HTMLImageElement,
   alphaThreshold = 8
 ): boolean {
-  const pixel = mapStagePointToImagePixel(
-    layer,
+  const pixel = mapPointToImagePixel(
+    geometry,
     point,
-    image.naturalWidth,
-    image.naturalHeight
+    image.naturalWidth || image.width,
+    image.naturalHeight || image.height
   )
   if (!pixel) return false
 
@@ -61,14 +75,17 @@ export function isLayerPointOpaque(
   return mask.pixels[(pixel.y * mask.width + pixel.x) * 4 + 3] >= alphaThreshold
 }
 
-function getAlphaMask(image: HTMLImageElement): AlphaMask | null {
+export const mapStagePointToImagePixel = mapPointToImagePixel
+export const isLayerPointOpaque = isGeometryPointOpaque
+
+export function getAlphaMask(image: HTMLImageElement): AlphaMask | null {
   const cached = alphaMaskCache.get(image)
   if (cached !== undefined) return cached
 
   try {
     const canvas = document.createElement('canvas')
-    canvas.width = image.naturalWidth
-    canvas.height = image.naturalHeight
+    canvas.width = image.naturalWidth || image.width
+    canvas.height = image.naturalHeight || image.height
     const context = canvas.getContext('2d', { willReadFrequently: true })
     if (!context) {
       alphaMaskCache.set(image, null)

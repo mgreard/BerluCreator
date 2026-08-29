@@ -106,7 +106,7 @@ function snapshotFixture(): WorkspaceSnapshot {
     ],
     rigCatalogJson: JSON.stringify({
       schema: 'berlu-creator/rig-catalog',
-      version: 3,
+      version: 6,
       exportedAt: new Date(now).toISOString(),
       defaultRigByCharacter: { berlu: 'rig-1' },
       rigs: [
@@ -119,6 +119,7 @@ function snapshotFixture(): WorkspaceSnapshot {
           canvasHeight: 908,
           body: { name: 'Corps', category: 'body', width: 840, height: 908 },
           bodyCalibration: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 },
+          bodyOrigin: { x: 420, y: 454 },
           categories: [
             {
               category: 'head',
@@ -172,7 +173,7 @@ describe('workspace-backup-file.service', () => {
     const catalog = JSON.parse(restored.rigCatalogJson ?? '{}')
     expect(catalog).toMatchObject({
       schema: 'berlu-creator/rig-catalog',
-      version: 3,
+      version: 6,
       rigs: [{ id: 'rig-1', bodyCalibration: { x: 0, y: 0 } }]
     })
     expect(catalog.rigs[0].categories).toEqual(

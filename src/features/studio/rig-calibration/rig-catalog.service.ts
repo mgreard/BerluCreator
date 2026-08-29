@@ -4,12 +4,14 @@ import {
   RIG_CATALOG_VERSION,
   RIG_CONFIGURABLE_CATEGORIES,
   RIG_SLOT_CATEGORIES,
+  type DuplicateRigOptions,
   type RigAssetIdentity,
   type RigCatalogFile,
   type RigCategoryDefinition,
   type RigConfigurableCategory,
   type RigDefinition,
   type RigPartDefinition,
+  type RigPoint,
   type RigSlotCategory
 } from './rig-catalog.types'
 
@@ -93,6 +95,90 @@ export function identityCalibration(asset?: Pick<Asset, 'calibration'>): AssetCa
   }
 }
 
+export function defaultBodyOrigin(body: Pick<RigAssetIdentity, 'width' | 'height'>): RigPoint {
+  return { x: body.width / 2, y: body.height / 2 }
+}
+
+export function bodyOriginInRigSpace(rig: RigDefinition): RigPoint {
+  return {
+    x: rig.bodyCalibration.x + rig.bodyOrigin.x * rig.bodyCalibration.scaleX,
+    y: rig.bodyCalibration.y + rig.bodyOrigin.y * rig.bodyCalibration.scaleY
+  }
+}
+
+export function partCalibrationToAbsolute(
+  rig: RigDefinition,
+  calibration: AssetCalibration
+): AssetCalibration {
+  const origin = bodyOriginInRigSpace(rig)
+  return {
+    ...calibration,
+    x: origin.x + calibration.x,
+    y: origin.y + calibration.y
+  }
+}
+
+export function partCalibrationToRelative(
+  rig: RigDefinition,
+  calibration: AssetCalibration
+): AssetCalibration {
+  const origin = bodyOriginInRigSpace(rig)
+  return {
+    ...calibration,
+    x: calibration.x - origin.x,
+    y: calibration.y - origin.y
+  }
+}
+
+export const headCalibrationToAbsolute = partCalibrationToAbsolute
+export const headCalibrationToRelative = partCalibrationToRelative
+
+function convertAbsolutePartsToRelative(
+  rig: RigDefinition,
+  shouldConvert: (category: RigConfigurableCategory) => boolean = () => true
+): void {
+  for (const category of rig.categories) {
+    if (category.template && shouldConvert(category.category)) {
+      category.template = partCalibrationToRelative(rig, category.template)
+    }
+  }
+  for (const part of rig.parts) {
+    if (
+      part.calibrationOverride &&
+      isRigConfigurableCategory(part.asset.category) &&
+      shouldConvert(part.asset.category)
+    ) {
+      part.calibrationOverride = partCalibrationToRelative(rig, part.calibrationOverride)
+    }
+  }
+}
+
+/** Déplace le repère sans déplacer visuellement les pièces déjà calibrées. */
+export function rebaseRigBodyOrigin(rig: RigDefinition, nextOrigin: RigPoint): RigDefinition {
+  const previousRig = JSON.parse(JSON.stringify(rig)) as RigDefinition
+  const nextRig = JSON.parse(JSON.stringify(rig)) as RigDefinition
+  nextRig.bodyOrigin = { ...nextOrigin }
+
+  for (const category of nextRig.categories) {
+    if (category.template) {
+      category.template = partCalibrationToRelative(
+        nextRig,
+        partCalibrationToAbsolute(previousRig, category.template)
+      )
+    }
+  }
+
+  for (const part of nextRig.parts) {
+    if (!part.calibrationOverride) continue
+    part.calibrationOverride = partCalibrationToRelative(
+      nextRig,
+      partCalibrationToAbsolute(previousRig, part.calibrationOverride)
+    )
+  }
+  nextRig.updatedAt = Date.now()
+  return nextRig
+}
+
 export function areCalibrationsEquivalent(
   left?: AssetCalibration | null,
   right?: AssetCalibration | null,
@@ -125,6 +211,19 @@ export function effectiveCalibration(
     category.template ??
     (asset ? identityCalibration(asset) : { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 })
   )
+}
+
+/** Calibration attendue par les calques du document, toujours absolue dans le repère du rig. */
+export function effectiveLayerCalibration(
+  rig: RigDefinition,
+  part: RigPartDefinition,
+  asset?: Asset
+): AssetCalibration | null {
+  const calibration = effectiveCalibration(rig, part, asset)
+  if (!calibration) return null
+  return isRigConfigurableCategory(part.asset.category)
+    ? partCalibrationToAbsolute(rig, calibration)
+    : { ...calibration }
 }
 
 export function createDefaultCategories(): RigCategoryDefinition[] {
@@ -162,7 +261,7 @@ export function createRigDefinition(bodyAsset: Asset, characterAssets: Asset[]):
     }
   }
 
-  return {
+  const rig: RigDefinition = {
     id: createRigId(bodyAsset.character?.key ?? 'berlu', body),
     name: bodyAsset.name,
     characterKey: bodyAsset.character?.key ?? 'berlu',
@@ -171,11 +270,14 @@ export function createRigDefinition(bodyAsset: Asset, characterAssets: Asset[]):
     canvasHeight: DEFAULT_RIG_CANVAS.height,
     body,
     bodyCalibration,
+    bodyOrigin: defaultBodyOrigin(body),
     categories,
     parts,
     excludedPartKeys: [],
     updatedAt: Date.now()
   }
+  convertAbsolutePartsToRelative(rig)
+  return rig
 }
 
 export function defaultPartsForRig(rig: RigDefinition): RigPartDefinition[] {
@@ -199,19 +301,81 @@ export function selectedPartForCategory(
 
 export function duplicateRigConfig(
   sourceRig: RigDefinition,
-  targetRig: RigDefinition
+  targetRig: RigDefinition,
+  options?: DuplicateRigOptions
 ): RigDefinition {
-  return {
-    ...targetRig,
-    categories: JSON.parse(JSON.stringify(sourceRig.categories)) as RigCategoryDefinition[],
-    parts: JSON.parse(JSON.stringify(sourceRig.parts)) as RigPartDefinition[],
-    excludedPartKeys: [...sourceRig.excludedPartKeys],
-    updatedAt: Date.now()
+  const result: RigDefinition = JSON.parse(JSON.stringify(targetRig)) as RigDefinition
+  const copyAll = !options || Object.values(options).every((v) => v === undefined)
+
+  if (copyAll || options?.copyOrigin) {
+    result.bodyOrigin = { ...sourceRig.bodyOrigin }
   }
+
+  if (copyAll) {
+    result.categories = JSON.parse(JSON.stringify(sourceRig.categories)) as RigCategoryDefinition[]
+    result.parts = JSON.parse(JSON.stringify(sourceRig.parts)) as RigPartDefinition[]
+    result.excludedPartKeys = [...sourceRig.excludedPartKeys]
+  } else {
+    if (options?.copyCommonPosition) {
+      const sourceHeadCat = sourceRig.categories.find((c) => c.category === 'head')
+      let targetHeadCat = result.categories.find((c) => c.category === 'head')
+      if (!targetHeadCat) {
+        targetHeadCat = { category: 'head', enabled: true }
+        result.categories.push(targetHeadCat)
+      }
+      if (sourceHeadCat?.template) {
+        targetHeadCat.template = { ...sourceHeadCat.template }
+      }
+    }
+
+    if (options?.copyDefaultHead) {
+      const sourceHeadCat = sourceRig.categories.find((c) => c.category === 'head')
+      let targetHeadCat = result.categories.find((c) => c.category === 'head')
+      if (!targetHeadCat) {
+        targetHeadCat = { category: 'head', enabled: true }
+        result.categories.push(targetHeadCat)
+      }
+      if (sourceHeadCat?.defaultPartKey) {
+        targetHeadCat.defaultPartKey = sourceHeadCat.defaultPartKey
+      }
+    }
+
+    if (options?.copySpecificPositions) {
+      for (const sourcePart of sourceRig.parts) {
+        if (sourcePart.asset.category !== 'head' || !sourcePart.calibrationOverride) continue
+        const key = rigAssetKey(sourcePart.asset)
+        let targetPart = result.parts.find((p) => rigAssetKey(p.asset) === key)
+        if (!targetPart) {
+          targetPart = { asset: { ...sourcePart.asset } }
+          result.parts.push(targetPart)
+        }
+        targetPart.calibrationOverride = { ...sourcePart.calibrationOverride }
+      }
+    }
+
+    if (options?.copyCompatibilities) {
+      result.excludedPartKeys = [...sourceRig.excludedPartKeys]
+      for (const sourcePart of sourceRig.parts) {
+        const key = rigAssetKey(sourcePart.asset)
+        if (!result.parts.some((p) => rigAssetKey(p.asset) === key)) {
+          result.parts.push({ asset: { ...sourcePart.asset } })
+        }
+      }
+    }
+  }
+
+  result.updatedAt = Date.now()
+  return result
 }
 
 function finite(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
+}
+
+function parsePoint(value: unknown): RigPoint | null {
+  if (!value || typeof value !== 'object') return null
+  const point = value as Partial<RigPoint>
+  return finite(point.x) && finite(point.y) ? { x: point.x, y: point.y } : null
 }
 
 export function parseCalibration(value: unknown): AssetCalibration | null {
@@ -271,7 +435,7 @@ function parseCategoryDefinition(value: unknown): RigCategoryDefinition | null {
   return { category, enabled, template, defaultPartKey }
 }
 
-function parsePartV3(value: unknown): RigPartDefinition | null {
+function parsePart(value: unknown): RigPartDefinition | null {
   if (!value || typeof value !== 'object') return null
   const part = value as Partial<RigPartDefinition>
   const asset = parseIdentity(part.asset)
@@ -282,7 +446,7 @@ function parsePartV3(value: unknown): RigPartDefinition | null {
   return { asset, calibrationOverride }
 }
 
-export function parseRigV3(value: unknown): RigDefinition | null {
+export function parseRigDefinition(value: unknown): RigDefinition | null {
   if (!value || typeof value !== 'object') return null
   const rig = value as Partial<RigDefinition>
   const body = parseIdentity(rig.body)
@@ -313,10 +477,10 @@ export function parseRigV3(value: unknown): RigDefinition | null {
   })
 
   const parts = Array.isArray(rig.parts)
-    ? rig.parts.map(parsePartV3).filter((part): part is RigPartDefinition => Boolean(part))
+    ? rig.parts.map(parsePart).filter((part): part is RigPartDefinition => Boolean(part))
     : []
 
-  return {
+  const parsed: RigDefinition = {
     id: rig.id,
     name: rig.name,
     characterKey: rig.characterKey,
@@ -325,6 +489,7 @@ export function parseRigV3(value: unknown): RigDefinition | null {
     canvasHeight: Math.max(64, Math.round(rig.canvasHeight)),
     body,
     bodyCalibration,
+    bodyOrigin: parsePoint(rig.bodyOrigin) ?? defaultBodyOrigin(body),
     categories,
     parts,
     excludedPartKeys: Array.isArray(rig.excludedPartKeys)
@@ -332,91 +497,11 @@ export function parseRigV3(value: unknown): RigDefinition | null {
       : [],
     updatedAt: finite(rig.updatedAt) ? rig.updatedAt : Date.now()
   }
+
+  return parsed
 }
 
-export function migrateRigV2ToV3(rawV2: unknown): RigDefinition | null {
-  if (!rawV2 || typeof rawV2 !== 'object') return null
-  const rig = rawV2 as Record<string, unknown>
-  const body = parseIdentity(rig.body)
-  if (
-    typeof rig.id !== 'string' ||
-    typeof rig.name !== 'string' ||
-    typeof rig.characterKey !== 'string' ||
-    typeof rig.characterName !== 'string' ||
-    !finite(rig.canvasWidth) ||
-    !finite(rig.canvasHeight) ||
-    !body ||
-    body.category !== 'body'
-  ) {
-    return null
-  }
-
-  const rawParts = Array.isArray(rig.parts) ? rig.parts : []
-  const v2Parts = rawParts.flatMap((rawPart) => {
-    if (!rawPart || typeof rawPart !== 'object') return []
-    const p = rawPart as { asset?: unknown; calibration?: unknown; isDefault?: unknown }
-    const asset = parseIdentity(p.asset)
-    const calibration = parseCalibration(p.calibration)
-    return asset && calibration ? [{ asset, calibration, isDefault: Boolean(p.isDefault) }] : []
-  })
-
-  // 1. Find body calibration from v2 parts or default
-  const bodyPart = v2Parts.find(
-    (part) => part.asset.category === 'body' && assetsShareRigIdentity(body, part.asset)
-  )
-  const bodyCalibration: AssetCalibration = bodyPart
-    ? { ...bodyPart.calibration }
-    : { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0 }
-
-  // 2. Build configurable categories & parts
-  const categories: RigCategoryDefinition[] = []
-  const partsV3: RigPartDefinition[] = []
-
-  for (const catName of RIG_CONFIGURABLE_CATEGORIES) {
-    const matchingParts = v2Parts.filter((p) => p.asset.category === catName)
-    if (matchingParts.length === 0) {
-      categories.push({ category: catName, enabled: true })
-      continue
-    }
-
-    const defaultPart = matchingParts.find((p) => p.isDefault) ?? matchingParts[0]
-    const template: AssetCalibration = { ...defaultPart.calibration }
-    const defaultPartKey = rigAssetKey(defaultPart.asset)
-
-    categories.push({
-      category: catName,
-      enabled: true,
-      template,
-      defaultPartKey
-    })
-
-    for (const p of matchingParts) {
-      const isDefault = rigAssetKey(p.asset) === defaultPartKey
-      const isOverride = !isDefault && !areCalibrationsEquivalent(p.calibration, template)
-      partsV3.push({
-        asset: p.asset,
-        calibrationOverride: isOverride ? { ...p.calibration } : undefined
-      })
-    }
-  }
-
-  return {
-    id: rig.id,
-    name: rig.name,
-    characterKey: rig.characterKey,
-    characterName: rig.characterName,
-    canvasWidth: Math.max(64, Math.round(rig.canvasWidth)),
-    canvasHeight: Math.max(64, Math.round(rig.canvasHeight)),
-    body,
-    bodyCalibration,
-    categories,
-    parts: partsV3,
-    excludedPartKeys: Array.isArray(rig.excludedPartKeys)
-      ? rig.excludedPartKeys.filter((key): key is string => typeof key === 'string')
-      : [],
-    updatedAt: finite(rig.updatedAt) ? rig.updatedAt : Date.now()
-  }
-}
+export const parseRigV6 = parseRigDefinition
 
 export function createRigCatalogFile(
   rigs: RigDefinition[],
@@ -437,18 +522,10 @@ export function parseRigCatalogFile(raw: string): RigCatalogFile {
     throw new Error('Format de catalogue de rigs non reconnu.')
   }
 
-  let rigs: RigDefinition[] = []
-  if (value.version === 3) {
-    rigs = Array.isArray(value.rigs)
-      ? value.rigs.map(parseRigV3).filter((rig): rig is RigDefinition => Boolean(rig))
-      : []
-  } else if (value.version === 2) {
-    rigs = Array.isArray(value.rigs)
-      ? value.rigs.map(migrateRigV2ToV3).filter((rig): rig is RigDefinition => Boolean(rig))
-      : []
-  } else {
-    throw new Error(`Version de catalogue de rigs non prise en charge : ${value.version}`)
-  }
+  const rawRigs = Array.isArray(value.rigs) ? value.rigs : []
+  const rigs: RigDefinition[] = rawRigs
+    .map(parseRigDefinition)
+    .filter((rig): rig is RigDefinition => Boolean(rig))
 
   if (rigs.length === 0) throw new Error('Aucun rig valide dans ce fichier.')
 

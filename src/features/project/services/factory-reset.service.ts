@@ -8,6 +8,8 @@ export const APPLICATION_STORAGE_KEYS = [
   'berlu-creator:rig-profiles:v1',
   'berlu-creator:rig-catalog:v2',
   'berlu-creator:rig-catalog:v3',
+  'berlu-creator:rig-catalog:v4',
+  'berlu-creator:rig-catalog:v5',
   'berlu.rig-calibration-sidebar-width.v1',
   'mycomplib-theme'
 ] as const

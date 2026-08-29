@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { useRigCatalogStore } from './rig-catalog.store'
+import { RIG_CATALOG_STORAGE_KEY } from './rig-catalog.types'
 
 function asset(
   id: string,
@@ -30,10 +31,10 @@ const assets = [
   asset('body-b', 'Corps complet', 'body', 1031, 812),
   asset('head-default', 'Tête par défaut', 'head', 260, 309),
   asset('head-variant', 'Tête variante', 'head', 280, 320),
-  asset('arm-left', 'Bras gauche', 'arms_left', 150, 400)
+  asset('head-special', 'Tête spéciale', 'head', 270, 310)
 ]
 
-describe('useRigCatalogStore (v3)', () => {
+describe('useRigCatalogStore (v6)', () => {
   beforeEach(() => {
     localStorage.clear()
     setActivePinia(createPinia())
@@ -49,6 +50,22 @@ describe('useRigCatalogStore (v3)', () => {
       expect(rig.bodyCalibration).toBeDefined()
       expect(rig.parts.some((p) => p.asset.category === 'body')).toBe(false)
     }
+  })
+
+  it('ignore les accessoires libres pendant l’initialisation', () => {
+    const store = useRigCatalogStore()
+    store.initialize([
+      ...assets,
+      asset('glasses', 'Lunettes', 'eyes', 180, 70),
+      asset('hat', 'Chapeau', 'props_host', 240, 180)
+    ])
+
+    expect(store.rigs.flatMap((rig) => rig.parts).map((part) => part.asset.category)).not.toContain(
+      'eyes'
+    )
+    expect(store.rigs.flatMap((rig) => rig.parts).map((part) => part.asset.category)).not.toContain(
+      'props_host'
+    )
   })
 
   it('initialise un template de catégorie hérité par les pièces', () => {
@@ -101,12 +118,14 @@ describe('useRigCatalogStore (v3)', () => {
     expect(store.effectiveCalibrationForAsset(bustRig!, headVariant)).toEqual(headCat?.template)
   })
 
-  it('modifier l’élément par défaut met à jour le template de la catégorie', () => {
+  it('modifier un élément enregistre sa configuration individuelle sans modifier les autres éléments', () => {
     const store = useRigCatalogStore()
     store.initialize(assets)
     const [bustRig] = store.rigs
     const headDefault = assets[2]!
     const headVariant = assets[3]!
+
+    const initialVariantCalib = { ...store.effectiveCalibrationForAsset(bustRig!, headVariant)! }
 
     store.savePartCalibration(bustRig!.id, headDefault, {
       x: 105,
@@ -116,35 +135,35 @@ describe('useRigCatalogStore (v3)', () => {
       rotation: 0
     })
 
-    const headCat = bustRig!.categories.find((c) => c.category === 'head')
-    expect(headCat?.template).toEqual({
+    // headDefault a bien été mis à jour
+    expect(store.effectiveCalibrationForAsset(bustRig!, headDefault)).toEqual({
       x: 105,
       y: 45,
       scaleX: 1.05,
       scaleY: 1.05,
       rotation: 0
     })
-    // La pièce variante sans surcharge hérite de la nouvelle valeur
-    expect(store.effectiveCalibrationForAsset(bustRig!, headVariant)).toEqual(headCat?.template)
+    // La pièce variante conserve sa propre calibration sans être altérée
+    expect(store.effectiveCalibrationForAsset(bustRig!, headVariant)).toEqual(initialVariantCalib)
   })
 
   it('désactiver une catégorie rend ses pièces incompatibles et conserve les données dormantes', () => {
     const store = useRigCatalogStore()
     store.initialize(assets)
     const [bustRig] = store.rigs
-    const armLeft = assets[4]!
+    const headSpecial = assets[4]!
 
-    expect(store.compatibleRigs(armLeft)).toHaveLength(2)
+    expect(store.compatibleRigs(headSpecial)).toHaveLength(2)
 
-    // Désactiver arms_left sur le buste
-    store.setCategoryEnabled(bustRig!.id, 'arms_left', false)
-    expect(store.compatibleRigs(armLeft)).toHaveLength(1)
-    expect(store.effectiveCalibrationForAsset(bustRig!, armLeft)).toBeNull()
+    // Désactiver head sur le buste
+    store.setCategoryEnabled(bustRig!.id, 'head', false)
+    expect(store.compatibleRigs(headSpecial)).toHaveLength(1)
+    expect(store.effectiveCalibrationForAsset(bustRig!, headSpecial)).toBeNull()
 
-    // Réactiver arms_left
-    store.setCategoryEnabled(bustRig!.id, 'arms_left', true)
-    expect(store.compatibleRigs(armLeft)).toHaveLength(2)
-    expect(store.effectiveCalibrationForAsset(bustRig!, armLeft)).not.toBeNull()
+    // Réactiver head
+    store.setCategoryEnabled(bustRig!.id, 'head', true)
+    expect(store.compatibleRigs(headSpecial)).toHaveLength(2)
+    expect(store.effectiveCalibrationForAsset(bustRig!, headSpecial)).not.toBeNull()
   })
 
   it('duplique la configuration d’un rig vers un autre sans écraser le corps cible', () => {
@@ -153,7 +172,6 @@ describe('useRigCatalogStore (v3)', () => {
     const [bustRig, fullRig] = store.rigs
 
     // Personnaliser bustRig
-    store.setCategoryEnabled(bustRig!.id, 'arms_left', false)
     store.savePartCalibration(bustRig!.id, assets[2]!, {
       x: 88,
       y: 99,
@@ -169,8 +187,32 @@ describe('useRigCatalogStore (v3)', () => {
     expect(updatedFullRig.id).toBe(fullRig!.id)
     expect(updatedFullRig.body).toEqual(fullRig!.body)
     expect(updatedFullRig.bodyCalibration).toEqual(fullRig!.bodyCalibration)
-    expect(updatedFullRig.categories.find((c) => c.category === 'arms_left')?.enabled).toBe(false)
-    expect(updatedFullRig.categories.find((c) => c.category === 'head')?.template?.x).toBe(88)
+    expect(store.effectiveCalibrationForAsset(updatedFullRig, assets[2]!)?.x).toBe(88)
+  })
+
+  it('applique la calibration comme un snapshot indépendant à toutes les pièces', () => {
+    const store = useRigCatalogStore()
+    store.initialize(assets)
+    const [bustRig] = store.rigs
+    const headDefault = assets[2]!
+    const headVariant = assets[3]!
+
+    const snapshot = { x: 33, y: 44, scaleX: 1.1, scaleY: 1.1, rotation: -5 }
+    store.applyPartCalibrationToAll(bustRig!.id, 'head', snapshot)
+
+    // Les deux pièces ont reçu la copie exacte
+    expect(store.partForAsset(bustRig!, headDefault)?.calibrationOverride).toEqual(snapshot)
+    expect(store.partForAsset(bustRig!, headVariant)?.calibrationOverride).toEqual(snapshot)
+
+    // Une modification ultérieure de headDefault ne modifie pas headVariant
+    store.savePartSpecificPosition(bustRig!.id, headDefault, {
+      x: 99,
+      y: 99,
+      scaleX: 2,
+      scaleY: 2,
+      rotation: 0
+    })
+    expect(store.partForAsset(bustRig!, headVariant)?.calibrationOverride).toEqual(snapshot)
   })
 
   it('propage un champ spécifique à tous les éléments d’une catégorie', () => {
@@ -205,7 +247,7 @@ describe('useRigCatalogStore (v3)', () => {
     expect(partVariant.calibrationOverride?.scaleY).toBe(0.75)
   })
 
-  it('exporte et réimporte la configuration v3', () => {
+  it('exporte et réimporte la configuration v6', () => {
     const store = useRigCatalogStore()
     store.initialize(assets)
     store.setDefaultRig('berlu', store.rigs[1]!.id)

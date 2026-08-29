@@ -546,6 +546,7 @@ useCanvasRenderer(
 // --- GESTION DU DRAG & DROP ET DU REDIMENSIONNEMENT INTERACTIF ---
 const isDragging = ref(false)
 const isResizing = ref(false)
+const isRotating = ref(false)
 const activeHandle = ref<ResizeHandle | null>(null)
 const hoveredHandle = ref<ResizeHandle | null>(null)
 const hoveredLayer = ref<RenderableLayer | null>(null)
@@ -553,6 +554,8 @@ const hoveredLayer = ref<RenderableLayer | null>(null)
 const dragStartPointer = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 const dragStartBounds = ref<BoxBounds>({ x: 0, y: 0, width: 0, height: 0 })
 const dragStartScale = ref({ x: 1, y: 1 })
+const dragStartRotation = ref(0)
+const dragStartAngleRad = ref(0)
 const dragStartLayerPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 const dragStartGroupPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 
@@ -565,10 +568,12 @@ const currentScale = computed(() => {
 
 const resizeCursorClass = computed(() => {
   const handle = activeHandle.value ?? hoveredHandle.value
+  if (handle === 'rot') return 'cursor-grab'
   if (handle === 'left' || handle === 'right') return 'cursor-ew-resize'
   if (handle === 'top' || handle === 'bottom') return 'cursor-ns-resize'
   if (handle === 'tl' || handle === 'br') return 'cursor-nwse-resize'
   if (handle === 'tr' || handle === 'bl') return 'cursor-nesw-resize'
+  if (isRotating.value) return 'cursor-grabbing'
   if (isDragging.value) return 'cursor-grabbing'
   if (hoveredLayer.value) return 'cursor-grab'
   return 'cursor-default'
@@ -725,6 +730,14 @@ function hitTestResizeHandle(
   const handleRadius = 10
   const centerX = bounds.x + bounds.width / 2
   const centerY = bounds.y + bounds.height / 2
+  const rotY = bounds.y - 24
+
+  // Vérifier d'abord la poignée de rotation
+  const distRot = Math.hypot(pos.x - centerX, pos.y - rotY)
+  if (distRot <= 12) {
+    return 'rot'
+  }
+
   const handles: { handle: ResizeHandle; x: number; y: number }[] = [
     { handle: 'tl', x: bounds.x, y: bounds.y },
     { handle: 'tr', x: bounds.x + bounds.width, y: bounds.y },
@@ -787,10 +800,30 @@ function onCanvasPointerDown(e: PointerEvent) {
   const pos = getStageCoordinates(e)
   if (!pos) return
 
-  // 1. Clic sur l'une des 8 poignées de redimensionnement
+  // 1. Clic sur l'une des poignées de transformation (rotation ou redimensionnement)
   if (selectedBounds.value && !isSelectionLocked.value) {
     const hitHandle = hitTestResizeHandle(pos, selectedBounds.value)
-    if (hitHandle) {
+    if (hitHandle === 'rot') {
+      editorStore.beginGesture('Pivoter la sélection')
+      isRotating.value = true
+      activeHandle.value = 'rot'
+      const centerX = selectedBounds.value.x + selectedBounds.value.width / 2
+      const centerY = selectedBounds.value.y + selectedBounds.value.height / 2
+      dragStartAngleRad.value = Math.atan2(pos.y - centerY, pos.x - centerX)
+
+      if (isGroupTarget.value && activeSelectedGroup.value) {
+        dragStartRotation.value = activeSelectedGroup.value.transform.rotation ?? 0
+      } else if (activeSelectedLayer.value) {
+        dragStartRotation.value =
+          activeSelectedLayer.value.localRotation ??
+          activeSelectedLayer.value.rotation ??
+          0
+      }
+
+      const target = e.currentTarget as HTMLElement
+      target?.setPointerCapture?.(e.pointerId)
+      return
+    } else if (hitHandle) {
       editorStore.beginGesture('Redimensionner la sélection')
       isResizing.value = true
       activeHandle.value = hitHandle
@@ -803,11 +836,23 @@ function onCanvasPointerDown(e: PointerEvent) {
       return
     }
 
-    // 2. Clic à l'intérieur de la boîte de sélection active (Déplacement)
-    const b = selectedBounds.value
-    const isInsideSelection =
-      pos.x >= b.x && pos.x <= b.x + b.width && pos.y >= b.y && pos.y <= b.y + b.height
-    if (isInsideSelection) {
+    // 2. Clic à l'intérieur de la boîte de sélection active (Déplacement uniquement si le pixel est opaque sur la sélection)
+    const isOpaqueOnActiveSelection = (() => {
+      if (isGroupTarget.value && activeSelectedGroup.value) {
+        const groupLayers = activeLayers.value.filter((l) => l.groupId === activeSelectedGroup.value?.id)
+        return groupLayers.some((layer) => {
+          const img = getCachedAssetImage(layer.asset.blobId)
+          return img ? isLayerPointOpaque(layer, pos, img) : false
+        })
+      }
+      if (activeSelectedLayer.value) {
+        const img = getCachedAssetImage(activeSelectedLayer.value.asset.blobId)
+        return img ? isLayerPointOpaque(activeSelectedLayer.value, pos, img) : false
+      }
+      return false
+    })()
+
+    if (isOpaqueOnActiveSelection) {
       editorStore.beginGesture('Déplacer la sélection')
       isDragging.value = true
       dragStartPointer.value = { ...pos }
@@ -873,7 +918,28 @@ function onCanvasPointerMove(e: PointerEvent) {
   const pos = getStageCoordinates(e)
   if (!pos) return
 
-  // A. Redimensionnement
+  // A. Rotation
+  if (isRotating.value && selectedBounds.value) {
+    const centerX = selectedBounds.value.x + selectedBounds.value.width / 2
+    const centerY = selectedBounds.value.y + selectedBounds.value.height / 2
+    const currentAngle = Math.atan2(pos.y - centerY, pos.x - centerX)
+    let deltaAngleDeg = ((currentAngle - dragStartAngleRad.value) * 180) / Math.PI
+    let nextRot = Math.round(dragStartRotation.value + deltaAngleDeg)
+    if (e.shiftKey) {
+      nextRot = Math.round(nextRot / 15) * 15
+    }
+    while (nextRot > 180) nextRot -= 360
+    while (nextRot < -180) nextRot += 360
+
+    if (isGroupTarget.value && activeSelectedGroup.value) {
+      editorStore.updateGroupTransform(activeSelectedGroup.value.id, { rotation: nextRot })
+    } else if (activeSelectedLayer.value) {
+      editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, { rotation: nextRot })
+    }
+    return
+  }
+
+  // B. Redimensionnement
   if (isResizing.value && activeHandle.value) {
     const scales = computeResizeScales(
       activeHandle.value,
@@ -887,7 +953,7 @@ function onCanvasPointerMove(e: PointerEvent) {
     return
   }
 
-  // B. Déplacement (Translation)
+  // C. Déplacement (Translation)
   if (isDragging.value) {
     const dx = pos.x - dragStartPointer.value.x
     const dy = pos.y - dragStartPointer.value.y
@@ -930,7 +996,7 @@ function onCanvasPointerMove(e: PointerEvent) {
     return
   }
 
-  // C. Survol
+  // D. Survol
   if (selectedBounds.value) {
     hoveredHandle.value = hitTestResizeHandle(pos, selectedBounds.value)
   } else {
@@ -942,6 +1008,7 @@ function onCanvasPointerMove(e: PointerEvent) {
 function onCanvasPointerUp(e: PointerEvent) {
   isDragging.value = false
   isResizing.value = false
+  isRotating.value = false
   activeHandle.value = null
   editorStore.endGesture()
   if (isRigCalibrationOpen.value && activeSelectedLayer.value) {

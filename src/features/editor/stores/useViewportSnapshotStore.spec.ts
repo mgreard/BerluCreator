@@ -21,6 +21,7 @@ function documentFixture(): EditorDocument {
     depthOfField: { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS, enabled: true },
     groups: JSON.parse(JSON.stringify(DEFAULT_EDITOR_GROUPS)),
     layers: [],
+    rigCatalogSnapshot: '{"version":5}',
     createdAt: 1,
     updatedAt: 1
   }
@@ -38,6 +39,7 @@ describe('useViewportSnapshotStore', () => {
     expect(snapshot.thumbnailDataUrl).toContain('data:image/png')
     expect(snapshot.depthOfField).toEqual(document.depthOfField)
     expect(snapshot.depthOfField).not.toBe(document.depthOfField)
+    expect(snapshot.rigCatalogSnapshot).toBe(document.rigCatalogSnapshot)
   })
 
   it('supprime un snapshot par identifiant', async () => {

@@ -30,15 +30,12 @@ const tabItems: TabItem[] = [
 ]
 
 const railItems: TabItem[] = [
-  { key: 'all', label: 'Tous les sprites', icon: 'apps', badge: 68, tone: 'indigo' },
+  { key: 'all', label: 'Tous les sprites', icon: 'apps', badge: 48, tone: 'indigo' },
   { key: 'background', label: 'Arrière-plans', icon: 'tv_gen', badge: 1, tone: 'sky' },
-  { key: 'torso', label: 'Torses', icon: 'body_system', badge: 1, tone: 'amber' },
+  { key: 'body', label: 'Corps', icon: 'body_system', badge: 1, tone: 'amber' },
   { key: 'head', label: 'Têtes', icon: 'face', badge: 7, tone: 'rose' },
-  { key: 'mouth', label: 'Bouches', icon: 'lips', badge: 7, tone: 'red' },
-  { key: 'eyes', label: 'Yeux', icon: 'visibility', badge: 4, tone: 'cyan' },
-  { key: 'props_host', label: 'Accessoires présentateur', icon: 'apparel', badge: 6, tone: 'purple' },
-  { key: 'arms_left', label: 'Bras gauche', icon: 'front_hand', badge: 4, tone: 'emerald' },
-  { key: 'arms_right', label: 'Bras droit', icon: 'waving_hand', badge: 9, tone: 'lime' },
+  { key: 'eyes', label: 'Accessoires visage', icon: 'visibility', badge: 4, tone: 'cyan' },
+  { key: 'props_host', label: 'Accessoires', icon: 'apparel', badge: 6, tone: 'purple' },
   { key: 'props_set', label: 'Accessoires plateau', icon: 'category', badge: 10, tone: 'yellow' },
   { key: 'desk', label: 'Bureau', icon: 'desk', badge: 2, tone: 'neutral' },
   { key: 'props_desk', label: 'Objets du bureau', icon: 'inventory_2', badge: 16, tone: 'indigo' },

@@ -19,18 +19,22 @@ import {
   DEFAULT_DEPTH_OF_FIELD_SETTINGS,
   DEFAULT_EDITOR_GROUPS,
   DEFAULT_STAGE_RESOLUTION,
-  DEFAULT_TRANSFORM
+  DEFAULT_TRANSFORM,
+  FREE_ACCESSORY_CATEGORIES
 } from '@core/constants/editor'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { editorDocumentRepository } from '@infrastructure/db/repositories/editor-document.repository'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { generateId } from '@/lib/utils'
+import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
+import { DEFAULT_RIG_CANVAS } from '@/features/studio/rig-calibration/rig-catalog.service'
 
 interface StudioState {
   depthOfField: DepthOfFieldSettings
   groups: EditorGroup[]
   layers: EditorLayer[]
+  rigCatalogSnapshot?: string
 }
 
 interface StudioHistoryEntry {
@@ -182,7 +186,8 @@ function stateOf(document: EditorDocument): StudioState {
   return clone({
     depthOfField: document.depthOfField,
     groups: document.groups,
-    layers: document.layers
+    layers: document.layers,
+    rigCatalogSnapshot: document.rigCatalogSnapshot
   })
 }
 
@@ -192,6 +197,12 @@ function statesAreEqual(left: StudioState, right: StudioState): boolean {
 
 function isCharacterCategory(category: AssetCategory): boolean {
   return ASSET_CATEGORIES[category].placementMode === 'character-anchored'
+}
+
+function isFreeAccessoryCategory(category: AssetCategory): boolean {
+  return FREE_ACCESSORY_CATEGORIES.includes(
+    category as (typeof FREE_ACCESSORY_CATEGORIES)[number]
+  )
 }
 
 function createCharacterGroup(name: string, key: string, zIndex: number): CharacterGroup {
@@ -235,6 +246,131 @@ export const useEditorStore = defineStore('editor', () => {
   const canUndo = computed(() => undoStack.value.length > 0)
   const canRedo = computed(() => redoStack.value.length > 0)
   const hasActiveGesture = computed(() => activeGesture.value !== null)
+
+  function accessoriesStageGroup(document = currentDocument.value): EditorGroup {
+    const existing = document.groups.find(
+      (group) =>
+        group.kind === 'stage' &&
+        FREE_ACCESSORY_CATEGORIES.some((category) => group.allowedCategories.includes(category))
+    )
+    if (existing) {
+      existing.allowedCategories = Array.from(
+        new Set([...existing.allowedCategories, ...FREE_ACCESSORY_CATEGORIES])
+      )
+      return existing
+    }
+
+    const template = DEFAULT_EDITOR_GROUPS.find((group) => group.id === 'grp_accessories')
+    const created = clone(
+      template ?? {
+        id: 'grp_accessories',
+        name: 'Accessoires',
+        kind: 'stage' as const,
+        zIndex: 27,
+        transform: DEFAULT_TRANSFORM,
+        muted: false,
+        locked: false,
+        collapsed: false,
+        color: 'purple' as const,
+        allowedCategories: [...FREE_ACCESSORY_CATEGORIES],
+        isDefault: true
+      }
+    )
+    document.groups.push(created)
+    return created
+  }
+
+  function detachAccessoryTransform(
+    layer: EditorLayer,
+    group: CharacterGroup,
+    asset: Asset
+  ): Transform2D {
+    const stage = useProjectStore().currentProject.stage
+    const rigCatalog = useRigCatalogStore()
+    const rig = rigCatalog.rigById(group.activeRigId) ?? rigCatalog.defaultRig(group.characterKey)
+    const referenceWidth = Math.max(1, rig?.canvasWidth ?? DEFAULT_RIG_CANVAS.width)
+    const referenceHeight = Math.max(1, rig?.canvasHeight ?? DEFAULT_RIG_CANVAS.height)
+    const baseScale = Math.min(
+      1,
+      (stage.width * 0.7) / referenceWidth,
+      (stage.height * 0.7) / referenceHeight
+    )
+    const geometryX = (stage.width - referenceWidth * baseScale) / 2
+    const geometryY = (stage.height - referenceHeight * baseScale) / 2
+    const groupOriginX = geometryX + (referenceWidth * baseScale) / 2 + group.transform.x
+    const groupOriginY = geometryY + (referenceHeight * baseScale) / 2 + group.transform.y
+    const layerCenterX =
+      geometryX +
+      layer.transform.x * baseScale +
+      group.transform.x +
+      (asset.width * baseScale) / 2
+    const layerCenterY =
+      geometryY +
+      layer.transform.y * baseScale +
+      group.transform.y +
+      (asset.height * baseScale) / 2
+    const radians = (group.transform.rotation * Math.PI) / 180
+    const scaledX = (layerCenterX - groupOriginX) * group.transform.scaleX
+    const scaledY = (layerCenterY - groupOriginY) * group.transform.scaleY
+    const finalCenterX =
+      groupOriginX + scaledX * Math.cos(radians) - scaledY * Math.sin(radians)
+    const finalCenterY =
+      groupOriginY + scaledX * Math.sin(radians) + scaledY * Math.cos(radians)
+
+    return {
+      x: Math.round(finalCenterX - asset.width / 2),
+      y: Math.round(finalCenterY - asset.height / 2),
+      scaleX: layer.transform.scaleX * baseScale * group.transform.scaleX,
+      scaleY: layer.transform.scaleY * baseScale * group.transform.scaleY,
+      rotation: layer.transform.rotation + group.transform.rotation,
+      opacity: Math.max(0, Math.min(1, layer.transform.opacity * group.transform.opacity))
+    }
+  }
+
+  function normalizeAndDetachAccessories(document: EditorDocument): {
+    document: EditorDocument
+    changed: boolean
+  } {
+    const normalized = normalizeDocument(document)
+    const hadAccessoriesGroup = normalized.groups.some(
+      (group) => group.kind === 'stage' && group.id === 'grp_accessories'
+    )
+    const targetGroup = accessoriesStageGroup(normalized)
+    const assets = new Map(useAssetStore().assets.map((asset) => [asset.id, asset]))
+    const groups = new Map(normalized.groups.map((group) => [group.id, group]))
+    let changed = !hadAccessoriesGroup
+
+    for (const group of normalized.groups) {
+      if (group.kind !== 'character') continue
+      const filtered = group.allowedCategories.filter((category) => !isFreeAccessoryCategory(category))
+      if (filtered.length !== group.allowedCategories.length) {
+        group.allowedCategories = filtered
+        changed = true
+      }
+    }
+
+    for (const layer of normalized.layers) {
+      if (!isFreeAccessoryCategory(layer.category)) continue
+      const sourceGroup = groups.get(layer.groupId)
+      if (sourceGroup?.kind !== 'character') continue
+      const asset = assets.get(layer.assetId)
+      if (asset) layer.transform = detachAccessoryTransform(layer, sourceGroup, asset)
+      layer.groupId = targetGroup.id
+      layer.depthRole = 'subject'
+      changed = true
+    }
+
+    return { document: normalized, changed }
+  }
+
+  function restoreRigCatalogSnapshot(snapshot?: string): void {
+    if (!snapshot) return
+    try {
+      useRigCatalogStore().importCatalog(snapshot, useAssetStore().assets)
+    } catch (error) {
+      console.warn('Snapshot de rigs ignoré car invalide :', error)
+    }
+  }
 
   function persistCurrentDocument(): Promise<void> {
     const snapshot = clone(currentDocument.value)
@@ -309,6 +445,8 @@ export const useEditorStore = defineStore('editor', () => {
     currentDocument.value.depthOfField = clone(state.depthOfField)
     currentDocument.value.groups = clone(state.groups)
     currentDocument.value.layers = clone(state.layers)
+    currentDocument.value.rigCatalogSnapshot = state.rigCatalogSnapshot
+    restoreRigCatalogSnapshot(state.rigCatalogSnapshot)
     if (
       selectedLayerId.value &&
       !currentDocument.value.layers.some((l) => l.id === selectedLayerId.value)
@@ -349,16 +487,21 @@ export const useEditorStore = defineStore('editor', () => {
     try {
       const existing = await editorDocumentRepository.getById(documentId)
       if (existing) {
-        currentDocument.value = normalizeDocument(existing)
+        const migrated = normalizeAndDetachAccessories(existing)
+        currentDocument.value = migrated.document
+        if (migrated.changed) await editorDocumentRepository.save(currentDocument.value)
       } else {
         const projectDocuments = await editorDocumentRepository.getByProjectId(projectId)
-        currentDocument.value = projectDocuments[0] ?? createDefaultDocument(projectId)
+        const source = projectDocuments[0] ?? createDefaultDocument(projectId)
+        const migrated = normalizeAndDetachAccessories(source)
+        currentDocument.value = migrated.document
         currentDocument.value.id = documentId || 'doc_default'
-        if (projectDocuments.length === 0)
+        if (projectDocuments.length === 0 || migrated.changed)
           await editorDocumentRepository.save(currentDocument.value)
       }
       clearStudioSelection()
       clearHistory()
+      restoreRigCatalogSnapshot(currentDocument.value.rigCatalogSnapshot)
       return currentDocument.value
     } finally {
       isLoading.value = false
@@ -414,6 +557,7 @@ export const useEditorStore = defineStore('editor', () => {
       (group) => group.kind === 'stage' && group.allowedCategories.includes(category)
     )
     if (matching) return matching
+    if (isFreeAccessoryCategory(category)) return accessoriesStageGroup()
     return (
       currentDocument.value.groups.find((group) => group.kind === 'stage') ??
       currentDocument.value.groups[0]
@@ -920,13 +1064,16 @@ export const useEditorStore = defineStore('editor', () => {
   function applyViewportSnapshot(snapshot: ViewportSnapshot): number {
     currentDocument.value.camera = clone(snapshot.camera)
     currentDocument.value.depthOfField = normalizeDepthOfField(snapshot.depthOfField)
-    const normalized = normalizeDocument({
+    const migrated = normalizeAndDetachAccessories({
       ...currentDocument.value,
       groups: clone(snapshot.groups),
-      layers: clone(snapshot.layers)
+      layers: clone(snapshot.layers),
+      rigCatalogSnapshot: snapshot.rigCatalogSnapshot
     })
-    currentDocument.value.groups = normalized.groups
-    currentDocument.value.layers = normalized.layers
+    currentDocument.value.groups = migrated.document.groups
+    currentDocument.value.layers = migrated.document.layers
+    currentDocument.value.rigCatalogSnapshot = migrated.document.rigCatalogSnapshot
+    restoreRigCatalogSnapshot(currentDocument.value.rigCatalogSnapshot)
     clearStudioSelection()
     clearHistory()
     persistInBackground()
@@ -958,6 +1105,12 @@ export const useEditorStore = defineStore('editor', () => {
     }
     clearStudioSelection()
     clearHistory()
+  }
+
+  function syncRigCatalogSnapshot(snapshot: string): void {
+    if (currentDocument.value.rigCatalogSnapshot === snapshot) return
+    currentDocument.value.rigCatalogSnapshot = snapshot
+    if (!activeGesture.value) persistInBackground()
   }
 
   return {
@@ -1016,6 +1169,7 @@ export const useEditorStore = defineStore('editor', () => {
     redo,
     clearHistory,
     applyViewportSnapshot,
-    syncAfterAssetDeletion
+    syncAfterAssetDeletion,
+    syncRigCatalogSnapshot
   }
 })

@@ -8,57 +8,75 @@ const props: RigCalibrationPanelProps = {
   canvasLabel: '840 × 908',
   rigs: [{ id: 'rig-body', label: 'Corps complet', bodyLabel: '1031 × 812 px', isDefault: true }],
   selectedRigId: 'rig-body',
+  bodyOrigin: { x: 212, y: 419 },
+  isEditingOrigin: false,
   categories: [
-    { value: 'head', label: 'Têtes & Visages', enabled: true },
-    { value: 'arms_left', label: 'Bras gauche', enabled: false }
-  ],
-  selectedCategory: 'head',
-  categoryEnabled: true,
-  items: [
     {
-      id: 'head-1',
-      label: 'Tête surprise',
-      categoryLabel: 'Têtes & Visages',
-      dimensions: '260 × 309 px',
-      compatible: true,
-      isDefault: true,
-      hasOverride: false
+      category: 'head',
+      label: 'Têtes & Visages',
+      icon: 'face',
+      color: '#fb7185',
+      enabled: true,
+      items: [
+        {
+          id: 'head-1',
+          label: 'Tête surprise',
+          categoryLabel: 'Têtes & Visages',
+          dimensions: '260 × 309 px',
+          compatible: true,
+          isDefault: true,
+          hasOverride: false
+        }
+      ],
+      selectedItemId: 'head-1',
+      heritageState: 'template',
+      value: { x: 0, y: 0, scale: 1, rotation: 0, zIndex: 10 }
     }
   ],
-  selectedItemId: 'head-1',
-  heritageState: 'template',
-  value: { x: 0, y: 0, scale: 1, rotation: 0, zIndex: 10 },
   canDuplicate: true
 }
 
-describe('RigCalibrationPanel (v3)', () => {
-  it('présente le corps racine et le badge de template', () => {
+describe('RigCalibrationPanel (Multi-Catégories)', () => {
+  it('présente le rig, l’origine et les catégories accordéon', () => {
     const wrapper = mount(RigCalibrationPanel, { props })
-    expect(wrapper.text()).toContain('Corps racine')
-    expect(wrapper.text()).toContain('1031 × 812 px')
-    expect(wrapper.text()).toContain('Template de la catégorie')
+    expect(wrapper.text()).toContain('Rig Berlu')
+    expect(wrapper.text()).toContain('Origine')
+    expect(wrapper.text()).toContain('212px')
+    expect(wrapper.text()).toContain('Têtes & Visages')
   })
 
-  it('émet les actions de sauvegarde, export et ouverture de duplication', async () => {
+  it('émet edit-origin et reset-origin', async () => {
     const wrapper = mount(RigCalibrationPanel, { props })
     const buttons = wrapper.findAll('button')
 
-    await buttons.find((button) => button.text().includes('Enregistrer'))!.trigger('click')
-    await buttons.find((button) => button.text().includes('Exporter tout'))!.trigger('click')
-    await buttons.find((button) => button.text().includes('Copier la configuration'))!.trigger('click')
+    const editOriginBtn = buttons.find((b) => b.text().includes('Ajuster l’origine'))
+    expect(editOriginBtn).toBeDefined()
+    await editOriginBtn!.trigger('click')
+    expect(wrapper.emitted('edit-origin')).toBeTruthy()
 
-    expect(wrapper.emitted('save')).toHaveLength(1)
-    expect(wrapper.emitted('export')).toHaveLength(1)
-    expect(wrapper.emitted('open-duplicate')).toHaveLength(1)
+    const resetOriginBtn = buttons.find((b) => b.text().includes('Centrer'))
+    expect(resetOriginBtn).toBeDefined()
+    await resetOriginBtn!.trigger('click')
+    expect(wrapper.emitted('reset-origin')).toBeTruthy()
   })
 
-  it('émet duplicate-field avec le nom du champ lors du clic sur l’IconButton', async () => {
+  it('émet save-part lors du clic sur le bouton de sauvegarde', async () => {
     const wrapper = mount(RigCalibrationPanel, { props })
-    const copyButtons = wrapper.findAllComponents({ name: 'IconButton' })
-    const xCopyBtn = copyButtons.find((btn) => btn.props('ariaLabel')?.includes('Appliquer X'))
-    expect(xCopyBtn).toBeDefined()
-    await xCopyBtn!.trigger('click')
+    const buttons = wrapper.findAll('button')
 
-    expect(wrapper.emitted('duplicate-field')).toEqual([['x']])
+    const saveBtn = buttons.find((b) => b.text().includes('Sauvegarder'))
+    expect(saveBtn).toBeDefined()
+    await saveBtn!.trigger('click')
+    expect(wrapper.emitted('save-part')).toEqual([['head']])
+  })
+
+  it('émet apply-all pour la catégorie active', async () => {
+    const wrapper = mount(RigCalibrationPanel, { props })
+    const buttons = wrapper.findAll('button')
+
+    const applyAllBtn = buttons.find((b) => b.text().includes('Appliquer à toutes'))
+    expect(applyAllBtn).toBeDefined()
+    await applyAllBtn!.trigger('click')
+    expect(wrapper.emitted('apply-all')).toEqual([['head']])
   })
 })

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RenderableLayer } from '../composables/useHierarchyResolver'
-import { mapStagePointToImagePixel } from './alpha-hit-test'
+import { mapPointToImagePixel, mapStagePointToImagePixel } from './alpha-hit-test'
 
 function layer(overrides: Partial<RenderableLayer> = {}): RenderableLayer {
   return {
@@ -35,5 +35,21 @@ describe('mapStagePointToImagePixel', () => {
 
   it('rejette un point situé hors du bitmap recadré', () => {
     expect(mapStagePointToImagePixel(layer(), { x: 99, y: 250 }, 20, 10)).toBeNull()
+  })
+
+  it('gère les objets TransformGeometry arbitraires pour le calibrateur', () => {
+    const geom = {
+      x: 50,
+      y: 100,
+      width: 100,
+      height: 100,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0
+    }
+    expect(mapPointToImagePixel(geom, { x: 75, y: 125 }, 10, 10)).toEqual({
+      x: 2,
+      y: 2
+    })
   })
 })

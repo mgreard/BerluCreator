@@ -30,7 +30,7 @@ function asset(id: string, name: string, category: AssetCategory): Asset {
   }
 }
 
-describe('useRigRuntime (v3)', () => {
+describe('useRigRuntime (v6)', () => {
   beforeEach(() => {
     localStorage.clear()
     setActivePinia(createPinia())
@@ -91,12 +91,11 @@ describe('useRigRuntime (v3)', () => {
     const catalog = useRigCatalogStore()
     const body = asset('body-a', 'Corps A', 'body')
     const head = asset('head-1', 'Tête', 'head')
-    const arm = asset('arm-left', 'Bras gauche', 'arms_left')
-    assetStore.assets = [body, head, arm]
+    assetStore.assets = [body, head]
     catalog.initialize(assetStore.assets)
     const [rig] = catalog.rigs
 
-    catalog.setCategoryEnabled(rig!.id, 'arms_left', false)
+    catalog.setCategoryEnabled(rig!.id, 'head', false)
     const runtime = useRigRuntime()
     runtime.activateRig(rig!)
 
@@ -107,7 +106,6 @@ describe('useRigRuntime (v3)', () => {
 
     const layers = editor.currentDocument.layers.filter((l) => l.groupId === group!.id)
     expect(layers.some((l) => l.category === 'body')).toBe(true)
-    expect(layers.some((l) => l.category === 'head')).toBe(true)
-    expect(layers.some((l) => l.category === 'arms_left')).toBe(false)
+    expect(layers.some((l) => l.category === 'head')).toBe(false)
   })
 })

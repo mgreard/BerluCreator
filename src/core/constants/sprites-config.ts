@@ -11,11 +11,8 @@ export const SPRITES_CONFIG: SpritesConfigFile = {
     character_full: { isMovable: false, defaultZIndex: 10 },
     body: { isMovable: false, defaultZIndex: 10 },
     head: { isMovable: false, defaultZIndex: 20 },
-    mouth: { isMovable: false, defaultZIndex: 25 },
-    eyes: { isMovable: false, defaultZIndex: 24 },
+    eyes: { isMovable: true, defaultZIndex: 26 },
     props_host: { isMovable: true, defaultZIndex: 30 },
-    arms_left: { isMovable: false, defaultZIndex: 12 },
-    arms_right: { isMovable: false, defaultZIndex: 15 },
     props_set: { isMovable: true, defaultZIndex: 30 },
     desk: { isMovable: true, defaultZIndex: 10 },
     props_desk: { isMovable: true, defaultZIndex: 30 },
@@ -62,20 +59,23 @@ export function resolveSpriteConfig(name: string, category: AssetCategory): {
     if (rule.pattern) {
       const regex = new RegExp(rule.pattern, 'i')
       if (regex.test(normalizedName)) {
-        const defaults = SPRITES_CONFIG.categoryDefaults[category] || { isMovable: false, defaultZIndex: 10 }
         return {
-          isMovable: rule.isMovable ?? defaults.isMovable,
-          defaultZIndex: rule.defaultZIndex ?? defaults.defaultZIndex,
+          isMovable: rule.isMovable ?? SPRITES_CONFIG.categoryDefaults[category]?.isMovable ?? true,
+          defaultZIndex:
+            rule.defaultZIndex ??
+            SPRITES_CONFIG.categoryDefaults[category]?.defaultZIndex ??
+            ASSET_CATEGORIES[category]?.defaultZIndex ??
+            10,
           rule
         }
       }
     }
   }
 
-  // 2. Fallback sur les valeurs par défaut de la catégorie
-  const catDefault = SPRITES_CONFIG.categoryDefaults[category] ?? { isMovable: false, defaultZIndex: 10 }
+  // 2. Fallback sur la catégorie
+  const categoryConfig = SPRITES_CONFIG.categoryDefaults[category]
   return {
-    isMovable: catDefault.isMovable,
-    defaultZIndex: catDefault.defaultZIndex
+    isMovable: categoryConfig?.isMovable ?? true,
+    defaultZIndex: categoryConfig?.defaultZIndex ?? 10
   }
 }

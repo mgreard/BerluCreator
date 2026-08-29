@@ -5,6 +5,7 @@ import {
   assetsShareRigIdentity,
   createRigCatalogFile,
   createRigDefinition,
+  defaultBodyOrigin,
   duplicateRigConfig,
   effectiveCalibration,
   findAssetByRigIdentity,
@@ -12,41 +13,30 @@ import {
   isRigConfigurableCategory,
   isRigSlotCategory,
   parseRigCatalogFile,
+  rebaseRigBodyOrigin,
   rigAssetIdentity,
   rigAssetKey
 } from './rig-catalog.service'
 import type {
+  DuplicateRigOptions,
   RigCatalogFile,
   RigCategoryDefinition,
   RigConfigurableCategory,
   RigDefinition,
-  RigPartDefinition
+  RigPartDefinition,
+  RigPoint
 } from './rig-catalog.types'
 import { RIG_CATALOG_STORAGE_KEY } from './rig-catalog.types'
 
-const STORAGE_KEY_V2 = 'berlu-creator:rig-catalog:v2'
-
 function readCatalog(): Pick<RigCatalogFile, 'rigs' | 'defaultRigByCharacter'> {
   if (typeof localStorage === 'undefined') return { rigs: [], defaultRigByCharacter: {} }
-  const rawV3 = localStorage.getItem(RIG_CATALOG_STORAGE_KEY)
-  if (rawV3) {
+  const current = localStorage.getItem(RIG_CATALOG_STORAGE_KEY)
+  if (current) {
     try {
-      const parsed = parseRigCatalogFile(rawV3)
+      const parsed = parseRigCatalogFile(current)
       return { rigs: parsed.rigs, defaultRigByCharacter: parsed.defaultRigByCharacter }
     } catch {
-      // Fall through to v2 check
-    }
-  }
-
-  const rawV2 = localStorage.getItem(STORAGE_KEY_V2)
-  if (rawV2) {
-    try {
-      const parsed = parseRigCatalogFile(rawV2)
-      localStorage.setItem(RIG_CATALOG_STORAGE_KEY, JSON.stringify(parsed))
-      localStorage.removeItem(STORAGE_KEY_V2)
-      return { rigs: parsed.rigs, defaultRigByCharacter: parsed.defaultRigByCharacter }
-    } catch {
-      return { rigs: [], defaultRigByCharacter: {} }
+      // Ignorer les fichiers corrompus
     }
   }
 
@@ -59,6 +49,7 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
   const defaultRigByCharacter = ref<Record<string, string>>(initial.defaultRigByCharacter)
   const isCalibrationOpen = ref(false)
   const selectedRigId = ref<string | null>(null)
+  const calibrationTargetId = ref<string | null>(null)
 
   function persist(): void {
     if (typeof localStorage === 'undefined') return
@@ -277,13 +268,10 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
     const part = partForAsset(rig, asset)
     if (!part) return
 
-    const isDefault = categoryDef.defaultPartKey === rigAssetKey(part.asset)
-    if (isDefault || !categoryDef.template) {
+    // Enregistrement strictement individuel pour cet asset sans modifier les autres pièces
+    part.calibrationOverride = { ...calibration }
+    if (!categoryDef.template) {
       categoryDef.template = { ...calibration }
-      categoryDef.defaultPartKey = rigAssetKey(part.asset)
-      part.calibrationOverride = undefined
-    } else {
-      part.calibrationOverride = { ...calibration }
     }
     rig.updatedAt = Date.now()
     persist()
@@ -302,6 +290,130 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
     }
   }
 
+  function updateRigBodyOrigin(rigId: string, origin: RigPoint): void {
+    const rig = rigById(rigId)
+    if (!rig) return
+    const rebased = rebaseRigBodyOrigin(rig, origin)
+    const index = rigs.value.findIndex((r) => r.id === rigId)
+    if (index >= 0) {
+      rigs.value[index] = rebased
+    }
+    persist()
+  }
+
+  function resetRigBodyOrigin(rigId: string): void {
+    const rig = rigById(rigId)
+    if (!rig) return
+    const defaultOrigin = defaultBodyOrigin(rig.body)
+    const rebased = rebaseRigBodyOrigin(rig, defaultOrigin)
+    const index = rigs.value.findIndex((r) => r.id === rigId)
+    if (index >= 0) {
+      rigs.value[index] = rebased
+    }
+    persist()
+  }
+
+  function savePartCommonPosition(
+    rigId: string,
+    category: RigConfigurableCategory,
+    calibration: AssetCalibration
+  ): void {
+    const rig = rigById(rigId)
+    if (!rig) return
+    let categoryDef = rig.categories.find((c) => c.category === category)
+    if (!categoryDef) {
+      categoryDef = { category, enabled: true }
+      rig.categories.push(categoryDef)
+    }
+    categoryDef.template = { ...calibration }
+    rig.updatedAt = Date.now()
+    persist()
+  }
+
+  function savePartSpecificPosition(
+    rigId: string,
+    asset: Asset,
+    calibration: AssetCalibration
+  ): void {
+    const rig = rigById(rigId)
+    if (!rig || asset.category === 'body' || !isRigConfigurableCategory(asset.category)) return
+    const part = partForAsset(rig, asset)
+    if (!part) return
+    part.calibrationOverride = { ...calibration }
+    rig.updatedAt = Date.now()
+    persist()
+  }
+
+  function resetPartToCommon(rigId: string, asset: Asset): void {
+    const rig = rigById(rigId)
+    if (!rig || asset.category === 'body' || !isRigConfigurableCategory(asset.category)) return
+    const part = partForAsset(rig, asset)
+    if (!part) return
+    part.calibrationOverride = undefined
+    rig.updatedAt = Date.now()
+    persist()
+  }
+
+  function applyPartCalibrationToAll(
+    rigId: string,
+    category: RigConfigurableCategory,
+    calibration: AssetCalibration,
+    targetAssetIds?: string[]
+  ): void {
+    const rig = rigById(rigId)
+    if (!rig) return
+    let categoryDef = rig.categories.find((c) => c.category === category)
+    if (!categoryDef) {
+      categoryDef = { category, enabled: true }
+      rig.categories.push(categoryDef)
+    }
+
+    if (!targetAssetIds || targetAssetIds.length === 0) {
+      // Snapshot indépendant à l'instant du clic pour chaque pièce de la catégorie
+      for (const part of rig.parts) {
+        if (part.asset.category === category) {
+          part.calibrationOverride = { ...calibration }
+        }
+      }
+    } else {
+      for (const part of rig.parts) {
+        if (part.asset.category === category) {
+          const key = rigAssetKey(part.asset)
+          const match = targetAssetIds.some((id) => id === key || id === part.asset.name)
+          if (match) {
+            part.calibrationOverride = { ...calibration }
+          }
+        }
+      }
+    }
+    rig.updatedAt = Date.now()
+    persist()
+  }
+
+  function saveHeadCommonPosition(rigId: string, calibration: AssetCalibration): void {
+    savePartCommonPosition(rigId, 'head', calibration)
+  }
+
+  function saveHeadSpecificPosition(
+    rigId: string,
+    asset: Asset,
+    calibration: AssetCalibration
+  ): void {
+    savePartSpecificPosition(rigId, asset, calibration)
+  }
+
+  function resetHeadToCommon(rigId: string, asset: Asset): void {
+    resetPartToCommon(rigId, asset)
+  }
+
+  function applyHeadCalibrationToAll(
+    rigId: string,
+    calibration: AssetCalibration,
+    targetAssetIds?: string[]
+  ): void {
+    applyPartCalibrationToAll(rigId, 'head', calibration, targetAssetIds)
+  }
+
   function updateBodyCalibration(rigId: string, calibration: AssetCalibration): void {
     const rig = rigById(rigId)
     if (!rig) return
@@ -310,12 +422,16 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
     persist()
   }
 
-  function duplicateRigConfiguration(sourceRigId: string, targetRigId: string): void {
+  function duplicateRigConfiguration(
+    sourceRigId: string,
+    targetRigId: string,
+    options?: DuplicateRigOptions
+  ): void {
     const sourceRig = rigById(sourceRigId)
     const targetRig = rigById(targetRigId)
-    if (!sourceRig || !targetRig || sourceRig.characterKey !== targetRig.characterKey) return
+    if (!sourceRig || !targetRig) return
 
-    const updated = duplicateRigConfig(sourceRig, targetRig)
+    const updated = duplicateRigConfig(sourceRig, targetRig, options)
     const index = rigs.value.findIndex((r) => r.id === targetRigId)
     if (index >= 0) {
       rigs.value[index] = updated
@@ -351,6 +467,7 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
 
   function openCalibration(rigId?: string): void {
     selectedRigId.value = rigId ?? selectedRigId.value
+    calibrationTargetId.value = null
     isCalibrationOpen.value = true
   }
 
@@ -408,6 +525,7 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
 
   function closeCalibration(): void {
     isCalibrationOpen.value = false
+    calibrationTargetId.value = null
   }
 
   return {
@@ -415,6 +533,7 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
     defaultRigByCharacter,
     isCalibrationOpen,
     selectedRigId,
+    calibrationTargetId,
     initialize,
     rigById,
     rigsForCharacter,
@@ -428,6 +547,16 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
     setDefaultPart,
     savePartCalibration,
     resetPartCalibration,
+    updateRigBodyOrigin,
+    resetRigBodyOrigin,
+    savePartCommonPosition,
+    savePartSpecificPosition,
+    resetPartToCommon,
+    applyPartCalibrationToAll,
+    saveHeadCommonPosition,
+    saveHeadSpecificPosition,
+    resetHeadToCommon,
+    applyHeadCalibrationToAll,
     updateBodyCalibration,
     duplicateRigConfiguration,
     propagateFieldToCategory,

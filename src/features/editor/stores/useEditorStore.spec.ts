@@ -90,6 +90,64 @@ describe('useEditorStore', () => {
     )
   })
 
+  it('crée des occurrences indépendantes pour un même accessoire libre', () => {
+    const store = useEditorStore()
+    const assets = useAssetStore()
+    const glasses = characterAsset('glasses', 'Lunettes', 'berlu', 'eyes')
+    glasses.isMovable = true
+    assets.assets = [glasses]
+
+    const first = store.assignAssetToGroup(glasses.id, glasses.category)
+    const second = store.assignAssetToGroup(glasses.id, glasses.category)
+    const group = store.currentDocument.groups.find((candidate) => candidate.id === first.groupId)
+
+    expect(first.id).not.toBe(second.id)
+    expect(first.groupId).toBe(second.groupId)
+    expect(group).toMatchObject({ kind: 'stage', id: 'grp_accessories' })
+    expect(store.currentDocument.layers.filter((layer) => layer.assetId === glasses.id)).toHaveLength(2)
+    expect(store.selectedLayerId).toBe(second.id)
+  })
+
+  it('détache les anciens accessoires du groupe personnage au chargement', async () => {
+    const store = useEditorStore()
+    const assets = useAssetStore()
+    const glasses = characterAsset('legacy-glasses', 'Anciennes lunettes', 'berlu', 'eyes')
+    glasses.width = 200
+    glasses.height = 80
+    assets.assets = [glasses]
+
+    const legacyDocument = JSON.parse(JSON.stringify(store.currentDocument))
+    const characterGroup = legacyDocument.groups.find((group: CharacterGroup) => group.kind === 'character')
+    characterGroup.allowedCategories.push('eyes')
+    characterGroup.transform = { x: 30, y: -10, scaleX: 1.2, scaleY: 1.2, rotation: 20, opacity: 1 }
+    legacyDocument.layers.push({
+      id: 'legacy-layer',
+      assetId: glasses.id,
+      name: glasses.name,
+      category: 'eyes',
+      groupId: characterGroup.id,
+      zIndex: 26,
+      order: 0,
+      muted: false,
+      locked: false,
+      depthRole: 'auto',
+      transform: { x: 250, y: 120, scaleX: 0.8, scaleY: 0.8, rotation: 5, opacity: 1 }
+    })
+    vi.mocked(editorDocumentRepository.getById).mockResolvedValueOnce(legacyDocument)
+
+    await store.loadDocument('doc_default')
+
+    const migrated = store.currentDocument.layers.find((layer) => layer.id === 'legacy-layer')
+    const migratedCharacter = store.currentDocument.groups.find(
+      (group): group is CharacterGroup => group.id === characterGroup.id && group.kind === 'character'
+    )
+    expect(migrated).toMatchObject({ groupId: 'grp_accessories', depthRole: 'subject' })
+    expect(migrated?.transform.rotation).toBe(25)
+    expect(migrated?.transform.scaleX).toBeGreaterThan(0)
+    expect(migratedCharacter?.allowedCategories).not.toContain('eyes')
+    expect(editorDocumentRepository.save).toHaveBeenCalled()
+  })
+
   it('réserve la sélection de groupe aux personnages et garde les props atomiques', () => {
     const store = useEditorStore()
     const assets = useAssetStore()
@@ -398,10 +456,10 @@ describe('useEditorStore', () => {
     expect(layer.transform.scaleY).toBe(1)
 
     store.undo()
-    expect(layer.transform.scaleX).toBe(-1)
+    expect(store.currentDocument.layers.find((c) => c.id === layer.id)?.transform.scaleX).toBe(-1)
 
     store.redo()
-    expect(layer.transform.scaleX).toBe(1)
+    expect(store.currentDocument.layers.find((c) => c.id === layer.id)?.transform.scaleX).toBe(1)
   })
 
   it('permet de retourner un groupe de personnage horizontalement', () => {
@@ -419,6 +477,6 @@ describe('useEditorStore', () => {
     expect(group.transform.scaleY).toBe(1.5)
 
     store.undo()
-    expect(group.transform.scaleX).toBe(-1)
+    expect(store.currentDocument.groups.find((c) => c.id === group.id)?.transform.scaleX).toBe(-1)
   })
 })

@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import type { AssetCategory } from '@core/types/asset.types'
 import CategorySelect from './CategorySelect.vue'
 
-const category = ref<AssetCategory>('mouth')
+const category = ref<AssetCategory>('head')
 </script>
 
 <template>

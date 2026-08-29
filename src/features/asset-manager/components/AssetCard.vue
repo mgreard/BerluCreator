@@ -18,13 +18,15 @@ import { Icon } from '@/components/ui/icon'
 import { Heading } from '@/components/ui/heading'
 import { SelectableSurface } from '@/components/ui/selectable-surface'
 
-const { asset, selected = false } = defineProps<{
+const { asset, selected = false, allowDuplicate = false } = defineProps<{
   asset: Asset
   selected?: boolean
+  allowDuplicate?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'select', asset: Asset): void
+  (e: 'duplicate', asset: Asset): void
   (e: 'delete', asset: Asset): void
 }>()
 
@@ -132,6 +134,16 @@ watchEffect(async () => {
         class="asset-delete absolute right-1.5 top-1.5 z-10 size-7 border border-border-default bg-bg-elevated/90 p-0 text-text-muted shadow-sm hover:border-danger/40 hover:text-danger"
         @click.stop="emit('delete', asset)"
       />
+      <IconButton
+        v-if="allowDuplicate"
+        icon="add"
+        size="xs"
+        variant="ghost"
+        :aria-label="`Ajouter une autre occurrence de ${asset.name}`"
+        title="Ajouter une autre occurrence"
+        class="asset-duplicate absolute left-1.5 top-1.5 z-10 size-7 border border-border-default bg-bg-elevated/90 p-0 text-text-muted shadow-sm hover:border-primary/40 hover:text-primary"
+        @click.stop="emit('duplicate', asset)"
+      />
     </div>
 
     <div class="min-w-0 pt-0.5">
@@ -215,9 +227,22 @@ watchEffect(async () => {
   transition: opacity 200ms ease-out, transform 200ms ease-out, color 200ms ease-out, border-color 200ms ease-out;
 }
 
+.asset-duplicate {
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 200ms ease-out, transform 200ms ease-out, color 200ms ease-out, border-color 200ms ease-out;
+}
+
 .asset-card:hover .asset-delete,
 .asset-card:focus-within .asset-delete,
 .asset-card[data-selected='true'] .asset-delete {
+  opacity: 0.82;
+  transform: translateY(0);
+}
+
+.asset-card:hover .asset-duplicate,
+.asset-card:focus-within .asset-duplicate,
+.asset-card[data-selected='true'] .asset-duplicate {
   opacity: 0.82;
   transform: translateY(0);
 }
@@ -227,11 +252,18 @@ watchEffect(async () => {
     opacity: 0.82;
     transform: none;
   }
+
+
+  .asset-duplicate {
+    opacity: 0.82;
+    transform: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .asset-card,
   .asset-delete,
+  .asset-duplicate,
   .asset-name {
     transition: none;
   }

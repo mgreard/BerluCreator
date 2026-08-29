@@ -1,20 +1,11 @@
-import { assetRepository } from '@infrastructure/db/repositories/asset.repository'
-import {
-  isAssetCategory,
-  type Asset,
-  type AssetCategory
-} from '@core/types/asset.types'
-import { resolveSpriteConfig } from '@core/constants/sprites-config'
+import type { Asset, AssetCategory } from '@core/types/asset.types'
+import { isAssetCategory } from '@core/types/asset.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
+import { resolveSpriteConfig } from '@core/constants/sprites-config'
+import { assetRepository } from '@infrastructure/db/repositories/asset.repository'
 import { generateId } from '@/lib/utils'
 
-// Import eager de tous les sprites PNG du dossier assets
-const spriteModules = import.meta.glob<string>('@/assets/sprites/**/*.png', {
-  eager: true,
-  import: 'default'
-})
-
-async function getImageDimensions(blob: Blob): Promise<{ width: number; height: number }> {
+function getImageDimensions(blob: Blob): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(blob)
     const img = new Image()
@@ -22,46 +13,76 @@ async function getImageDimensions(blob: Blob): Promise<{ width: number; height: 
       URL.revokeObjectURL(url)
       resolve({ width: img.naturalWidth, height: img.naturalHeight })
     }
-    img.onerror = () => {
+    img.onerror = (err) => {
       URL.revokeObjectURL(url)
-      reject(new Error('Impossible de lire les dimensions du sprite.'))
+      reject(err)
     }
     img.src = url
   })
 }
 
 /**
- * Charge l'ensemble des sprites réels du studio dans la base locale Dexie
- * avec leurs dimensions natives, sans recadrage transparent.
+ * Nettoie les catégories obsolètes et déduplique la base de données locale.
  */
-export async function syncBundledAssets(force = false): Promise<void> {
-  const existing = await assetRepository.getAll()
+export async function cleanupObsoleteAndDuplicateAssets(): Promise<void> {
+  const allAssets = await assetRepository.getAll()
+  const seenIdentities = new Map<string, Asset>()
 
-  const needsSpritePackMigration = existing.some(
-    (asset) => !isAssetCategory(asset.category) || asset.isMovable === undefined
-  )
+  for (const asset of allAssets) {
+    // 1. Supprimer les catégories obsolètes (ex: mouth, arms_left, arms_right)
+    if (!isAssetCategory(asset.category)) {
+      await assetRepository.delete(asset.id)
+      continue
+    }
 
-  // Nettoyer les anciens assets si leur structure est obsolète ou en cas de forçage.
-  if (needsSpritePackMigration || force) {
-    for (const old of existing) {
-      await assetRepository.delete(old.id)
+    // 2. Dédupliquer par identité (catégorie + nom normalisé)
+    const identity = spriteIdentity(asset.name, asset.category)
+    if (seenIdentities.has(identity)) {
+      // Déjà présent : supprimer le doublon
+      await assetRepository.delete(asset.id)
+    } else {
+      seenIdentities.set(identity, asset)
     }
   }
+}
 
-  const assetsToKeep = needsSpritePackMigration || force ? [] : existing
-  const missingPaths = new Set(
-    findMissingBundledSpritePaths(Object.keys(spriteModules), assetsToKeep)
+export async function syncBundledDemoAssets(force = false): Promise<void> {
+  const spriteModules = import.meta.glob<string>(
+    '@/assets/sprites/**/*.{png,PNG}',
+    {
+      eager: true,
+      import: 'default'
+    }
   )
 
-  // Importer uniquement les sprites absents. Les imports personnels et les anciens
-  // sprites locaux sont conservés lors d'une synchronisation normale.
+  // 1. Assainir la base de données : supprimer doublons et catégories obsolètes
+  await cleanupObsoleteAndDuplicateAssets()
+
+  // 2. Identifier les sprites manquants
+  const existing = await assetRepository.getAll()
+  const missingPaths = new Set(
+    findMissingBundledSpritePaths(Object.keys(spriteModules), existing)
+  )
+
+  const registeredIdentities = new Set(
+    existing.map((asset) => spriteIdentity(asset.name, asset.category))
+  )
+
   for (const [path, url] of Object.entries(spriteModules)) {
     if (!missingPaths.has(path)) continue
     try {
+      const metadata = parseSpriteMetadata(path)
+      if (!metadata) continue
+      const { name, category, tags } = metadata
+      const identity = spriteIdentity(name, category)
+
+      // Éviter toute insertion en double dans la même boucle
+      if (registeredIdentities.has(identity)) continue
+      registeredIdentities.add(identity)
+
       const response = await fetch(url)
       const blob = await response.blob()
       const dimensions = await getImageDimensions(blob)
-      const { name, category, tags } = parseSpriteMetadata(path)
       const spriteConfig = resolveSpriteConfig(name, category)
 
       const assetId = generateId(`asset_${category}`)
@@ -75,9 +96,10 @@ export async function syncBundledAssets(force = false): Promise<void> {
         blobId,
         width: dimensions.width,
         height: dimensions.height,
-        character: ASSET_CATEGORIES[category].placementMode === 'character-anchored'
-          ? { key: 'berlu', name: 'Berlu', form: 'rig' }
-          : undefined,
+        character:
+          ASSET_CATEGORIES[category]?.placementMode === 'character-anchored'
+            ? { key: 'berlu', name: 'Berlu', form: 'rig' }
+            : undefined,
         isMovable: spriteConfig.isMovable,
         createdAt: Date.now(),
         updatedAt: Date.now()
@@ -89,6 +111,8 @@ export async function syncBundledAssets(force = false): Promise<void> {
     }
   }
 }
+
+export const syncBundledAssets = syncBundledDemoAssets
 
 function spriteIdentity(name: string, category: AssetCategory): string {
   return `${category}:${name.trim().toLocaleLowerCase('fr')}`
@@ -104,6 +128,7 @@ export function findMissingBundledSpritePaths(
   const missing: string[] = []
   for (const path of paths) {
     const metadata = parseSpriteMetadata(path)
+    if (!metadata) continue
     const identity = spriteIdentity(metadata.name, metadata.category)
     if (existingIdentities.has(identity)) continue
     existingIdentities.add(identity)
@@ -116,40 +141,27 @@ export function parseSpriteMetadata(filePath: string): {
   name: string
   category: AssetCategory
   tags: string[]
-} {
+} | null {
   const parts = filePath.replace(/\\/g, '/').split('/')
   const fileName = parts[parts.length - 1].replace(/\.png$/i, '')
   const folder = parts[parts.length - 2]
 
+  // Ignorer les dossiers obsolètes
+  if (folder === 'arms' || folder === 'mouth') {
+    return null
+  }
+
   let category: AssetCategory
   const tags: string[] = [folder]
 
-  // Formater un nom propre lisible (ex: "Bras_baisse_droit" -> "Bras Baissé Droit")
   const formattedName = fileName
     .replace(/_/g, ' ')
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .trim()
 
-  if (folder === 'arms') {
-    const normalizedFileName = fileName.toLowerCase()
-    if (normalizedFileName.includes('_left_arm')) {
-      category = 'arms_left'
-      tags.push('arms_left', 'bras', 'berlu')
-    } else if (
-      normalizedFileName.includes('_right_arm') ||
-      normalizedFileName.includes('_both_arms')
-    ) {
-      category = 'arms_right'
-      tags.push('arms_right', 'bras', 'berlu')
-    } else {
-      throw new Error(`Nom de sprite de bras non reconnu : ${fileName}`)
-    }
-  } else if (folder === 'head') {
+  if (folder === 'head') {
     category = 'head'
     tags.push('head', 'visage', 'expression', 'berlu')
-  } else if (folder === 'mouth') {
-    category = 'mouth'
-    tags.push('mouth', 'bouche', 'phoneme', 'berlu')
   } else if (folder === 'torso') {
     category = 'body'
     tags.push('body', 'corps', 'berlu')
@@ -175,7 +187,7 @@ export function parseSpriteMetadata(filePath: string): {
     category = 'foreground'
     tags.push('foreground', 'premier-plan', 'ambiance')
   } else {
-    throw new Error(`Dossier de sprites non reconnu : ${folder}`)
+    return null
   }
 
   return { name: formattedName, category, tags }

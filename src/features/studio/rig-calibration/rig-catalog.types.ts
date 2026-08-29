@@ -1,28 +1,23 @@
 import type { AssetCalibration, AssetCategory } from '@core/types/asset.types'
 
 export const RIG_CATALOG_SCHEMA = 'berlu-creator/rig-catalog' as const
-export const RIG_CATALOG_VERSION = 3 as const
-export const RIG_CATALOG_STORAGE_KEY = 'berlu-creator:rig-catalog:v3' as const
+export const RIG_CATALOG_VERSION = 6 as const
+export const RIG_CATALOG_STORAGE_KEY = 'berlu-creator:rig-catalog:v6' as const
+
+export interface RigPoint {
+  x: number
+  y: number
+}
 
 export const RIG_SLOT_CATEGORIES = [
   'body',
-  'head',
-  'eyes',
-  'mouth',
-  'arms_left',
-  'arms_right',
-  'props_host'
+  'head'
 ] as const satisfies readonly AssetCategory[]
 
 export type RigSlotCategory = (typeof RIG_SLOT_CATEGORIES)[number]
 
 export const RIG_CONFIGURABLE_CATEGORIES = [
-  'head',
-  'eyes',
-  'mouth',
-  'arms_left',
-  'arms_right',
-  'props_host'
+  'head'
 ] as const satisfies readonly AssetCategory[]
 
 export type RigConfigurableCategory = (typeof RIG_CONFIGURABLE_CATEGORIES)[number]
@@ -56,11 +51,21 @@ export interface RigDefinition {
 
   body: RigAssetIdentity
   bodyCalibration: AssetCalibration
+  /** Origine locale du sprite corps, avant calibration et mise à l’échelle. */
+  bodyOrigin: RigPoint
 
   categories: RigCategoryDefinition[]
   parts: RigPartDefinition[]
   excludedPartKeys: string[]
   updatedAt: number
+}
+
+export interface DuplicateRigOptions {
+  copyOrigin?: boolean
+  copyCommonPosition?: boolean
+  copySpecificPositions?: boolean
+  copyCompatibilities?: boolean
+  copyDefaultHead?: boolean
 }
 
 export interface RigCatalogFile {

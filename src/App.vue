@@ -28,6 +28,7 @@ const editorStore = useEditorStore()
 const workspaceBackupStore = useWorkspaceBackupStore()
 const rigCatalogStore = useRigCatalogStore()
 let stopWorkspaceWatch: WatchStopHandle | null = null
+let stopRigCatalogWatch: WatchStopHandle | null = null
 
 const isSettingsOpen = ref(false)
 const isExportOpen = ref(false)
@@ -88,6 +89,14 @@ onMounted(async () => {
 
   // 3. Charger le document courant de l'éditeur
   await editorStore.loadDocument(proj.editorDocumentId, proj.id)
+  if (!editorStore.currentDocument.rigCatalogSnapshot) {
+    editorStore.syncRigCatalogSnapshot(JSON.stringify(rigCatalogStore.exportCatalog()))
+  }
+  stopRigCatalogWatch = watch(
+    [() => rigCatalogStore.rigs, () => rigCatalogStore.defaultRigByCharacter],
+    () => editorStore.syncRigCatalogSnapshot(JSON.stringify(rigCatalogStore.exportCatalog())),
+    { deep: true }
+  )
 
   await workspaceBackupStore.initialize()
   stopWorkspaceWatch = watch(
@@ -105,6 +114,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stopWorkspaceWatch?.()
+  stopRigCatalogWatch?.()
   workspaceBackupStore.dispose()
 })
 

@@ -1,14 +1,10 @@
+import type { RigConfigurableCategory } from '@/features/studio/rig-calibration/rig-catalog.types'
+
 export interface RigCalibrationPanelRig {
   id: string
   label: string
   bodyLabel: string
   isDefault: boolean
-}
-
-export interface RigCalibrationPanelCategory {
-  value: string
-  label: string
-  enabled: boolean
 }
 
 export interface RigCalibrationPanelItem {
@@ -26,7 +22,7 @@ export interface RigCalibrationPanelValue {
   y: number
   scale: number
   rotation: number
-  zIndex: number
+  zIndex?: number
 }
 
 export type RigCalibrationHeritageState =
@@ -35,18 +31,27 @@ export type RigCalibrationHeritageState =
   | 'custom'
   | 'undefined'
 
+export interface RigCalibrationCategoryConfig {
+  category: RigConfigurableCategory
+  label: string
+  icon: string
+  color: string
+  enabled: boolean
+  items: RigCalibrationPanelItem[]
+  selectedItemId?: string
+  heritageState: RigCalibrationHeritageState
+  value: RigCalibrationPanelValue
+}
+
 export interface RigCalibrationPanelProps {
   characterName: string
   canvasLabel: string
   rigs: RigCalibrationPanelRig[]
   selectedRigId?: string
-  categories: RigCalibrationPanelCategory[]
-  selectedCategory?: string
-  categoryEnabled?: boolean
-  items: RigCalibrationPanelItem[]
-  selectedItemId?: string
-  heritageState?: RigCalibrationHeritageState
-  value: RigCalibrationPanelValue
+  bodyOrigin?: { x: number; y: number }
+  isEditingOrigin?: boolean
+  categories: RigCalibrationCategoryConfig[]
+  activeCategory?: RigConfigurableCategory
   busy?: boolean
   canDuplicate?: boolean
   class?: string
@@ -54,18 +59,22 @@ export interface RigCalibrationPanelProps {
 
 export interface RigCalibrationPanelEmits {
   (event: 'select-rig', rigId: string): void
-  (event: 'select-category', category: string): void
-  (event: 'toggle-category', enabled: boolean): void
-  (event: 'select', assetId: string): void
-  (event: 'update:value', value: RigCalibrationPanelValue): void
-  (event: 'toggle-compatible', compatible: boolean): void
-  (event: 'set-default-part'): void
   (event: 'set-default-rig'): void
+  (event: 'edit-origin'): void
+  (event: 'reset-origin'): void
+  (event: 'toggle-category', category: RigConfigurableCategory): void
+  (event: 'toggle-category-enabled', category: RigConfigurableCategory, enabled: boolean): void
+  (event: 'select-part', category: RigConfigurableCategory, assetId: string): void
+  (event: 'toggle-compatible', category: RigConfigurableCategory, compatible: boolean): void
+  (event: 'set-default-part', category: RigConfigurableCategory): void
+  (event: 'update:value', category: RigConfigurableCategory, value: RigCalibrationPanelValue): void
+  (event: 'set-common-position', category: RigConfigurableCategory): void
+  (event: 'set-specific-position', category: RigConfigurableCategory): void
+  (event: 'save-part', category: RigConfigurableCategory): void
+  (event: 'reset-part', category: RigConfigurableCategory): void
+  (event: 'apply-all', category: RigConfigurableCategory): void
+  (event: 'auto', category: RigConfigurableCategory): void
   (event: 'open-duplicate'): void
-  (event: 'duplicate-field', field: keyof RigCalibrationPanelValue): void
-  (event: 'save'): void
-  (event: 'auto'): void
-  (event: 'reset'): void
   (event: 'export'): void
   (event: 'import', file: File): void
   (event: 'close'): void

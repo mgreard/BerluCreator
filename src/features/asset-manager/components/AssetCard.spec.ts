@@ -56,4 +56,15 @@ describe('AssetCard', () => {
     expect(wrapper.emitted('select')).toEqual([[headAsset]])
     expect(wrapper.emitted('delete')).toEqual([[headAsset]])
   })
+
+  it('propose une occurrence supplémentaire uniquement quand elle est autorisée', async () => {
+    const wrapper = mount(AssetCard, {
+      props: { asset: { ...headAsset, category: 'eyes' }, allowDuplicate: true }
+    })
+    await flushPromises()
+
+    await wrapper.get('button[aria-label^="Ajouter une autre occurrence"]').trigger('click')
+    expect(wrapper.emitted('duplicate')).toHaveLength(1)
+    expect(wrapper.emitted('select')).toBeUndefined()
+  })
 })

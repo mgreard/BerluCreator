@@ -19,7 +19,7 @@ export interface ResolvedLayerPosition {
   opacity: number
 }
 
-export type ResizeHandle = 'tl' | 'tr' | 'bl' | 'br' | 'top' | 'right' | 'bottom' | 'left'
+export type ResizeHandle = 'tl' | 'tr' | 'bl' | 'br' | 'top' | 'right' | 'bottom' | 'left' | 'rot'
 
 export interface ResizeScales {
   scaleX: number

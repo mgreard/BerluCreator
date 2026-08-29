@@ -38,6 +38,7 @@ export interface RenderableLayer {
   localY: number
   localScaleX: number
   localScaleY: number
+  localRotation: number
   rotation: number
   zIndex: number
   opacity: number
@@ -248,6 +249,7 @@ function resolveLayer(
       localY: clamped.y,
       localScaleX: clamped.scaleX,
       localScaleY: clamped.scaleY,
+      localRotation: 0,
       rotation: 0,
       opacity: transform.opacity
     }
@@ -258,22 +260,38 @@ function resolveLayer(
     const geometry = characterGeometry ?? { x: 0, y: 0, baseScale: 1, originX: 0, originY: 0 }
     const width = asset.width * geometry.baseScale
     const height = asset.height * geometry.baseScale
-    const x = geometry.x + transform.x * geometry.baseScale + rig.x
-    const y = geometry.y + transform.y * geometry.baseScale + rig.y
+    const unrotatedX = geometry.x + transform.x * geometry.baseScale + rig.x
+    const unrotatedY = geometry.y + transform.y * geometry.baseScale + rig.y
+    const layerCenterX = unrotatedX + width / 2
+    const layerCenterY = unrotatedY + height / 2
+
+    const groupOriginX = geometry.originX + rig.x
+    const groupOriginY = geometry.originY + rig.y
+
+    let finalCenterX = layerCenterX
+    let finalCenterY = layerCenterY
+
+    const rad = (rig.rotation * Math.PI) / 180
+    const dx = (layerCenterX - groupOriginX) * rig.scaleX
+    const dy = (layerCenterY - groupOriginY) * rig.scaleY
+    finalCenterX = groupOriginX + (dx * Math.cos(rad) - dy * Math.sin(rad))
+    finalCenterY = groupOriginY + (dx * Math.sin(rad) + dy * Math.cos(rad))
+
     return {
       ...commonLayer(layer, asset, group),
-      x: Math.round(x),
-      y: Math.round(y),
+      x: Math.round(finalCenterX - width / 2),
+      y: Math.round(finalCenterY - height / 2),
       width,
       height,
-      transformOriginX: geometry.originX + rig.x,
-      transformOriginY: geometry.originY + rig.y,
+      transformOriginX: finalCenterX,
+      transformOriginY: finalCenterY,
       scaleX: transform.scaleX * rig.scaleX,
       scaleY: transform.scaleY * rig.scaleY,
       localX: transform.x,
       localY: transform.y,
       localScaleX: transform.scaleX,
       localScaleY: transform.scaleY,
+      localRotation: transform.rotation,
       rotation: transform.rotation + rig.rotation,
       opacity: Math.max(0, Math.min(1, transform.opacity * rig.opacity))
     }
@@ -299,6 +317,7 @@ function resolveLayer(
     localY,
     localScaleX: transform.scaleX,
     localScaleY: transform.scaleY,
+    localRotation: transform.rotation,
     rotation: transform.rotation + group.transform.rotation,
     opacity: Math.max(0, Math.min(1, transform.opacity * group.transform.opacity))
   }
