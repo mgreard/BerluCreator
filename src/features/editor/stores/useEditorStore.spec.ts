@@ -333,4 +333,43 @@ describe('useEditorStore', () => {
       'head'
     ])
   })
+
+  it('permet de retourner un calque horizontalement et de l’annuler avec undo/redo', () => {
+    const store = useEditorStore()
+    const layer = store.assignAssetToGroup('prop-flip', 'props_set')
+    expect(layer.transform.scaleX).toBe(1)
+    expect(layer.transform.scaleY).toBe(1)
+
+    store.toggleLayerHorizontalFlip(layer.id)
+    expect(layer.transform.scaleX).toBe(-1)
+    expect(layer.transform.scaleY).toBe(1)
+
+    store.toggleLayerHorizontalFlip(layer.id)
+    expect(layer.transform.scaleX).toBe(1)
+    expect(layer.transform.scaleY).toBe(1)
+
+    store.undo()
+    expect(layer.transform.scaleX).toBe(-1)
+
+    store.redo()
+    expect(layer.transform.scaleX).toBe(1)
+  })
+
+  it('permet de retourner un groupe de personnage horizontalement', () => {
+    const store = useEditorStore()
+    const group = store.currentDocument.groups.find((candidate) => candidate.kind === 'character')!
+    expect(group.transform.scaleX).toBe(1)
+    expect(group.transform.scaleY).toBe(1)
+
+    store.toggleGroupHorizontalFlip(group.id)
+    expect(group.transform.scaleX).toBe(-1)
+    expect(group.transform.scaleY).toBe(1)
+
+    store.updateGroupTransform(group.id, { scaleX: -1.5, scaleY: 1.5 })
+    expect(group.transform.scaleX).toBe(-1.5)
+    expect(group.transform.scaleY).toBe(1.5)
+
+    store.undo()
+    expect(group.transform.scaleX).toBe(-1)
+  })
 })

@@ -58,8 +58,12 @@ function clone<T>(value: T): T {
 }
 
 function normalizeTransform(transform?: Partial<Transform2D>): Transform2D {
-  const scale = transform?.scaleX ?? transform?.scaleY ?? DEFAULT_TRANSFORM.scaleX
-  return { ...DEFAULT_TRANSFORM, ...(transform ?? {}), scaleX: scale, scaleY: scale }
+  return {
+    ...DEFAULT_TRANSFORM,
+    ...(transform ?? {}),
+    scaleX: transform?.scaleX !== undefined ? transform.scaleX : DEFAULT_TRANSFORM.scaleX,
+    scaleY: transform?.scaleY !== undefined ? transform.scaleY : DEFAULT_TRANSFORM.scaleY
+  }
 }
 
 function normalizeDepthOfField(settings?: Partial<DepthOfFieldSettings>): DepthOfFieldSettings {
@@ -85,11 +89,37 @@ function normalizeLayerDepthRole(role?: LayerDepthRole): LayerDepthRole {
 }
 
 function mergeUniformTransform(current: Transform2D, changes: Partial<Transform2D>): Transform2D {
-  const scale = changes.scaleX ?? changes.scaleY
+  let nextScaleX = current.scaleX
+  let nextScaleY = current.scaleY
+
+  if (changes.scaleX !== undefined && changes.scaleY !== undefined) {
+    const magX = Math.abs(changes.scaleX)
+    const magY = Math.abs(changes.scaleY)
+    if (magX !== magY) {
+      nextScaleX = changes.scaleX
+      nextScaleY = magX
+    } else {
+      nextScaleX = changes.scaleX
+      nextScaleY = changes.scaleY
+    }
+  } else if (changes.scaleX !== undefined) {
+    const currentSignX = Math.sign(current.scaleX) || 1
+    const newSignX = Math.sign(changes.scaleX) || 1
+    nextScaleX = changes.scaleX
+    if (Math.abs(changes.scaleX) !== Math.abs(current.scaleX) || currentSignX === newSignX) {
+      nextScaleY = Math.abs(changes.scaleX)
+    }
+  } else if (changes.scaleY !== undefined) {
+    const currentSignX = Math.sign(current.scaleX) || 1
+    nextScaleY = Math.abs(changes.scaleY)
+    nextScaleX = currentSignX * Math.abs(changes.scaleY)
+  }
+
   return normalizeTransform({
     ...current,
     ...changes,
-    ...(scale === undefined ? {} : { scaleX: scale, scaleY: scale })
+    scaleX: nextScaleX,
+    scaleY: nextScaleY
   })
 }
 
@@ -625,6 +655,17 @@ export const useEditorStore = defineStore('editor', () => {
     else mutateStudio('Transformer un calque', apply)
   }
 
+  function toggleLayerHorizontalFlip(layerId: string): void {
+    mutateStudio('Retourner horizontalement un calque', () => {
+      const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
+      if (!layer) return
+      layer.transform = {
+        ...layer.transform,
+        scaleX: -layer.transform.scaleX
+      }
+    })
+  }
+
   function updateLayerSettings(
     layerId: string,
     transform: Partial<Transform2D>,
@@ -722,6 +763,17 @@ export const useEditorStore = defineStore('editor', () => {
     }
     if (activeGesture.value) apply()
     else mutateStudio('Transformer un groupe', apply)
+  }
+
+  function toggleGroupHorizontalFlip(groupId: string): void {
+    mutateStudio('Retourner horizontalement un groupe', () => {
+      const group = currentDocument.value.groups.find((candidate) => candidate.id === groupId)
+      if (!group) return
+      group.transform = {
+        ...group.transform,
+        scaleX: -group.transform.scaleX
+      }
+    })
   }
 
   function updateGroupSettings(
@@ -907,6 +959,7 @@ export const useEditorStore = defineStore('editor', () => {
     removeActiveCharacterRepresentation,
     updateLayer,
     updateLayerTransform,
+    toggleLayerHorizontalFlip,
     updateLayerSettings,
     updateLayerZIndex,
     setLayerMuted,
@@ -916,6 +969,7 @@ export const useEditorStore = defineStore('editor', () => {
     createGroup,
     updateGroup,
     updateGroupTransform,
+    toggleGroupHorizontalFlip,
     updateGroupSettings,
     updateGroupZIndex,
     deleteGroup,

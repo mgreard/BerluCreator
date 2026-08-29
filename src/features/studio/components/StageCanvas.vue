@@ -347,11 +347,14 @@ const selectedBounds = computed<BoxBounds | null>(() => {
 const targetLabel = computed<string | null>(() => {
   if (!activeSelectedLayer.value) return null
   if (isGroupTarget.value && activeSelectedGroup.value) {
-    const scale = activeSelectedGroup.value.transform.scaleX
-    return `Groupe : ${activeSelectedGroup.value.name} (${scale.toFixed(2)}×)`
+    const scale = Math.abs(activeSelectedGroup.value.transform.scaleX)
+    const flipSuffix = activeSelectedGroup.value.transform.scaleX < 0 ? ' [Flip H]' : ''
+    return `Groupe : ${activeSelectedGroup.value.name} (${scale.toFixed(2)}×${flipSuffix})`
   }
   const l = activeSelectedLayer.value
-  return `${l.name || l.asset.name} (${l.localScaleX.toFixed(2)}×)`
+  const scale = Math.abs(l.localScaleX)
+  const flipSuffix = l.localScaleX < 0 ? ' [Flip H]' : ''
+  return `${l.name || l.asset.name} (${scale.toFixed(2)}×${flipSuffix})`
 })
 
 const deleteSelectionLabel = computed(() => {
@@ -391,9 +394,9 @@ const dragStartGroupPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 
 const currentScale = computed(() => {
   if (isGroupTarget.value && activeSelectedGroup.value) {
-    return activeSelectedGroup.value.transform.scaleX
+    return Math.abs(activeSelectedGroup.value.transform.scaleX)
   }
-  return activeSelectedLayer.value?.localScaleX ?? activeSelectedLayer.value?.scaleX ?? 1
+  return Math.abs(activeSelectedLayer.value?.localScaleX ?? activeSelectedLayer.value?.scaleX ?? 1)
 })
 
 const resizeCursorClass = computed(() => {
@@ -478,22 +481,48 @@ onUnmounted(() => {
   if (hasDepthOfFieldGesture) editorStore.endGesture()
 })
 
+const isSelectedFlippedHorizontally = computed(() => {
+  if (isGroupTarget.value && activeSelectedGroup.value) {
+    return activeSelectedGroup.value.transform.scaleX < 0
+  }
+  if (activeSelectedLayer.value) {
+    const rawScaleX =
+      activeSelectedLayer.value.localScaleX ?? activeSelectedLayer.value.scaleX ?? 1
+    return rawScaleX < 0
+  }
+  return false
+})
+
+function flipSelectedHorizontal() {
+  if (isGroupTarget.value && activeSelectedGroup.value) {
+    editorStore.toggleGroupHorizontalFlip(activeSelectedGroup.value.id)
+  } else if (activeSelectedLayer.value) {
+    editorStore.toggleLayerHorizontalFlip(activeSelectedLayer.value.layerId)
+    if (isRigCalibrationOpen.value) {
+      void persistLayerCalibration(activeSelectedLayer.value)
+    }
+  }
+}
+
 function clampScale(value: number) {
   return Number(Math.max(0.05, Math.min(5, value)).toFixed(2))
 }
 
 function applyUniformScale(newScale: number) {
   const scale = clampScale(newScale)
+  const isFlipped = isSelectedFlippedHorizontally.value
+  const scaleX = isFlipped ? -scale : scale
+  const scaleY = scale
 
   if (isGroupTarget.value && activeSelectedGroup.value) {
     editorStore.updateGroupTransform(activeSelectedGroup.value.id, {
-      scaleX: scale,
-      scaleY: scale
+      scaleX,
+      scaleY
     })
   } else if (activeSelectedLayer.value) {
     editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, {
-      scaleX: scale,
-      scaleY: scale
+      scaleX,
+      scaleY
     })
   }
 }
@@ -975,6 +1004,25 @@ function onCanvasDoubleClick(e: MouseEvent) {
               aria-label="Plan de mise au point de l’accessoire"
             />
           </div>
+
+          <IconButton
+            icon="flip"
+            size="xs"
+            variant="ghost"
+            class="viewport-action"
+            :active="isSelectedFlippedHorizontally"
+            :aria-label="
+              isSelectedFlippedHorizontally
+                ? 'Rétablir l’orientation normale'
+                : 'Retourner horizontalement'
+            "
+            :title="
+              isSelectedFlippedHorizontally
+                ? 'Rétablir l’orientation normale'
+                : 'Retourner horizontalement'
+            "
+            @click="flipSelectedHorizontal"
+          />
 
           <IconButton
             icon="delete"
