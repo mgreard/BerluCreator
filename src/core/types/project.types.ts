@@ -17,7 +17,7 @@ export interface Project {
 
 export interface WorkspaceSnapshot {
   id: 'manual'
-  schemaVersion: 4
+  schemaVersion: 4 | 5
   activeProjectId: string
   createdAt: number
   projects: Project[]
@@ -25,6 +25,8 @@ export interface WorkspaceSnapshot {
   viewportSnapshots: ViewportSnapshot[]
   assets: Asset[]
   assetBlobs: AssetBlobRecord[]
+  /** Catalogue de rigs sérialisé. Absent uniquement sur les snapshots legacy v4. */
+  rigCatalogJson?: string
 }
 
 export interface WorkspaceSnapshotSummary {
@@ -35,9 +37,4 @@ export interface WorkspaceSnapshotSummary {
 }
 
 export type WorkspaceBackupStatus =
-  | 'checking'
-  | 'no_snapshot'
-  | 'saved'
-  | 'dirty'
-  | 'saving'
-  | 'error'
+  'checking' | 'no_snapshot' | 'saved' | 'dirty' | 'saving' | 'error'

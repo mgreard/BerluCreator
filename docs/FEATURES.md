@@ -11,21 +11,21 @@
 
 ## Vue d’ensemble
 
-| Domaine                            | Statut             | Résumé                                                                                    |
-| ---------------------------------- | ------------------ | ----------------------------------------------------------------------------------------- |
-| Bibliothèque d’assets              | Disponible         | Navigation par personnage et décor, recherche, miniatures et comptages                    |
-| Import d’images                    | Disponible         | Import multiple PNG/JPEG/WebP/SVG, un asset par fichier                                   |
-| Composition sur canvas             | Disponible         | Ajout, remplacement, sélection, déplacement, redimensionnement et suppression             |
-| Flou de profondeur MVP             | Disponible         | Focus draggable et flou sélectif de l’arrière-plan, désactivable                          |
-| Personnage complet et rig          | Disponible         | Deux représentations conservées, une seule visible à la fois                              |
-| Historique                         | Disponible         | Undo/redo de 50 mutations, gestes regroupés                                               |
-| Cadrage caméra                     | Disponible         | Cadre éditable, facultatif à l’export                                                     |
-| Compositions sauvegardées          | Disponible         | Capture avec miniature, chargement et suppression                                         |
-| Sauvegarde complète                | Disponible, locale | Snapshot complet dans IndexedDB, restauration et indicateur d’écart                       |
-| Export                             | Disponible         | PNG natif/1080p et JSON de structure                                                      |
-| Organisation avancée des calques   | Interne            | Le domaine supporte groupes, ordre, verrouillage et visibilité, sans panneau dédié actuel |
-| Multi-projet, cloud, collaboration | Hors périmètre     | Aucun backend ni compte utilisateur                                                       |
-| Animation et vidéo                 | Hors périmètre     | Timeline et keyframes supprimées                                                          |
+| Domaine                            | Statut         | Résumé                                                                                    |
+| ---------------------------------- | -------------- | ----------------------------------------------------------------------------------------- |
+| Bibliothèque d’assets              | Disponible     | Navigation par personnage et décor, recherche, miniatures et comptages                    |
+| Import d’images                    | Disponible     | Import multiple PNG/JPEG/WebP/SVG, un asset par fichier                                   |
+| Composition sur canvas             | Disponible     | Ajout, remplacement, sélection, déplacement, redimensionnement et suppression             |
+| Flou de profondeur MVP             | Disponible     | Focus draggable et flou sélectif de l’arrière-plan, désactivable                          |
+| Personnage complet et rig          | Disponible     | Deux représentations conservées, une seule visible à la fois                              |
+| Historique                         | Disponible     | Undo/redo de 50 mutations, gestes regroupés                                               |
+| Cadrage caméra                     | Disponible     | Cadre éditable, facultatif à l’export                                                     |
+| Compositions sauvegardées          | Disponible     | Capture avec miniature, chargement et suppression                                         |
+| Sauvegarde complète                | Disponible     | Snapshot local et fichier portable avec images et rigs, export, import et restauration    |
+| Export                             | Disponible     | PNG natif/1080p et JSON de structure                                                      |
+| Organisation avancée des calques   | Interne        | Le domaine supporte groupes, ordre, verrouillage et visibilité, sans panneau dédié actuel |
+| Multi-projet, cloud, collaboration | Hors périmètre | Aucun backend ni compte utilisateur                                                       |
+| Animation et vidéo                 | Hors périmètre | Timeline et keyframes supprimées                                                          |
 
 ## 1. Initialisation et prise en main
 
@@ -250,7 +250,8 @@ Le menu des données permet de créer une sauvegarde contenant :
 - le document courant ;
 - les compositions sauvegardées ;
 - les métadonnées d’assets ;
-- tous les blobs image.
+- tous les blobs image ;
+- le catalogue global des rigs, y compris les placements, compatibilités et choix par défaut.
 
 Un badge indique : vérification, aucune sauvegarde, sauvegardé, modifications à sauvegarder, sauvegarde en cours ou erreur.
 
@@ -258,9 +259,9 @@ Un badge indique : vérification, aucune sauvegarde, sauvegardé, modifications 
 
 Après confirmation, la restauration remplace les projets, documents, compositions, assets et blobs courants par le snapshot manuel. Le studio recharge ensuite ces données.
 
-### Limite de portabilité — Partiel
+### Fichier portable — Disponible
 
-Le snapshot complet reste dans IndexedDB. Il n’est ni téléchargé, ni synchronisé, ni copié hors du navigateur. Il ne remplace donc pas une stratégie de sauvegarde externe.
+Le menu permet aussi d’exporter un fichier JSON autonome puis de le réimporter. Les blobs image y sont encodés en base64 et le catalogue des rigs est inclus. L’import valide le format et les tailles binaires avant de remplacer transactionnellement les données courantes. Les préférences d’interface (thème, largeur des panneaux et état de la visite) ne font pas partie de cette sauvegarde métier.
 
 ### Réinitialisation usine — Disponible
 

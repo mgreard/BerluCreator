@@ -96,9 +96,12 @@ flowchart LR
   V -->|charger et remplacer| D
   C -->|rendre| P[PNG]
   D -->|décrire| J[JSON]
-  A --> B[Sauvegarde complète locale]
+  A --> B[Sauvegarde complète]
   D --> B
   V --> B
+  R[Catalogue des rigs] --> B
+  B -->|exporter| FJ[Fichier autonome]
+  FJ -->|importer| B
   B -->|restaurer| A
   B -->|restaurer| D
   B -->|restaurer| V
@@ -111,7 +114,7 @@ Les concepts structurants sont :
 - **Groupe :** unité logique de transformation, notamment un personnage.
 - **Document courant :** groupes, calques et caméra du plateau actif.
 - **Composition sauvegardée :** copie nommée du document courant avec miniature.
-- **Sauvegarde complète :** copie locale du projet, du document, des assets, des blobs et des compositions.
+- **Sauvegarde complète :** copie locale ou fichier portable du projet, du document, des assets, des blobs, des compositions et du catalogue des rigs.
 
 ## Parcours principal
 
@@ -121,16 +124,16 @@ Les concepts structurants sont :
 4. Un clic ajoute un asset à la scène. Pour un personnage, il choisit implicitement entre représentation complète et rig selon l’asset sélectionné.
 5. Sur le canvas, il sélectionne, déplace et redimensionne le personnage ou l’élément libre. Undo/redo protège l’exploration.
 6. Il peut activer un cadrage caméra et choisir les dimensions du plateau.
-7. Il enregistre une composition réutilisable, crée une sauvegarde complète locale ou exporte le rendu.
+7. Il enregistre une composition réutilisable, crée ou exporte une sauvegarde complète, ou exporte le rendu.
 
 ## Deux niveaux de conservation
 
-| Besoin                            | Fonction                | Contenu                                                  | Effet du chargement                                    |
-| --------------------------------- | ----------------------- | -------------------------------------------------------- | ------------------------------------------------------ |
-| Retrouver une mise en scène       | Composition sauvegardée | Miniature, caméra, groupes et calques                    | Remplace le document courant et vide l’historique      |
-| Protéger tout l’espace de travail | Sauvegarde complète     | Projet, document, assets, fichiers image et compositions | Remplace toutes les données courantes de l’application |
+| Besoin                            | Fonction                | Contenu                                                | Effet du chargement                                     |
+| --------------------------------- | ----------------------- | ------------------------------------------------------ | ------------------------------------------------------- |
+| Retrouver une mise en scène       | Composition sauvegardée | Miniature, caméra, groupes et calques                  | Remplace le document courant et vide l’historique       |
+| Protéger tout l’espace de travail | Sauvegarde complète     | Projet, document, assets, images, compositions et rigs | Remplace toutes les données de travail de l’application |
 
-La sauvegarde complète est stockée dans la même base locale que l’application. Elle protège contre une mauvaise modification ou un reset partiel, mais **pas** contre la suppression des données du navigateur, la perte de la machine ou un changement de navigateur.
+La sauvegarde peut rester locale pour revenir rapidement à un état précédent ou être téléchargée sous forme de fichier autonome. Seul ce fichier exporté protège contre la suppression des données du navigateur et permet le transfert vers une autre machine ou un autre navigateur.
 
 ## Périmètre actuel et non-objectifs
 
@@ -150,7 +153,6 @@ Ne font pas partie du produit livré :
 - publication directe vers un CMS ou un réseau social ;
 - retouche bitmap, suppression de fond, découpe de spritesheet ou dessin libre ;
 - gestion de plusieurs projets depuis l’interface ;
-- sauvegarde complète téléchargeable sous forme de fichier.
 
 ## Indicateurs de valeur suggérés
 

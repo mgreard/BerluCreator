@@ -22,13 +22,13 @@ import type {
   RigDefinition,
   RigPartDefinition
 } from './rig-catalog.types'
+import { RIG_CATALOG_STORAGE_KEY } from './rig-catalog.types'
 
-const STORAGE_KEY_V3 = 'berlu-creator:rig-catalog:v3'
 const STORAGE_KEY_V2 = 'berlu-creator:rig-catalog:v2'
 
 function readCatalog(): Pick<RigCatalogFile, 'rigs' | 'defaultRigByCharacter'> {
   if (typeof localStorage === 'undefined') return { rigs: [], defaultRigByCharacter: {} }
-  const rawV3 = localStorage.getItem(STORAGE_KEY_V3)
+  const rawV3 = localStorage.getItem(RIG_CATALOG_STORAGE_KEY)
   if (rawV3) {
     try {
       const parsed = parseRigCatalogFile(rawV3)
@@ -42,7 +42,7 @@ function readCatalog(): Pick<RigCatalogFile, 'rigs' | 'defaultRigByCharacter'> {
   if (rawV2) {
     try {
       const parsed = parseRigCatalogFile(rawV2)
-      localStorage.setItem(STORAGE_KEY_V3, JSON.stringify(parsed))
+      localStorage.setItem(RIG_CATALOG_STORAGE_KEY, JSON.stringify(parsed))
       localStorage.removeItem(STORAGE_KEY_V2)
       return { rigs: parsed.rigs, defaultRigByCharacter: parsed.defaultRigByCharacter }
     } catch {
@@ -63,7 +63,7 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
   function persist(): void {
     if (typeof localStorage === 'undefined') return
     localStorage.setItem(
-      STORAGE_KEY_V3,
+      RIG_CATALOG_STORAGE_KEY,
       JSON.stringify(createRigCatalogFile(rigs.value, defaultRigByCharacter.value))
     )
   }
@@ -173,10 +173,7 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
     })
   }
 
-  function effectiveCalibrationForAsset(
-    rig: RigDefinition,
-    asset: Asset
-  ): AssetCalibration | null {
+  function effectiveCalibrationForAsset(rig: RigDefinition, asset: Asset): AssetCalibration | null {
     if (asset.category === 'body') {
       return { ...rig.bodyCalibration }
     }
@@ -259,11 +256,7 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
     persist()
   }
 
-  function savePartCalibration(
-    rigId: string,
-    asset: Asset,
-    calibration: AssetCalibration
-  ): void {
+  function savePartCalibration(rigId: string, asset: Asset, calibration: AssetCalibration): void {
     const rig = rigById(rigId)
     if (!rig) return
 

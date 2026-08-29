@@ -2,6 +2,7 @@ import type { AssetCalibration, AssetCategory } from '@core/types/asset.types'
 
 export const RIG_CATALOG_SCHEMA = 'berlu-creator/rig-catalog' as const
 export const RIG_CATALOG_VERSION = 3 as const
+export const RIG_CATALOG_STORAGE_KEY = 'berlu-creator:rig-catalog:v3' as const
 
 export const RIG_SLOT_CATEGORIES = [
   'body',

@@ -91,7 +91,13 @@ onMounted(async () => {
 
   await workspaceBackupStore.initialize()
   stopWorkspaceWatch = watch(
-    [() => projectStore.currentProject, () => editorStore.currentDocument, () => assetStore.assets],
+    [
+      () => projectStore.currentProject,
+      () => editorStore.currentDocument,
+      () => assetStore.assets,
+      () => rigCatalogStore.rigs,
+      () => rigCatalogStore.defaultRigByCharacter
+    ],
     () => workspaceBackupStore.markDirty(),
     { deep: true }
   )

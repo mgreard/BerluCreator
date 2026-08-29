@@ -111,7 +111,7 @@ Le transform global d’un groupe personnage permet de manipuler un rig entier c
 
 ### Snapshot d’espace de travail
 
-`WorkspaceSnapshot` copie projets, documents, compositions, assets et blobs. Le snapshot manuel utilise actuellement le schéma applicatif `4` et la base Dexie est en version `5`.
+`WorkspaceSnapshot` copie projets, documents, compositions, assets et blobs, et embarque le catalogue des rigs sérialisé depuis `localStorage`. Le snapshot manuel utilise le schéma applicatif `5` et la base Dexie est en version `5` ; les anciens snapshots applicatifs `4` restent restaurables.
 
 ## Règles métier structurantes
 
@@ -165,7 +165,7 @@ Les moteurs isolés couvrent notamment les matrices, le hit-test alpha, la séle
 
 ## Persistance et portabilité
 
-Toutes les données de travail sont locales à IndexedDB. Les préférences légères, telles que les largeurs de sidebars et l’état de la visite, utilisent `localStorage`.
+Les données de travail sont conservées dans IndexedDB. Le catalogue global des rigs utilise `localStorage`; les préférences légères, telles que les largeurs de sidebars et l’état de la visite, également.
 
 Conséquences :
 
@@ -173,7 +173,7 @@ Conséquences :
 - données isolées par origine, navigateur et profil ;
 - quota et politiques de nettoyage contrôlés par le navigateur ;
 - aucune récupération distante ;
-- le PNG est portable, le JSON ne contient pas les images et le snapshot complet n’est pas exportable en fichier.
+- le PNG et le fichier de sauvegarde complète sont portables ; le JSON d’export de scène ne contient pas les images.
 
 ## Imports et URLs temporaires
 
@@ -183,8 +183,9 @@ Les fichiers sont validés dans le navigateur puis écrits dans une transaction 
 
 - PNG : capture du rendu actif, avec caméra facultative et résolution native ou normalisée 1080p.
 - JSON : plateau, document, métadonnées d’assets, date et version de format.
+- Sauvegarde complète JSON v1 : snapshot applicatif v5, blobs encodés en base64 et catalogue de rigs v3.
 
-Le format JSON d’export (`3.2.0`) et le schéma de sauvegarde interne (`5`) répondent à des besoins différents et ne doivent pas être confondus.
+Le format JSON d’export de scène, le fichier de sauvegarde complète v1 et le schéma de snapshot interne v5 répondent à des besoins différents et ne doivent pas être confondus.
 
 ## Qualité
 

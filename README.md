@@ -2,7 +2,7 @@
 
 BerluCreator est le projet technique derrière **Incroyaux News Studio**, un studio de composition graphique 2D dans le navigateur. Il permet de construire rapidement une image de plateau à partir de sprites de personnages et de décor, de conserver plusieurs compositions et d’exporter le résultat en PNG ou en JSON.
 
-Le produit est aujourd’hui un **éditeur local mono-espace de travail** : les assets, la scène et les sauvegardes restent dans le navigateur grâce à IndexedDB. Il ne s’agit plus d’un séquenceur d’animation et il n’embarque ni compte utilisateur, ni cloud, ni collaboration temps réel.
+Le produit est aujourd’hui un **éditeur local mono-espace de travail** : les assets et la scène restent dans le navigateur grâce à IndexedDB, avec export/import d’un fichier de sauvegarde autonome. Il ne s’agit plus d’un séquenceur d’animation et il n’embarque ni compte utilisateur, ni cloud, ni collaboration temps réel.
 
 ## Documentation
 
@@ -18,7 +18,7 @@ Version du package : `0.1.0`.
 
 Le cœur du produit est utilisable : bibliothèque de sprites, import d’images, composition directe sur canvas, personnages complets ou assemblés, cadrage caméra, historique, compositions sauvegardées, sauvegarde locale complète et exports PNG/JSON.
 
-Le positionnement reste celui d’un outil spécialisé et local. Les principales limites actuelles sont l’absence d’export/import d’une sauvegarde complète sous forme de fichier, l’absence de collaboration et la dépendance au stockage du navigateur.
+Le positionnement reste celui d’un outil spécialisé et local. Les principales limites actuelles sont l’absence de collaboration ou de synchronisation cloud et la nécessité d’exporter manuellement le fichier de sauvegarde pour le conserver hors du navigateur.
 
 ## Démarrage local
 

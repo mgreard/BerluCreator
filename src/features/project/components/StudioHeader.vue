@@ -8,10 +8,18 @@ import { useWorkspaceBackupStore } from '../stores/useWorkspaceBackupStore'
 import {
   createManualWorkspaceSnapshot,
   getManualSnapshotSummary,
+  getManualWorkspaceSnapshot,
+  restoreWorkspaceSnapshot,
   restoreManualWorkspaceSnapshot
 } from '../services/workspace-snapshot.service'
+import {
+  parseWorkspaceBackupFile,
+  serializeWorkspaceBackupFile,
+  workspaceBackupFilename
+} from '../services/workspace-backup-file.service'
 import { resetApplicationToFactoryDefaults } from '../services/factory-reset.service'
 import type { WorkspaceSnapshotSummary } from '@core/types/project.types'
+import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import { toast } from '@/ui/shared/services/toast.service'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -34,19 +42,24 @@ const editorStore = useEditorStore()
 const snapshotStore = useViewportSnapshotStore()
 const assetStore = useAssetStore()
 const workspaceBackupStore = useWorkspaceBackupStore()
+const rigCatalogStore = useRigCatalogStore()
 const snapshotSummary = ref<WorkspaceSnapshotSummary | null>(null)
+const backupFileInput = ref<HTMLInputElement | null>(null)
 const isSnapshotBusy = ref(false)
 const isResetConfirmOpen = ref(false)
 const isResetting = ref(false)
 
-const backupBadge = computed(() => ({
-  checking: { label: 'Vérification…', variant: 'neutral' as const, pulse: true },
-  no_snapshot: { label: 'Aucune sauvegarde', variant: 'warning' as const, pulse: false },
-  saved: { label: 'Sauvegardé', variant: 'success' as const, pulse: false },
-  dirty: { label: 'Modifications à sauvegarder', variant: 'warning' as const, pulse: false },
-  saving: { label: 'Sauvegarde…', variant: 'neutral' as const, pulse: true },
-  error: { label: 'Erreur de sauvegarde', variant: 'danger' as const, pulse: false }
-})[workspaceBackupStore.status])
+const backupBadge = computed(
+  () =>
+    ({
+      checking: { label: 'Vérification…', variant: 'neutral' as const, pulse: true },
+      no_snapshot: { label: 'Aucune sauvegarde', variant: 'warning' as const, pulse: false },
+      saved: { label: 'Sauvegardé', variant: 'success' as const, pulse: false },
+      dirty: { label: 'Modifications à sauvegarder', variant: 'warning' as const, pulse: false },
+      saving: { label: 'Sauvegarde…', variant: 'neutral' as const, pulse: true },
+      error: { label: 'Erreur de sauvegarde', variant: 'danger' as const, pulse: false }
+    })[workspaceBackupStore.status]
+)
 
 const applicationMenuItems = computed<DropdownMenuItemDef[]>(() => [
   {
@@ -59,17 +72,32 @@ const applicationMenuItems = computed<DropdownMenuItemDef[]>(() => [
   { id: 'application-data', type: 'label', label: 'Données de l’application' },
   {
     id: 'save-application',
-    label: 'Sauvegarder l’application',
+    label: 'Créer une sauvegarde locale',
     icon: 'save',
     disabled: isSnapshotBusy.value || isResetting.value,
     onClick: () => void saveSnapshot()
   },
   {
     id: 'restore-application',
-    label: 'Restaurer l’application',
+    label: 'Restaurer la sauvegarde locale',
     icon: 'restore',
     disabled: isSnapshotBusy.value || isResetting.value || !snapshotSummary.value,
     onClick: () => void restoreSnapshot()
+  },
+  { id: 'separator-backup-file', type: 'separator' },
+  {
+    id: 'export-application-backup',
+    label: 'Exporter la sauvegarde complète',
+    icon: 'download',
+    disabled: isSnapshotBusy.value || isResetting.value,
+    onClick: () => void exportSnapshotFile()
+  },
+  {
+    id: 'import-application-backup',
+    label: 'Importer une sauvegarde complète',
+    icon: 'upload',
+    disabled: isSnapshotBusy.value || isResetting.value,
+    onClick: () => backupFileInput.value?.click()
   },
   { id: 'separator-reset', type: 'separator' },
   {
@@ -103,7 +131,10 @@ async function saveSnapshot() {
   try {
     editorStore.endGesture()
     await Promise.all([projectStore.saveProject(), editorStore.saveDocument()])
-    snapshotSummary.value = await createManualWorkspaceSnapshot(projectStore.currentProject.id)
+    snapshotSummary.value = await createManualWorkspaceSnapshot(
+      projectStore.currentProject.id,
+      JSON.stringify(rigCatalogStore.exportCatalog())
+    )
     await workspaceBackupStore.finishSaving()
     toast.success(
       'Sauvegarde de l’application créée',
@@ -120,10 +151,101 @@ async function saveSnapshot() {
   }
 }
 
+async function exportSnapshotFile() {
+  if (isSnapshotBusy.value) return
+  isSnapshotBusy.value = true
+  workspaceBackupStore.beginSaving()
+  try {
+    editorStore.endGesture()
+    await Promise.all([projectStore.saveProject(), editorStore.saveDocument()])
+    snapshotSummary.value = await createManualWorkspaceSnapshot(
+      projectStore.currentProject.id,
+      JSON.stringify(rigCatalogStore.exportCatalog())
+    )
+    const snapshot = await getManualWorkspaceSnapshot()
+    if (!snapshot) throw new Error('La sauvegarde locale vient de disparaître.')
+
+    const contents = await serializeWorkspaceBackupFile(snapshot)
+    const url = URL.createObjectURL(new Blob([contents], { type: 'application/json' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = workspaceBackupFilename()
+    link.click()
+    URL.revokeObjectURL(url)
+
+    await workspaceBackupStore.finishSaving()
+    toast.success(
+      'Sauvegarde complète exportée',
+      `${snapshotSummary.value.assetCount} assets, leurs images, ${snapshotSummary.value.viewportSnapshotCount} vue(s) et le catalogue des rigs ont été inclus.`
+    )
+  } catch (error) {
+    workspaceBackupStore.failSaving()
+    toast.error(
+      'Échec de l’export de sauvegarde',
+      error instanceof Error ? error.message : 'Erreur inconnue.'
+    )
+  } finally {
+    isSnapshotBusy.value = false
+  }
+}
+
+async function importSnapshotFile(event: Event) {
+  const input = event.currentTarget as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || isSnapshotBusy.value) return
+
+  try {
+    const snapshot = parseWorkspaceBackupFile(await file.text())
+    const date = formatSnapshotDate(snapshot.createdAt)
+    if (
+      !confirm(
+        `Importer la sauvegarde complète du ${date} ? Toutes les données de travail actuelles seront remplacées.`
+      )
+    ) {
+      return
+    }
+
+    isSnapshotBusy.value = true
+    workspaceBackupStore.beginSaving()
+    editorStore.endGesture()
+    await restoreWorkspaceSnapshot(snapshot)
+    if (snapshot.rigCatalogJson) {
+      rigCatalogStore.importCatalog(snapshot.rigCatalogJson, snapshot.assets)
+    }
+    await reloadRestoredWorkspace()
+    snapshotSummary.value = await getManualSnapshotSummary()
+    await workspaceBackupStore.finishSaving()
+    toast.success(
+      'Sauvegarde complète importée',
+      `${snapshot.assets.length} assets, leurs images, ${snapshot.viewportSnapshots.length} vue(s) et le catalogue des rigs ont été restaurés.`
+    )
+  } catch (error) {
+    if (isSnapshotBusy.value) workspaceBackupStore.failSaving()
+    toast.error(
+      'Échec de l’import de sauvegarde',
+      error instanceof Error ? error.message : 'Erreur inconnue.'
+    )
+  } finally {
+    isSnapshotBusy.value = false
+  }
+}
+
+async function reloadRestoredWorkspace() {
+  const workspace = await projectStore.loadInitialProject()
+  await Promise.all([assetStore.loadAssets(), snapshotStore.loadSnapshots()])
+  await editorStore.loadDocument(workspace.editorDocumentId, workspace.id)
+  editorStore.clearStudioSelection()
+}
+
 async function restoreSnapshot() {
   if (isSnapshotBusy.value || !snapshotSummary.value) return
   const date = formatSnapshotDate(snapshotSummary.value.createdAt)
-  if (!confirm(`Restaurer l’état complet de l’application du ${date} ? Les changements plus récents seront remplacés.`)) {
+  if (
+    !confirm(
+      `Restaurer l’état complet de l’application du ${date} ? Les changements plus récents seront remplacés.`
+    )
+  ) {
     return
   }
 
@@ -132,10 +254,10 @@ async function restoreSnapshot() {
   try {
     editorStore.endGesture()
     const snapshot = await restoreManualWorkspaceSnapshot()
-    const workspace = await projectStore.loadInitialProject()
-    await Promise.all([assetStore.loadAssets(), snapshotStore.loadSnapshots()])
-    await editorStore.loadDocument(workspace.editorDocumentId, workspace.id)
-    editorStore.clearStudioSelection()
+    if (snapshot.rigCatalogJson) {
+      rigCatalogStore.importCatalog(snapshot.rigCatalogJson, snapshot.assets)
+    }
+    await reloadRestoredWorkspace()
     await workspaceBackupStore.finishSaving()
     toast.success(
       'Application restaurée',
@@ -180,9 +302,24 @@ onMounted(async () => {
 </script>
 
 <template>
-  <header class="h-12 border-b border-border-subtle px-4 flex items-center justify-between bg-bg-surface/80 backdrop-blur-xl z-20 select-none">
+  <header
+    class="h-12 border-b border-border-subtle px-4 flex items-center justify-between bg-bg-surface/80 backdrop-blur-xl z-20 select-none"
+  >
+    <!-- eslint-disable-next-line vue/no-restricted-html-elements -- Sélecteur de fichier natif caché -->
+    <input
+      ref="backupFileInput"
+      class="sr-only"
+      type="file"
+      accept="application/json,.json"
+      aria-label="Importer une sauvegarde complète"
+      @change="importSnapshotFile"
+    />
     <div class="flex items-center gap-3">
-      <Heading as="h1" variant="section" class="text-md font-black font-display tracking-tight leading-none">
+      <Heading
+        as="h1"
+        variant="section"
+        class="text-md font-black font-display tracking-tight leading-none"
+      >
         <span class="text-yellow-500">Incroyaux</span>
         <span class="text-purple-600"> News</span> Studio
       </Heading>
