@@ -32,6 +32,7 @@ export const useViewportSnapshotStore = defineStore('viewportSnapshots', () => {
       thumbnailDataUrl,
       camera: { ...document.camera },
       depthOfField: { ...document.depthOfField },
+      colorGrading: { ...document.colorGrading },
       groups: JSON.parse(JSON.stringify(document.groups)),
       layers: JSON.parse(JSON.stringify(document.layers)),
       rigCatalogSnapshot: document.rigCatalogSnapshot,

@@ -51,7 +51,10 @@ async function saveCurrentViewport() {
       activeLayers.value,
       projectStore.currentProject.stage,
       'image/png',
-      { depthOfField: editorStore.currentDocument.depthOfField }
+      {
+        depthOfField: editorStore.currentDocument.depthOfField,
+        colorGrading: editorStore.currentDocument.colorGrading
+      }
     )
     const snapshot = await snapshotStore.createSnapshot(
       editorStore.currentDocument,

@@ -48,6 +48,7 @@ import {
   CategorySelect,
   Checkbox,
   Chip,
+  ColorGradingOverlay,
   Combobox,
   CommandPalette,
   DataTable,

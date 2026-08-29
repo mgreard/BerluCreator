@@ -30,6 +30,15 @@ function snapshotFixture(): WorkspaceSnapshot {
         name: 'Scène courante',
         camera: { enabled: true, x: 12, y: 24, width: 1280, height: 720, aspectRatio: '16:9' },
         depthOfField: { enabled: true, focusY: 0.6, feather: 0.2, blurRadius: 8 },
+        colorGrading: {
+          enabled: false,
+          preset: 'neutral',
+          exposure: 0,
+          contrast: 0,
+          saturation: 0,
+          temperature: 0,
+          tint: 0
+        },
         groups: [
           {
             id: 'group-1',
@@ -74,6 +83,15 @@ function snapshotFixture(): WorkspaceSnapshot {
         thumbnailDataUrl: 'data:image/png;base64,iVBORw==',
         camera: { enabled: true, x: 12, y: 24, width: 1280, height: 720, aspectRatio: '16:9' },
         depthOfField: { enabled: false, focusY: 0.5, feather: 0.2, blurRadius: 0 },
+        colorGrading: {
+          enabled: false,
+          preset: 'neutral',
+          exposure: 0,
+          contrast: 0,
+          saturation: 0,
+          temperature: 0,
+          tint: 0
+        },
         groups: [],
         layers: [],
         createdAt: now,

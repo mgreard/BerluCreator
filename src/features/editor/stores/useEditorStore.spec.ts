@@ -479,4 +479,37 @@ describe('useEditorStore', () => {
     store.undo()
     expect(store.currentDocument.groups.find((c) => c.id === group.id)?.transform.scaleX).toBe(-1)
   })
+
+  it('met à jour, réinitialise et historise le color grading global', () => {
+    const store = useEditorStore()
+    expect(store.currentDocument.colorGrading.enabled).toBe(false)
+    expect(store.currentDocument.colorGrading.preset).toBe('neutral')
+
+    store.updateColorGrading({
+      enabled: true,
+      preset: 'warm',
+      exposure: 2,
+      contrast: 4,
+      saturation: 8,
+      temperature: 18,
+      tint: 0
+    })
+
+    expect(store.currentDocument.colorGrading.enabled).toBe(true)
+    expect(store.currentDocument.colorGrading.preset).toBe('warm')
+    expect(store.currentDocument.colorGrading.temperature).toBe(18)
+
+    store.undo()
+    expect(store.currentDocument.colorGrading.enabled).toBe(false)
+    expect(store.currentDocument.colorGrading.preset).toBe('neutral')
+
+    store.redo()
+    expect(store.currentDocument.colorGrading.enabled).toBe(true)
+    expect(store.currentDocument.colorGrading.preset).toBe('warm')
+
+    store.resetColorGrading()
+    expect(store.currentDocument.colorGrading.enabled).toBe(false)
+    expect(store.currentDocument.colorGrading.preset).toBe('neutral')
+  })
 })
+

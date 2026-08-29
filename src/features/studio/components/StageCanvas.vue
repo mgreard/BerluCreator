@@ -29,7 +29,8 @@ import {
   DepthOfFieldOverlay,
   type DepthOfFieldOverlayValue
 } from '@/components/ui/depth-of-field-overlay'
-import type { CameraFrame, CharacterGroup } from '@core/types/editor.types'
+import { ColorGradingOverlay } from '@/components/ui/color-grading-overlay'
+import type { CameraFrame, CharacterGroup, ColorGradingSettings } from '@core/types/editor.types'
 import { OPTICAL_DEPTH_PRESETS } from '@core/constants/editor'
 import { toast } from '@/ui/shared/services/toast.service'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
@@ -193,6 +194,18 @@ const activeCamera = computed<CameraFrame>({
 const depthOfField = computed(() => editorStore.currentDocument.depthOfField)
 const isDepthOfFieldEditorOpen = ref(false)
 const isOpticalDepthEditorOpen = ref(false)
+
+const colorGrading = computed(() => editorStore.currentDocument.colorGrading)
+const isColorGradingEditorOpen = ref(false)
+const colorGradingModel = computed<ColorGradingSettings>({
+  get: () => editorStore.currentDocument.colorGrading,
+  set: (settings) => editorStore.updateColorGrading(settings)
+})
+
+function toggleColorGradingEditor(): void {
+  isColorGradingEditorOpen.value = !isColorGradingEditorOpen.value
+}
+
 let depthOfFieldFrame: number | null = null
 let pendingDepthOfField: DepthOfFieldOverlayValue | null = null
 let hasDepthOfFieldGesture = false
@@ -540,7 +553,8 @@ useCanvasRenderer(
   targetLabel,
   isGroupTarget,
   showSelection,
-  depthOfField
+  depthOfField,
+  colorGrading
 )
 
 // --- GESTION DU DRAG & DROP ET DU REDIMENSIONNEMENT INTERACTIF ---
@@ -1163,6 +1177,26 @@ function onCanvasDoubleClick(e: MouseEvent) {
           @click="toggleDepthOfFieldEditor"
         />
         <IconButton
+          icon="palette"
+          size="xs"
+          variant="ghost"
+          class="viewport-action"
+          :active="colorGrading.enabled || isColorGradingEditorOpen"
+          :aria-label="
+            isColorGradingEditorOpen
+              ? 'Masquer les réglages de color grading'
+              : 'Afficher les réglages de color grading'
+          "
+          :title="
+            isColorGradingEditorOpen
+              ? 'Masquer les réglages de color grading'
+              : colorGrading.enabled
+                ? 'Color grading (Actif)'
+                : 'Color grading'
+          "
+          @click="toggleColorGradingEditor"
+        />
+        <IconButton
           icon="crop_free"
           size="xs"
           variant="ghost"
@@ -1301,6 +1335,13 @@ function onCanvasDoubleClick(e: MouseEvent) {
           </div>
         </div>
       </section>
+
+      <ColorGradingOverlay
+        v-if="!isRigCalibrationOpen"
+        v-model="colorGradingModel"
+        v-model:open="isColorGradingEditorOpen"
+        @reset="editorStore.resetColorGrading"
+      />
 
       <!-- HUD contextuel d'Édition Directe (Bannière Inférieure) -->
       <div

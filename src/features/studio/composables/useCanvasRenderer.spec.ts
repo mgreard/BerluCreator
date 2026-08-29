@@ -352,4 +352,63 @@ describe('profondeur de champ', () => {
     expect(gradient.addColorStop).toHaveBeenNthCalledWith(1, 0, 'rgba(0, 0, 0, 0)')
     expect(gradient.addColorStop).toHaveBeenNthCalledWith(2, 1, 'rgba(0, 0, 0, 1)')
   })
+
+  describe('color grading global', () => {
+    it('identifie un état neutre ou inactif', async () => {
+      const { isColorGradingNeutral } = await import('./useCanvasRenderer')
+      expect(isColorGradingNeutral(undefined)).toBe(true)
+      expect(
+        isColorGradingNeutral({
+          enabled: false,
+          preset: 'warm',
+          exposure: 10,
+          contrast: 10,
+          saturation: 10,
+          temperature: 10,
+          tint: 10
+        })
+      ).toBe(true)
+      expect(
+        isColorGradingNeutral({
+          enabled: true,
+          preset: 'neutral',
+          exposure: 0,
+          contrast: 0,
+          saturation: 0,
+          temperature: 0,
+          tint: 0
+        })
+      ).toBe(true)
+      expect(
+        isColorGradingNeutral({
+          enabled: true,
+          preset: 'warm',
+          exposure: 5,
+          contrast: 0,
+          saturation: 0,
+          temperature: 0,
+          tint: 0
+        })
+      ).toBe(false)
+    })
+
+    it('génère la chaîne de filtres CSS appropriée', async () => {
+      const { buildColorGradingCssFilter } = await import('./useCanvasRenderer')
+      const filter = buildColorGradingCssFilter({
+        enabled: true,
+        preset: 'custom',
+        exposure: 20, // 1.200
+        contrast: -10, // 0.900
+        saturation: 50, // 1.500
+        temperature: 0,
+        tint: 10 // 18deg
+      })
+
+      expect(filter).toContain('brightness(1.200)')
+      expect(filter).toContain('contrast(0.900)')
+      expect(filter).toContain('saturate(1.500)')
+      expect(filter).toContain('hue-rotate(18.0deg)')
+    })
+  })
 })
+

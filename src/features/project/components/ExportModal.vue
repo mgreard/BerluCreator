@@ -52,6 +52,7 @@ function getCaptureOptions() {
   return {
     camera,
     depthOfField: editorStore.currentDocument.depthOfField,
+    colorGrading: editorStore.currentDocument.colorGrading,
     outputResolution:
       resolutionMode.value === '1080p' ? get1080pExportResolution(stage.value, camera) : undefined
   }

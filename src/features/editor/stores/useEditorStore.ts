@@ -4,6 +4,7 @@ import type {
   CameraFrame,
   CharacterGroup,
   CharacterMode,
+  ColorGradingSettings,
   DepthOfFieldSettings,
   EditorDocument,
   EditorGroup,
@@ -16,6 +17,7 @@ import type {
 import type { Asset, AssetCalibration, AssetCategory } from '@core/types/asset.types'
 import {
   CHARACTER_CATEGORIES,
+  DEFAULT_COLOR_GRADING_SETTINGS,
   DEFAULT_DEPTH_OF_FIELD_SETTINGS,
   DEFAULT_EDITOR_GROUPS,
   DEFAULT_STAGE_RESOLUTION,
@@ -32,6 +34,7 @@ import { DEFAULT_RIG_CANVAS } from '@/features/studio/rig-calibration/rig-catalo
 
 interface StudioState {
   depthOfField: DepthOfFieldSettings
+  colorGrading: ColorGradingSettings
   groups: EditorGroup[]
   layers: EditorLayer[]
   rigCatalogSnapshot?: string
@@ -88,6 +91,28 @@ function normalizeDepthOfField(settings?: Partial<DepthOfFieldSettings>): DepthO
   }
 }
 
+function normalizeColorGrading(settings?: Partial<ColorGradingSettings>): ColorGradingSettings {
+  return {
+    enabled: settings?.enabled ?? DEFAULT_COLOR_GRADING_SETTINGS.enabled,
+    preset: settings?.preset ?? DEFAULT_COLOR_GRADING_SETTINGS.preset,
+    exposure: Number.isFinite(settings?.exposure)
+      ? Math.max(-100, Math.min(100, settings!.exposure!))
+      : DEFAULT_COLOR_GRADING_SETTINGS.exposure,
+    contrast: Number.isFinite(settings?.contrast)
+      ? Math.max(-100, Math.min(100, settings!.contrast!))
+      : DEFAULT_COLOR_GRADING_SETTINGS.contrast,
+    saturation: Number.isFinite(settings?.saturation)
+      ? Math.max(-100, Math.min(100, settings!.saturation!))
+      : DEFAULT_COLOR_GRADING_SETTINGS.saturation,
+    temperature: Number.isFinite(settings?.temperature)
+      ? Math.max(-100, Math.min(100, settings!.temperature!))
+      : DEFAULT_COLOR_GRADING_SETTINGS.temperature,
+    tint: Number.isFinite(settings?.tint)
+      ? Math.max(-100, Math.min(100, settings!.tint!))
+      : DEFAULT_COLOR_GRADING_SETTINGS.tint
+  }
+}
+
 function normalizeLayerDepthRole(role?: LayerDepthRole): LayerDepthRole {
   return role === 'background' || role === 'subject' ? role : 'auto'
 }
@@ -135,6 +160,7 @@ function normalizeDocument(document: EditorDocument): EditorDocument {
   return {
     ...document,
     depthOfField: normalizeDepthOfField(document.depthOfField),
+    colorGrading: normalizeColorGrading(document.colorGrading),
     groups: document.groups.map((group) => ({
       ...group,
       transform: normalizeTransform(group.transform)
@@ -175,6 +201,7 @@ function createDefaultDocument(projectId = 'proj_default'): EditorDocument {
       aspectRatio: '16:9'
     },
     depthOfField: { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS },
+    colorGrading: { ...DEFAULT_COLOR_GRADING_SETTINGS },
     groups: clone(DEFAULT_EDITOR_GROUPS),
     layers: [],
     createdAt: now,
@@ -185,6 +212,7 @@ function createDefaultDocument(projectId = 'proj_default'): EditorDocument {
 function stateOf(document: EditorDocument): StudioState {
   return clone({
     depthOfField: document.depthOfField,
+    colorGrading: document.colorGrading,
     groups: document.groups,
     layers: document.layers,
     rigCatalogSnapshot: document.rigCatalogSnapshot
@@ -432,6 +460,7 @@ export const useEditorStore = defineStore('editor', () => {
     currentDocument.value.groups = clone(gesture.before.groups)
     currentDocument.value.layers = clone(gesture.before.layers)
     currentDocument.value.depthOfField = clone(gesture.before.depthOfField)
+    currentDocument.value.colorGrading = clone(gesture.before.colorGrading)
     activeGesture.value = null
   }
 
@@ -443,6 +472,7 @@ export const useEditorStore = defineStore('editor', () => {
 
   function restoreState(state: StudioState): void {
     currentDocument.value.depthOfField = clone(state.depthOfField)
+    currentDocument.value.colorGrading = clone(state.colorGrading)
     currentDocument.value.groups = clone(state.groups)
     currentDocument.value.layers = clone(state.layers)
     currentDocument.value.rigCatalogSnapshot = state.rigCatalogSnapshot
@@ -1020,6 +1050,22 @@ export const useEditorStore = defineStore('editor', () => {
     })
   }
 
+  function updateColorGrading(
+    changes: Partial<ColorGradingSettings>,
+    label = 'Régler le color grading'
+  ): void {
+    mutateStudio(label, () => {
+      currentDocument.value.colorGrading = normalizeColorGrading({
+        ...currentDocument.value.colorGrading,
+        ...changes
+      })
+    })
+  }
+
+  function resetColorGrading(): void {
+    updateColorGrading({ ...DEFAULT_COLOR_GRADING_SETTINGS }, 'Réinitialiser le color grading')
+  }
+
   function selectLayerForEditing(layerId: string): void {
     const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
     if (!layer) return
@@ -1064,6 +1110,7 @@ export const useEditorStore = defineStore('editor', () => {
   function applyViewportSnapshot(snapshot: ViewportSnapshot): number {
     currentDocument.value.camera = clone(snapshot.camera)
     currentDocument.value.depthOfField = normalizeDepthOfField(snapshot.depthOfField)
+    currentDocument.value.colorGrading = normalizeColorGrading(snapshot.colorGrading)
     const migrated = normalizeAndDetachAccessories({
       ...currentDocument.value,
       groups: clone(snapshot.groups),
@@ -1158,6 +1205,8 @@ export const useEditorStore = defineStore('editor', () => {
     setCharacterMode,
     updateCamera,
     updateDepthOfField,
+    updateColorGrading,
+    resetColorGrading,
     selectLayerForEditing,
     selectRigLayerForCalibration,
     selectGroupForEditing,

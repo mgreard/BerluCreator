@@ -11,6 +11,7 @@ import type {
 } from '@core/types/editor.types'
 import {
   CHARACTER_CATEGORIES,
+  DEFAULT_COLOR_GRADING_SETTINGS,
   DEFAULT_DEPTH_OF_FIELD_SETTINGS,
   DEFAULT_EDITOR_GROUPS,
   DEFAULT_TRANSFORM
@@ -335,6 +336,7 @@ export function migrateV4Document(raw: V4Document, assets: Map<string, Asset>): 
     name: raw.name,
     camera: raw.camera,
     depthOfField: { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS },
+    colorGrading: { ...DEFAULT_COLOR_GRADING_SETTINGS },
     groups,
     layers: migrateLayers(raw.layers, groups, assets),
     createdAt: raw.createdAt,
@@ -350,6 +352,7 @@ function migrateV4Snapshot(raw: V4Snapshot, assets: Map<string, Asset>): Viewpor
     thumbnailDataUrl: raw.thumbnailDataUrl,
     camera: raw.camera,
     depthOfField: { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS },
+    colorGrading: { ...DEFAULT_COLOR_GRADING_SETTINGS },
     groups,
     layers: migrateLayers(raw.layers, groups, assets),
     createdAt: raw.createdAt,

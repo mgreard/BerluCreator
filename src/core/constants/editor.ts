@@ -1,5 +1,8 @@
 import type {
   CharacterGroup,
+  ColorGradingAdjustments,
+  ColorGradingPreset,
+  ColorGradingSettings,
   DepthOfFieldSettings,
   EditorGroup,
   Transform2D
@@ -26,6 +29,64 @@ export const DEFAULT_DEPTH_OF_FIELD_SETTINGS: DepthOfFieldSettings = {
   focusY: 0.62,
   feather: 180,
   blurRadius: 12
+}
+
+export const DEFAULT_COLOR_GRADING_SETTINGS: ColorGradingSettings = {
+  enabled: false,
+  preset: 'neutral',
+  exposure: 0,
+  contrast: 0,
+  saturation: 0,
+  temperature: 0,
+  tint: 0
+}
+
+export const COLOR_GRADING_PRESET_CONFIGS: Record<
+  Exclude<ColorGradingPreset, 'custom'>,
+  ColorGradingAdjustments
+> = {
+  neutral: {
+    exposure: 0,
+    contrast: 0,
+    saturation: 0,
+    temperature: 0,
+    tint: 0
+  },
+  warm: {
+    exposure: 2,
+    contrast: 4,
+    saturation: 8,
+    temperature: 18,
+    tint: 0
+  },
+  golden_hour: {
+    exposure: 5,
+    contrast: 10,
+    saturation: 14,
+    temperature: 30,
+    tint: -6
+  },
+  studio: {
+    exposure: 4,
+    contrast: 12,
+    saturation: 6,
+    temperature: -4,
+    tint: 0
+  },
+  night: {
+    exposure: -15,
+    contrast: 8,
+    saturation: -12,
+    temperature: -28,
+    tint: 8
+  },
+  cartoon_punch: {
+    exposure: 3,
+    contrast: 15,
+    saturation: 25,
+    temperature: 4,
+    tint: 0
+  }
 }
 
 export const OPTICAL_DEPTH_PRESETS = {

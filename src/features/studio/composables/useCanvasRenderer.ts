@@ -3,10 +3,64 @@ import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 import type { RenderableLayer } from './useHierarchyResolver'
 import type { StageSettings } from '@core/types/project.types'
 import type { BoxBounds } from '../engine/transform-matrix'
-import type { CameraFrame } from '@core/types/editor.types'
-import type { DepthOfFieldSettings } from '@core/types/editor.types'
+import type { CameraFrame, ColorGradingSettings, DepthOfFieldSettings } from '@core/types/editor.types'
 
 const globalImageCache = new Map<string, HTMLImageElement>()
+
+interface ColorGradingBuffer {
+  width: number
+  height: number
+  canvas: HTMLCanvasElement
+  context: CanvasRenderingContext2D
+}
+
+let colorGradingBuffer: ColorGradingBuffer | null = null
+
+function getColorGradingBuffer(width: number, height: number): ColorGradingBuffer | null {
+  if (typeof document === 'undefined') return null
+  if (
+    colorGradingBuffer &&
+    colorGradingBuffer.width === width &&
+    colorGradingBuffer.height === height
+  ) {
+    return colorGradingBuffer
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  if (!context) return null
+
+  colorGradingBuffer = { width, height, canvas, context }
+  return colorGradingBuffer
+}
+
+export function isColorGradingNeutral(settings?: ColorGradingSettings): boolean {
+  if (!settings || !settings.enabled) return true
+  return (
+    settings.exposure === 0 &&
+    settings.contrast === 0 &&
+    settings.saturation === 0 &&
+    settings.temperature === 0 &&
+    settings.tint === 0
+  )
+}
+
+export function buildColorGradingCssFilter(settings: ColorGradingSettings): string {
+  const brightness = Math.max(0, 1 + settings.exposure / 100)
+  const contrast = Math.max(0, 1 + settings.contrast / 100)
+  const saturate = Math.max(0, 1 + settings.saturation / 100)
+  const hueRotate = settings.tint * 1.8 // -180deg à +180deg
+
+  const parts: string[] = []
+  if (Math.abs(brightness - 1) > 0.001) parts.push(`brightness(${brightness.toFixed(3)})`)
+  if (Math.abs(contrast - 1) > 0.001) parts.push(`contrast(${contrast.toFixed(3)})`)
+  if (Math.abs(saturate - 1) > 0.001) parts.push(`saturate(${saturate.toFixed(3)})`)
+  if (Math.abs(hueRotate) > 0.01) parts.push(`hue-rotate(${hueRotate.toFixed(1)}deg)`)
+
+  return parts.length > 0 ? parts.join(' ') : 'none'
+}
 
 interface DepthOfFieldBuffers {
   stageWidth: number
@@ -321,7 +375,7 @@ function drawDepthLayersOnContext(
       maskedContext.fillStyle = gradient
       maskedContext.fillRect(0, 0, maskedCanvas.width, maskedCanvas.height)
     }
-    maskedContext.restore()
+  maskedContext.restore()
     buffers.maskKey = maskKey
   }
 
@@ -329,11 +383,7 @@ function drawDepthLayersOnContext(
   ctx.drawImage(maskedCanvas, padding, padding, width, height, 0, 0, width, height)
 }
 
-/**
- * Dessine la scène par plans optiques, sans modifier l'ordre z des calques.
- * Lorsque l'effet est désactivé, le chemin direct n'alloue aucun buffer temporaire.
- */
-export function drawSceneLayersOnContext(
+function drawRawSceneLayersOnContext(
   ctx: CanvasRenderingContext2D,
   layers: RenderableLayer[],
   width: number,
@@ -388,6 +438,60 @@ export function drawSceneLayersOnContext(
 }
 
 /**
+ * Dessine la scène par plans optiques et applique le color grading global si configuré.
+ * Lorsque les effets sont neutres ou désactivés, le chemin direct n'alloue aucun buffer.
+ */
+export function drawSceneLayersOnContext(
+  ctx: CanvasRenderingContext2D,
+  layers: RenderableLayer[],
+  width: number,
+  height: number,
+  depthOfField?: DepthOfFieldSettings,
+  imageCache: Map<string, HTMLImageElement> = globalImageCache,
+  colorGrading?: ColorGradingSettings
+): void {
+  if (isColorGradingNeutral(colorGrading)) {
+    drawRawSceneLayersOnContext(ctx, layers, width, height, depthOfField, imageCache)
+    return
+  }
+
+  const buffer = getColorGradingBuffer(width, height)
+  if (!buffer) {
+    drawRawSceneLayersOnContext(ctx, layers, width, height, depthOfField, imageCache)
+    return
+  }
+
+  // 1. Rendu brut de la scène (avec profondeur de champ) dans le buffer
+  buffer.context.clearRect(0, 0, width, height)
+  drawRawSceneLayersOnContext(buffer.context, layers, width, height, depthOfField, imageCache)
+
+  // 2. Température colorimétrique si demandée (overlay subtil chaud/froid sur pixels opaques)
+  if (colorGrading!.temperature !== 0) {
+    const temp = colorGrading!.temperature
+    const alpha = Math.min(0.4, (Math.abs(temp) / 100) * 0.28)
+    const color =
+      temp > 0
+        ? `rgba(255, 160, 40, ${alpha.toFixed(3)})`
+        : `rgba(40, 140, 255, ${alpha.toFixed(3)})`
+
+    buffer.context.save()
+    buffer.context.globalCompositeOperation = 'source-atop'
+    buffer.context.fillStyle = color
+    buffer.context.fillRect(0, 0, width, height)
+    buffer.context.restore()
+  }
+
+  // 3. Dessin final avec filtre CSS Canvas 2D
+  ctx.save()
+  const filter = buildColorGradingCssFilter(colorGrading!)
+  if (filter !== 'none' && 'filter' in ctx) {
+    ctx.filter = filter
+  }
+  ctx.drawImage(buffer.canvas, 0, 0)
+  ctx.restore()
+}
+
+/**
  * Le fond de plateau est un matte d'édition. Pour un format avec canal alpha,
  * il ne doit être exporté que si un véritable calque d'arrière-plan est visible.
  */
@@ -407,6 +511,7 @@ export interface FrameCaptureOptions {
   camera?: CameraFrame
   outputResolution?: ExportResolution
   depthOfField?: DepthOfFieldSettings
+  colorGrading?: ColorGradingSettings
 }
 
 function normalizeCameraCrop(camera: CameraFrame, stage: StageSettings) {
@@ -448,8 +553,16 @@ export async function captureCleanFrame(
   // 2. Précharger tous les assets de la scène
   await Promise.all(layers.map((l) => fetchAndLoadImage(l.asset.blobId, globalImageCache)))
 
-  // 3. Dessiner strictement les calques
-  drawSceneLayersOnContext(ctx, layers, width, height, options.depthOfField, globalImageCache)
+  // 3. Dessiner strictement les calques avec DoF et Color Grading
+  drawSceneLayersOnContext(
+    ctx,
+    layers,
+    width,
+    height,
+    options.depthOfField,
+    globalImageCache,
+    options.colorGrading
+  )
 
   const camera = options.camera?.enabled ? normalizeCameraCrop(options.camera, stage) : null
   const outputResolution = options.outputResolution
@@ -487,7 +600,8 @@ export function useCanvasRenderer(
   targetLabel?: Ref<string | null>,
   isGroupScope?: Ref<boolean>,
   showSelection?: Ref<boolean>,
-  depthOfField?: Ref<DepthOfFieldSettings>
+  depthOfField?: Ref<DepthOfFieldSettings>,
+  colorGrading?: Ref<ColorGradingSettings>
 ) {
   const isRendering = ref(false)
 
@@ -522,7 +636,15 @@ export function useCanvasRenderer(
       }
     }
 
-    drawSceneLayersOnContext(ctx, layers, width, height, depthOfField?.value, globalImageCache)
+    drawSceneLayersOnContext(
+      ctx,
+      layers,
+      width,
+      height,
+      depthOfField?.value,
+      globalImageCache,
+      colorGrading?.value
+    )
 
     // 3. Cadre de sélection interactif avec poignées d'angles et latérales.
     const bounds = showSelection?.value === false ? null : selectedBounds?.value
@@ -561,42 +683,33 @@ export function useCanvasRenderer(
       ctx.lineWidth = 2
       ctx.stroke()
 
-      // Point central
-      ctx.beginPath()
-      ctx.arc(centerX, rotY, 2, 0, Math.PI * 2)
-      ctx.fillStyle = primaryColor
-      ctx.fill()
-
-      // 3. Cadre de sélection
+      // 3. Rectangle délimiteur principal en pointillés
       ctx.strokeStyle = primaryColor
-      ctx.lineWidth = 2
-      ctx.setLineDash([6, 4])
+      ctx.lineWidth = 1.5
+      ctx.setLineDash([5, 4])
       ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height)
       ctx.setLineDash([])
 
-      // 4. 8 Poignées de redimensionnement carrées
+      // 4. Poignées de redimensionnement (4 coins + 4 centres latéraux)
+      const halfSize = handleSize / 2
       const handles = [
         { x: bounds.x, y: bounds.y, size: handleSize },
+        { x: bounds.x + bounds.width / 2, y: bounds.y, size: handleSize },
         { x: bounds.x + bounds.width, y: bounds.y, size: handleSize },
+        { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2, size: handleSize },
         { x: bounds.x + bounds.width, y: bounds.y + bounds.height, size: handleSize },
+        { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height, size: handleSize },
         { x: bounds.x, y: bounds.y + bounds.height, size: handleSize },
-        { x: centerX, y: bounds.y, size: 8 },
-        { x: bounds.x + bounds.width, y: centerY, size: 8 },
-        { x: centerX, y: bounds.y + bounds.height, size: 8 },
-        { x: bounds.x, y: centerY, size: 8 }
+        { x: bounds.x, y: bounds.y + bounds.height / 2, size: handleSize }
       ]
 
       for (const handle of handles) {
-        const halfSize = handle.size / 2
-        // Ombre de poignée
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
         ctx.fillRect(handle.x - halfSize + 1, handle.y - halfSize + 1, handle.size, handle.size)
 
-        // Corps blanc
         ctx.fillStyle = '#ffffff'
         ctx.fillRect(handle.x - halfSize, handle.y - halfSize, handle.size, handle.size)
 
-        // Contour accentué
         ctx.strokeStyle = primaryColor
         ctx.lineWidth = 2
         ctx.strokeRect(handle.x - halfSize, handle.y - halfSize, handle.size, handle.size)
@@ -636,6 +749,7 @@ export function useCanvasRenderer(
     void isGroupScope?.value
     void showSelection?.value
     void depthOfField?.value
+    void colorGrading?.value
     render()
 
     onWatcherCleanup(() => {

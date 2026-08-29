@@ -87,12 +87,35 @@ export interface EditorLayer {
   transform: Transform2D
 }
 
+export type ColorGradingPreset =
+  | 'neutral'
+  | 'warm'
+  | 'golden_hour'
+  | 'studio'
+  | 'night'
+  | 'cartoon_punch'
+  | 'custom'
+
+export interface ColorGradingAdjustments {
+  exposure: number
+  contrast: number
+  saturation: number
+  temperature: number
+  tint: number
+}
+
+export interface ColorGradingSettings extends ColorGradingAdjustments {
+  enabled: boolean
+  preset: ColorGradingPreset
+}
+
 export interface EditorDocument {
   id: string
   projectId: string
   name: string
   camera: CameraFrame
   depthOfField: DepthOfFieldSettings
+  colorGrading: ColorGradingSettings
   layers: EditorLayer[]
   groups: EditorGroup[]
   rigCatalogSnapshot?: string
@@ -106,6 +129,7 @@ export interface ViewportSnapshot {
   thumbnailDataUrl: string
   camera: CameraFrame
   depthOfField: DepthOfFieldSettings
+  colorGrading: ColorGradingSettings
   layers: EditorLayer[]
   groups: EditorGroup[]
   rigCatalogSnapshot?: string
