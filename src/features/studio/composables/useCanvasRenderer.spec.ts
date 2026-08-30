@@ -7,7 +7,12 @@ import {
   shouldApplyDepthOfField,
   shouldFillExportBackground
 } from './useCanvasRenderer'
-import { DEFAULT_DEPTH_OF_FIELD_SETTINGS } from '@core/constants/editor'
+import {
+  DEFAULT_COLOR_GRADING_SETTINGS,
+  DEFAULT_DEPTH_OF_FIELD_SETTINGS,
+  DEFAULT_SHADER_SETTINGS
+} from '@core/constants/editor'
+import * as shaderEngine from '../engine/post-processing-shader.engine'
 
 const stage: StageSettings = {
   width: 1792,
@@ -105,6 +110,110 @@ describe('export du canvas', () => {
     expect(exportCanvas.width).toBe(1080)
     expect(exportCanvas.height).toBe(1920)
     expect(exportDrawImage).toHaveBeenCalledWith(sceneCanvas, 120, 0, 576, 1024, 0, 0, 1080, 1920)
+  })
+
+  it('compose le grading avant le shader et conserve le matte', () => {
+    const contextFactory = () => ({
+      clearRect: vi.fn(),
+      fillRect: vi.fn(),
+      drawImage: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      fillStyle: '',
+      filter: 'none',
+      globalCompositeOperation: 'source-over',
+      globalAlpha: 1
+    }) as unknown as CanvasRenderingContext2D
+    const rawContext = contextFactory()
+    const gradedContext = contextFactory()
+    const shaderContext = contextFactory()
+    const targetContext = contextFactory()
+    const rawCanvas = { width: 0, height: 0, getContext: vi.fn(() => rawContext) }
+    const gradedCanvas = { width: 0, height: 0, getContext: vi.fn(() => gradedContext) }
+    const shaderCanvas = { width: 0, height: 0, getContext: vi.fn(() => shaderContext) }
+    const canvases = [rawCanvas, gradedCanvas, shaderCanvas]
+    const createElement = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tagName, options) =>
+      tagName === 'canvas'
+        ? (canvases.shift() as unknown as HTMLCanvasElement)
+        : createElement(tagName, options)
+    )
+    const applyShader = vi
+      .spyOn(shaderEngine, 'applyPostProcessingShader')
+      .mockReturnValue('applied')
+
+    const status = drawSceneLayersOnContext(
+      targetContext,
+      [],
+      320,
+      180,
+      DEFAULT_DEPTH_OF_FIELD_SETTINGS,
+      new Map(),
+      { ...DEFAULT_COLOR_GRADING_SETTINGS, enabled: true, preset: 'warm', temperature: 18 },
+      { ...DEFAULT_SHADER_SETTINGS, enabled: true, preset: 'vignette', vignette: 5 },
+      { backgroundColor: '#123456' }
+    )
+
+    expect(status).toBe('applied')
+    expect(rawContext.fillRect).toHaveBeenCalledWith(0, 0, 320, 180)
+    expect(gradedContext.drawImage).toHaveBeenCalledWith(rawCanvas, 0, 0, 320, 180)
+    expect(gradedContext.filter).toBe('none')
+    expect(applyShader.mock.calls[0]?.[0]).toBe(gradedCanvas)
+    expect(applyShader.mock.calls[0]?.[1]).not.toBe(targetContext)
+    expect(applyShader.mock.calls[0]?.[2]).toMatchObject({ preset: 'vignette' })
+    expect(targetContext.drawImage).toHaveBeenCalledWith(shaderCanvas, 0, 0, 320, 180)
+  })
+
+  it('applique les effets spatiaux dans le cadre caméra recadré', () => {
+    const contextFactory = () => ({
+      clearRect: vi.fn(),
+      fillRect: vi.fn(),
+      drawImage: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      fillStyle: '',
+      filter: 'none',
+      globalCompositeOperation: 'source-over',
+      globalAlpha: 1
+    }) as unknown as CanvasRenderingContext2D
+    const contexts = [contextFactory(), contextFactory(), contextFactory(), contextFactory()]
+    const canvases = contexts.map((context) => ({
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => context)
+    }))
+    const createElement = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tagName, options) =>
+      tagName === 'canvas'
+        ? (canvases.shift() as unknown as HTMLCanvasElement)
+        : createElement(tagName, options)
+    )
+    const applyShader = vi
+      .spyOn(shaderEngine, 'applyPostProcessingShader')
+      .mockReturnValue('applied')
+    const target = contextFactory()
+
+    drawSceneLayersOnContext(
+      target,
+      [],
+      321,
+      181,
+      DEFAULT_DEPTH_OF_FIELD_SETTINGS,
+      new Map(),
+      DEFAULT_COLOR_GRADING_SETTINGS,
+      { ...DEFAULT_SHADER_SETTINGS, enabled: true, preset: 'vignette', vignette: 5 },
+      { shaderFrame: { x: 20, y: 10, width: 100, height: 50 }, backgroundColor: null }
+    )
+
+    const shaderSource = applyShader.mock.calls[0]?.[0]
+    expect(shaderSource).toMatchObject({ width: 100, height: 50 })
+    expect(target.drawImage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ width: 100, height: 50 }),
+      20,
+      10,
+      100,
+      50
+    )
   })
 })
 
@@ -411,4 +520,3 @@ describe('profondeur de champ', () => {
     })
   })
 })
-

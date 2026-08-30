@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { DEFAULT_DEPTH_OF_FIELD_SETTINGS, DEFAULT_EDITOR_GROUPS } from '@core/constants/editor'
+import {
+  DEFAULT_COLOR_GRADING_SETTINGS,
+  DEFAULT_DEPTH_OF_FIELD_SETTINGS,
+  DEFAULT_EDITOR_GROUPS,
+  DEFAULT_SHADER_SETTINGS
+} from '@core/constants/editor'
 import type { EditorDocument } from '@core/types/editor.types'
 import { useViewportSnapshotStore } from './useViewportSnapshotStore'
 
@@ -19,6 +24,8 @@ function documentFixture(): EditorDocument {
     name: 'Document',
     camera: { enabled: true, x: 0, y: 0, width: 1792, height: 1024, aspectRatio: '16:9' },
     depthOfField: { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS, enabled: true },
+    colorGrading: { ...DEFAULT_COLOR_GRADING_SETTINGS },
+    shaderSettings: { ...DEFAULT_SHADER_SETTINGS },
     groups: JSON.parse(JSON.stringify(DEFAULT_EDITOR_GROUPS)),
     layers: [],
     rigCatalogSnapshot: '{"version":5}',

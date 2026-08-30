@@ -53,7 +53,8 @@ async function saveCurrentViewport() {
       'image/png',
       {
         depthOfField: editorStore.currentDocument.depthOfField,
-        colorGrading: editorStore.currentDocument.colorGrading
+        colorGrading: editorStore.currentDocument.colorGrading,
+        shaderSettings: editorStore.currentDocument.shaderSettings
       }
     )
     const snapshot = await snapshotStore.createSnapshot(
@@ -82,7 +83,6 @@ async function loadSnapshot(snapshot: ViewportSnapshot) {
   try {
     const layerCount = editorStore.applyViewportSnapshot(snapshot)
     toast.success('Composition chargée', `${layerCount} calque(s) restauré(s).`)
-    open.value = false
   } catch (error) {
     toast.error('Échec du chargement', error instanceof Error ? error.message : 'Erreur inconnue.')
   } finally {
@@ -152,6 +152,7 @@ function formatDate(timestamp: number) {
             @keydown.enter="saveCurrentViewport"
           />
           <Button
+            data-tour="snapshots-create-btn"
             variant="primary"
             size="sm"
             class="h-8 shrink-0 gap-1 px-2"
@@ -170,7 +171,7 @@ function formatDate(timestamp: number) {
       </Text>
     </div>
 
-    <div class="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-2.5">
+    <div data-tour="snapshots-list" class="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-2.5">
       <div v-if="snapshotStore.snapshots.length > 0" class="space-y-2">
         <article
           v-for="snapshot in snapshotStore.snapshots"

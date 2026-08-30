@@ -102,6 +102,23 @@ describe('useHierarchyResolver', () => {
     expect(activeLayers.value[0]).toMatchObject({ depthRole: 'background', opticalDepth: 0.65 })
   })
 
+  it('résout la distance optique et le rôle de profondeur appliqués à un groupe de personnage', () => {
+    const editor = useEditorStore()
+    const assets = useAssetStore()
+    assets.assets = [asset('body', 'body', 'rig'), asset('head', 'head', 'rig')]
+    const group = editor.currentDocument.groups.find((g) => g.kind === 'character')!
+    editor.assignAssetToGroup('body', 'body', group.id)
+    editor.assignAssetToGroup('head', 'head', group.id)
+
+    editor.setGroupOpticalDepth(group.id, 0.85)
+    const { activeLayers } = useHierarchyResolver()
+    const characterResolved = activeLayers.value.filter((l) => l.groupId === group.id)
+    expect(characterResolved.length).toBeGreaterThan(0)
+    for (const l of characterResolved) {
+      expect(l.opticalDepth).toBe(0.85)
+    }
+  })
+
   it('conserve le rôle optique indépendant de l’ordre de rendu et de hit-test', () => {
     const editor = useEditorStore()
     const assets = useAssetStore()

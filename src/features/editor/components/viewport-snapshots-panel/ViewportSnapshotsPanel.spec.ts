@@ -64,7 +64,7 @@ describe('ViewportSnapshotsPanel', () => {
     vi.stubGlobal('confirm', vi.fn(() => true))
   })
 
-  it('rend une ligne compacte et replie le panneau après chargement', async () => {
+  it('rend une ligne compacte et charge le snapshot sans refermer le panneau', async () => {
     const wrapper = mount(ViewportSnapshotsPanel, { props: { open: true } })
     await flushPromises()
 
@@ -76,6 +76,14 @@ describe('ViewportSnapshotsPanel', () => {
     await row.get('button').trigger('click')
 
     expect(mocks.applyViewportSnapshot).toHaveBeenCalledWith(mocks.snapshot)
+    expect(wrapper.emitted('update:open')).toBeUndefined()
+  })
+
+  it('replie le panneau lors du clic sur le bouton de fermeture', async () => {
+    const wrapper = mount(ViewportSnapshotsPanel, { props: { open: true } })
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="Replier le panneau des compositions"]').trigger('click')
     expect(wrapper.emitted('update:open')).toContainEqual([false])
   })
 

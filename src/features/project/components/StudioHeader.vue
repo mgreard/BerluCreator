@@ -30,11 +30,13 @@ import { Heading } from '@/components/ui/heading'
 import { DropdownMenu, type DropdownMenuItemDef } from '@/components/ui/dropdown-menu'
 import { AlertDialog } from '@/components/ui/alert-dialog'
 
+import type { TourKey } from '../services/tour-definitions'
+
 const emit = defineEmits<{
   (event: 'openSettings'): void
   (event: 'openExport'): void
   (event: 'openSavedSnapshots'): void
-  (event: 'startTour'): void
+  (event: 'startTour', key?: TourKey): void
 }>()
 
 const projectStore = useProjectStore()
@@ -109,6 +111,41 @@ const applicationMenuItems = computed<DropdownMenuItemDef[]>(() => [
     onClick: () => {
       isResetConfirmOpen.value = true
     }
+  }
+])
+
+const tourMenuItems = computed<DropdownMenuItemDef[]>(() => [
+  {
+    id: 'current-context-tour',
+    label: 'Visite du contexte actuel',
+    icon: 'help_center',
+    onClick: () => emit('startTour')
+  },
+  { id: 'separator-tours', type: 'separator' },
+  { id: 'tours-label', type: 'label', label: 'Toutes les visites' },
+  {
+    id: 'tour-studio',
+    label: 'Studio & Viewport',
+    icon: 'dashboard',
+    onClick: () => emit('startTour', 'studio-overview')
+  },
+  {
+    id: 'tour-rig',
+    label: 'Calibrage de personnage',
+    icon: 'accessibility_new',
+    onClick: () => emit('startTour', 'rig-calibration')
+  },
+  {
+    id: 'tour-snapshots',
+    label: 'Vues sauvegardées',
+    icon: 'collections_bookmark',
+    onClick: () => emit('startTour', 'saved-snapshots')
+  },
+  {
+    id: 'tour-export',
+    label: 'Module d’exportation',
+    icon: 'file_download',
+    onClick: () => emit('startTour', 'export')
   }
 ])
 
@@ -336,6 +373,7 @@ onMounted(async () => {
 
     <div class="flex items-center gap-2">
       <Button
+        data-tour="saved-snapshots-btn"
         variant="ghost"
         size="sm"
         class="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
@@ -346,16 +384,24 @@ onMounted(async () => {
         <span>Vues sauvegardées</span>
       </Button>
 
-      <IconButton
-        icon="help"
-        variant="ghost"
-        size="sm"
-        aria-label="Démarrer la visite guidée"
-        title="Visite guidée"
-        @click="emit('startTour')"
-      />
+      <DropdownMenu
+        :items="tourMenuItems"
+        align="end"
+        width="md"
+        surface="glass"
+      >
+        <template #trigger>
+          <IconButton
+            icon="help"
+            variant="ghost"
+            size="sm"
+            aria-label="Visites guidées et aide"
+            title="Visites guidées"
+          />
+        </template>
+      </DropdownMenu>
 
-      <div data-tour="backup">
+      <div data-tour="backup-menu-btn">
         <DropdownMenu
           :items="applicationMenuItems"
           align="end"
@@ -376,7 +422,7 @@ onMounted(async () => {
       </div>
 
       <Button
-        data-tour="export"
+        data-tour="export-btn"
         variant="primary"
         size="sm"
         class="gap-1.5 text-xs shadow-glass-sm"

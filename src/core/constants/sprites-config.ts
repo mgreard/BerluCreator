@@ -1,4 +1,5 @@
 import type { SpritesConfigFile, AssetCategory, SpriteConfigRule } from '../types/asset.types'
+import { ASSET_CATEGORIES } from './categories'
 
 /**
  * Fichier de configuration déclarative des sprites.

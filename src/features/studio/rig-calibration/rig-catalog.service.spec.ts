@@ -7,7 +7,6 @@ import {
   effectiveCalibration,
   headCalibrationToAbsolute,
   parseRigCatalogFile,
-  partCalibrationToAbsolute,
   rebaseRigBodyOrigin,
   rigAssetIdentity
 } from './rig-catalog.service'

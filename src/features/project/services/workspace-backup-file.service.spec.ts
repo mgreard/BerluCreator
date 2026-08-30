@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkspaceSnapshot } from '@core/types/project.types'
+import { DEFAULT_SHADER_SETTINGS } from '@core/constants/editor'
 import {
   parseWorkspaceBackupFile,
   serializeWorkspaceBackupFile,
@@ -39,6 +40,7 @@ function snapshotFixture(): WorkspaceSnapshot {
           temperature: 0,
           tint: 0
         },
+        shaderSettings: { ...DEFAULT_SHADER_SETTINGS },
         groups: [
           {
             id: 'group-1',
@@ -92,6 +94,7 @@ function snapshotFixture(): WorkspaceSnapshot {
           temperature: 0,
           tint: 0
         },
+        shaderSettings: { ...DEFAULT_SHADER_SETTINGS },
         groups: [],
         layers: [],
         createdAt: now,

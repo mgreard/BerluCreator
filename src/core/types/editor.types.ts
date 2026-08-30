@@ -52,6 +52,10 @@ interface EditorGroupBase {
   collapsed: boolean
   color: EditorGroupColor
   isDefault: boolean
+  /** Rôle optique du groupe. Absent dans les anciens documents = auto. */
+  depthRole?: LayerDepthRole
+  /** Distance optique du groupe : 0 = lointain, 0.5 = net, 1 = proche. */
+  opticalDepth?: number
 }
 
 export interface StageGroup extends EditorGroupBase {
@@ -109,6 +113,31 @@ export interface ColorGradingSettings extends ColorGradingAdjustments {
   preset: ColorGradingPreset
 }
 
+export type ShaderPreset =
+  | 'none'
+  | 'film_grain'
+  | 'vignette'
+  | 'chromatic'
+  | 'crt_retro'
+  | 'vhs'
+  | 'bloom'
+  | 'custom'
+
+export interface ShaderAdjustments {
+  intensity: number
+  grain: number
+  aberration: number
+  scanlines: number
+  scanlinesDensity: number
+  vignette: number
+  bloom: number
+}
+
+export interface ShaderSettings extends ShaderAdjustments {
+  enabled: boolean
+  preset: ShaderPreset
+}
+
 export interface EditorDocument {
   id: string
   projectId: string
@@ -116,6 +145,7 @@ export interface EditorDocument {
   camera: CameraFrame
   depthOfField: DepthOfFieldSettings
   colorGrading: ColorGradingSettings
+  shaderSettings: ShaderSettings
   layers: EditorLayer[]
   groups: EditorGroup[]
   rigCatalogSnapshot?: string
@@ -130,6 +160,7 @@ export interface ViewportSnapshot {
   camera: CameraFrame
   depthOfField: DepthOfFieldSettings
   colorGrading: ColorGradingSettings
+  shaderSettings: ShaderSettings
   layers: EditorLayer[]
   groups: EditorGroup[]
   rigCatalogSnapshot?: string

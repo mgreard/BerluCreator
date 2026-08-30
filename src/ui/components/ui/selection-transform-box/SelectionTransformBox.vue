@@ -17,6 +17,7 @@ const {
   scaleY = undefined,
   rotation = 0,
   zoom = 1,
+  zIndex = undefined,
   active = true,
   canResize = true,
   canRotate = true,
@@ -24,7 +25,8 @@ const {
   lockAspectRatio = true,
   label = undefined,
   color = '#6366f1',
-  class: className = undefined
+  class: className = undefined,
+  style: propStyle = undefined
 } = defineProps<SelectionTransformBoxProps>()
 
 const emit = defineEmits<SelectionTransformBoxEmits>()
@@ -52,12 +54,17 @@ interface DragState {
 const activeDrag = ref<DragState | null>(null)
 
 // Position et transformation globale du conteneur
-const boxStyle = computed(() => ({
-  transform: `translate(${x}px, ${y}px) rotate(${rotation}deg) scale(${currentScaleX.value}, ${currentScaleY.value})`,
-  transformOrigin: 'center center',
-  width: `${width}px`,
-  height: `${height}px`
-}))
+const boxStyle = computed(() => {
+  const custom = typeof propStyle === 'object' && propStyle !== null ? propStyle : {}
+  return {
+    ...custom,
+    transform: `translate(${x}px, ${y}px) rotate(${rotation}deg) scale(${currentScaleX.value}, ${currentScaleY.value})`,
+    transformOrigin: 'center center',
+    width: `${width}px`,
+    height: `${height}px`,
+    ...(zIndex !== undefined ? { zIndex } : {})
+  }
+})
 
 const handles: Array<{ type: TransformHandleType; style: Record<string, string>; cursor: string; isCorner: boolean }> = [
   { type: 'nw', style: { top: '0%', left: '0%', transform: 'translate(-50%, -50%)' }, cursor: 'nwse-resize', isCorner: true },

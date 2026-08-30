@@ -5,6 +5,9 @@ import type {
   ColorGradingSettings,
   DepthOfFieldSettings,
   EditorGroup,
+  ShaderAdjustments,
+  ShaderPreset,
+  ShaderSettings,
   Transform2D
 } from '../types/editor.types'
 import type { AssetCategory } from '../types/asset.types'
@@ -88,6 +91,79 @@ export const COLOR_GRADING_PRESET_CONFIGS: Record<
     tint: 0
   }
 }
+
+export const DEFAULT_SHADER_SETTINGS: ShaderSettings = {
+  enabled: false,
+  preset: 'none',
+  intensity: 80,
+  grain: 0,
+  aberration: 0,
+  scanlines: 0,
+  scanlinesDensity: 1.0,
+  vignette: 0,
+  bloom: 0
+}
+
+export const SHADER_PRESET_CONFIGS: Record<
+  Exclude<ShaderPreset, 'none' | 'custom'>,
+  ShaderAdjustments
+> = {
+  film_grain: {
+    intensity: 80,
+    grain: 4.5,
+    aberration: 0.15,
+    scanlines: 0,
+    scanlinesDensity: 1.0,
+    vignette: 3.5,
+    bloom: 2.0
+  },
+  vignette: {
+    intensity: 85,
+    grain: 0,
+    aberration: 0,
+    scanlines: 0,
+    scanlinesDensity: 1.0,
+    vignette: 6.0,
+    bloom: 0
+  },
+  chromatic: {
+    intensity: 85,
+    grain: 1.0,
+    aberration: 0.7,
+    scanlines: 0,
+    scanlinesDensity: 1.0,
+    vignette: 2.0,
+    bloom: 1.0
+  },
+  crt_retro: {
+    intensity: 85,
+    grain: 1.5,
+    aberration: 0.35,
+    scanlines: 3.0,
+    scanlinesDensity: 1.5,
+    vignette: 3.5,
+    bloom: 2.5
+  },
+  vhs: {
+    intensity: 80,
+    grain: 3.5,
+    aberration: 0.55,
+    scanlines: 1.8,
+    scanlinesDensity: 1.0,
+    vignette: 2.5,
+    bloom: 3.0
+  },
+  bloom: {
+    intensity: 85,
+    grain: 0,
+    aberration: 0.05,
+    scanlines: 0,
+    scanlinesDensity: 1.0,
+    vignette: 1.5,
+    bloom: 7.0
+  }
+}
+
 
 export const OPTICAL_DEPTH_PRESETS = {
   far: 0,

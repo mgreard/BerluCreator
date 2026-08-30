@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, useTemplateRef, computed, onMounted, onUnmounted, watch, nextTick, useId } from 'vue'
+import { ref, useTemplateRef, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
@@ -23,19 +23,18 @@ import { SegmentedControl, type SegmentOption } from '@/components/ui/segmented-
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
-import { Text } from '@/components/ui/text'
+import { FloatingGlassPanel, type StudioPanelId } from '@/components/ui/floating-glass-panel'
 import { CameraFrameOverlay } from '@/components/ui/camera-frame-overlay'
 import {
   DepthOfFieldOverlay,
   type DepthOfFieldOverlayValue
 } from '@/components/ui/depth-of-field-overlay'
-import { ColorGradingOverlay } from '@/components/ui/color-grading-overlay'
-import type { CameraFrame, CharacterGroup, ColorGradingSettings } from '@core/types/editor.types'
+import { VisualEffectsOverlay } from '@/components/ui/visual-effects-overlay'
+import type { CameraFrame, CharacterGroup, ColorGradingSettings, ShaderSettings } from '@core/types/editor.types'
 import { OPTICAL_DEPTH_PRESETS } from '@core/constants/editor'
 import { toast } from '@/ui/shared/services/toast.service'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
 import { useRigRuntime } from '../rig-calibration/useRigRuntime'
-import { useBoundedFloatingPanel } from '@/shared/composables/useBoundedFloatingPanel'
 
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
@@ -46,24 +45,8 @@ const rigRuntime = useRigRuntime()
 const stage = computed(() => projectStore.currentProject.stage)
 const canvasRef = useTemplateRef<HTMLCanvasElement>('canvas')
 const stageViewportRef = useTemplateRef<HTMLDivElement>('stageViewport')
-const viewportHudRef = useTemplateRef<HTMLDivElement>('viewportHud')
-const opticalDepthPanelRef = useTemplateRef<HTMLElement>('opticalDepthPanel')
-const opticalDepthPanelTitleId = useId()
 const { activeLayers } = useHierarchyResolver()
 const isRigCalibrationOpen = computed(() => rigCatalog.isCalibrationOpen)
-
-const viewportHudFloating = useBoundedFloatingPanel(
-  stageViewportRef,
-  viewportHudRef,
-  { left: '12px', bottom: '12px' },
-  8
-)
-const opticalDepthFloating = useBoundedFloatingPanel(
-  stageViewportRef,
-  opticalDepthPanelRef,
-  { right: '12px', bottom: '72px' },
-  8
-)
 
 const activeCalibrationGroup = computed<CharacterGroup | null>(() => {
   const selected = editorStore.currentDocument.groups.find(
@@ -192,25 +175,92 @@ const activeCamera = computed<CameraFrame>({
 })
 
 const depthOfField = computed(() => editorStore.currentDocument.depthOfField)
-const isDepthOfFieldEditorOpen = ref(false)
-const isOpticalDepthEditorOpen = ref(false)
-
-const colorGrading = computed(() => editorStore.currentDocument.colorGrading)
-const isColorGradingEditorOpen = ref(false)
-const colorGradingModel = computed<ColorGradingSettings>({
-  get: () => editorStore.currentDocument.colorGrading,
-  set: (settings) => editorStore.updateColorGrading(settings)
+const activeGlobalToolbarPanel = ref<'visual-effects' | 'depth-of-field' | null>(null)
+const isVisualEffectsEditorOpen = computed({
+  get: () => activeGlobalToolbarPanel.value === 'visual-effects',
+  set: (open: boolean) => {
+    activeGlobalToolbarPanel.value = open ? 'visual-effects' : null
+  }
+})
+const isDepthOfFieldEditorOpen = computed({
+  get: () => activeGlobalToolbarPanel.value === 'depth-of-field',
+  set: (open: boolean) => {
+    activeGlobalToolbarPanel.value = open ? 'depth-of-field' : null
+  }
 })
 
-function toggleColorGradingEditor(): void {
-  isColorGradingEditorOpen.value = !isColorGradingEditorOpen.value
+const isOpticalDepthEditorOpen = ref(false)
+const isSelectionToolsOpen = computed(() => Boolean(activeSelectedLayer.value))
+let visualEffectsFrame: number | null = null
+let pendingColorGrading: ColorGradingSettings | null = null
+let pendingShaderSettings: ShaderSettings | null = null
+
+function flushVisualEffectsUpdate(): void {
+  visualEffectsFrame = null
+  if (pendingColorGrading) {
+    editorStore.updateColorGrading(pendingColorGrading)
+    pendingColorGrading = null
+  }
+  if (pendingShaderSettings) {
+    editorStore.updateShaderSettings(pendingShaderSettings)
+    pendingShaderSettings = null
+  }
+}
+
+function scheduleVisualEffectsUpdate(): void {
+  if (visualEffectsFrame !== null) return
+  visualEffectsFrame = window.requestAnimationFrame(flushVisualEffectsUpdate)
+}
+
+const colorGrading = computed(() => editorStore.currentDocument.colorGrading)
+const colorGradingModel = computed<ColorGradingSettings>({
+  get: () => editorStore.currentDocument.colorGrading,
+  set: (settings) => {
+    pendingColorGrading = settings
+    scheduleVisualEffectsUpdate()
+  }
+})
+
+const shaderSettings = computed(() => editorStore.currentDocument.shaderSettings)
+const shaderModel = computed<ShaderSettings>({
+  get: () => editorStore.currentDocument.shaderSettings,
+  set: (settings) => {
+    pendingShaderSettings = settings
+    scheduleVisualEffectsUpdate()
+  }
+})
+
+const hasVisualEffects = computed(() => colorGrading.value.enabled || shaderSettings.value.enabled)
+
+function toggleVisualEffectsEditor(): void {
+  isVisualEffectsEditorOpen.value = !isVisualEffectsEditorOpen.value
+}
+
+function beginVisualEffectsInteraction(label: string): void {
+  editorStore.beginGesture(label)
+}
+
+function endVisualEffectsInteraction(): void {
+  if (visualEffectsFrame !== null) window.cancelAnimationFrame(visualEffectsFrame)
+  flushVisualEffectsUpdate()
+  editorStore.endGesture()
+}
+
+function resetVisualEffects(): void {
+  if (visualEffectsFrame !== null) window.cancelAnimationFrame(visualEffectsFrame)
+  pendingColorGrading = null
+  pendingShaderSettings = null
+  visualEffectsFrame = null
+  editorStore.endGesture()
+  editorStore.resetVisualEffects()
 }
 
 let depthOfFieldFrame: number | null = null
 let pendingDepthOfField: DepthOfFieldOverlayValue | null = null
 let hasDepthOfFieldGesture = false
 let opticalDepthFrame: number | null = null
-let pendingOpticalDepth: { layerId: string; value: number } | null = null
+let pendingOpticalDepth: { targetType: 'layer' | 'group'; targetId: string; value: number } | null =
+  null
 let hasOpticalDepthGesture = false
 
 const showSelection = computed(() => !activeCamera.value.enabled)
@@ -245,33 +295,69 @@ const stagePlacementZIndexes = computed(() => {
 })
 
 const canEditSelectedDeskPlacement = computed(
-  () => editScope.value === 'layer' && editorStore.selectedLayer?.category === 'props_set'
+  () =>
+    (editScope.value === 'layer' && editorStore.selectedLayer?.category === 'props_set') ||
+    (isGroupTarget.value && activeSelectedGroup.value?.kind === 'character')
 )
 
 const selectedDeskPlacement = computed<string>({
-  get: () =>
-    (editorStore.selectedLayer?.zIndex ?? ASSET_CATEGORIES.props_set.defaultZIndex) <=
-    stagePlacementZIndexes.value.behind
+  get: () => {
+    if (isGroupTarget.value && activeSelectedGroup.value?.kind === 'character') {
+      return activeSelectedGroup.value.zIndex <= deskReferenceZIndex.value ? 'behind' : 'front'
+    }
+    return (editorStore.selectedLayer?.zIndex ?? ASSET_CATEGORIES.props_set.defaultZIndex) <=
+      stagePlacementZIndexes.value.behind
       ? 'behind'
-      : 'front',
+      : 'front'
+  },
   set: (value) => {
+    if (value !== 'behind' && value !== 'front') return
+    if (isGroupTarget.value && activeSelectedGroup.value?.kind === 'character') {
+      editorStore.updateGroup(
+        activeSelectedGroup.value.id,
+        {
+          zIndex:
+            value === 'behind'
+              ? stagePlacementZIndexes.value.behind
+              : stagePlacementZIndexes.value.front
+        },
+        value === 'behind'
+          ? 'Placer le personnage derrière le bureau'
+          : 'Placer le personnage devant le bureau'
+      )
+      return
+    }
     const layer = editorStore.selectedLayer
-    if (!layer || (value !== 'behind' && value !== 'front')) return
+    if (!layer) return
     editorStore.updateLayerZIndex(layer.id, stagePlacementZIndexes.value[value])
   }
 })
 
 const canEditSelectedOpticalDepth = computed(() => {
-  const category = editorStore.selectedLayer?.category
-  return (
-    depthOfField.value.enabled &&
-    editScope.value === 'layer' &&
-    (category === 'props_set' || category === 'foreground')
-  )
+  if (isGroupTarget.value && activeSelectedGroup.value?.kind === 'character') return true
+  const category = activeSelectedLayer.value?.category ?? editorStore.selectedLayer?.category
+  if (!category) return false
+  return category !== 'background'
 })
 
 function resolvedSelectedOpticalDepth(): number {
-  const layer = editorStore.selectedLayer
+  if (isGroupTarget.value && activeSelectedGroup.value) {
+    const group = activeSelectedGroup.value
+    if (Number.isFinite(group.opticalDepth)) {
+      return Math.max(0, Math.min(1, group.opticalDepth!))
+    }
+    const primaryLayer = editorStore.currentDocument.layers.find(
+      (l) => l.groupId === group.id && !l.muted
+    )
+    if (primaryLayer && Number.isFinite(primaryLayer.opticalDepth)) {
+      return Math.max(0, Math.min(1, primaryLayer.opticalDepth!))
+    }
+    return group.depthRole === 'background'
+      ? OPTICAL_DEPTH_PRESETS.far
+      : OPTICAL_DEPTH_PRESETS.focus
+  }
+
+  const layer = activeSelectedLayer.value ?? editorStore.selectedLayer
   if (!layer) return OPTICAL_DEPTH_PRESETS.focus
   if (Number.isFinite(layer.opticalDepth)) {
     return Math.max(0, Math.min(1, layer.opticalDepth!))
@@ -301,7 +387,17 @@ const selectedOpticalPreset = computed<string>({
     return 'custom'
   },
   set: (preset) => {
-    const layer = editorStore.selectedLayer
+    if (isGroupTarget.value && activeSelectedGroup.value) {
+      const group = activeSelectedGroup.value
+      if (preset === 'far') editorStore.setGroupDepthRole(group.id, 'background')
+      else if (preset === 'focus') editorStore.setGroupDepthRole(group.id, 'subject')
+      else if (preset === 'near') {
+        editorStore.setGroupOpticalDepth(group.id, OPTICAL_DEPTH_PRESETS.near)
+      }
+      return
+    }
+
+    const layer = activeSelectedLayer.value ?? editorStore.selectedLayer
     if (!layer) return
     if (preset === 'far') editorStore.setLayerDepthRole(layer.id, 'background')
     else if (preset === 'focus') editorStore.setLayerDepthRole(layer.id, 'subject')
@@ -325,15 +421,31 @@ function flushOpticalDepthUpdate() {
   opticalDepthFrame = null
   const pending = pendingOpticalDepth
   pendingOpticalDepth = null
-  if (pending) editorStore.setLayerOpticalDepth(pending.layerId, pending.value)
+  if (pending) {
+    if (pending.targetType === 'group') {
+      editorStore.setGroupOpticalDepth(pending.targetId, pending.value)
+    } else {
+      editorStore.setLayerOpticalDepth(pending.targetId, pending.value)
+    }
+  }
 }
 
 function scheduleOpticalDepthUpdate(value: number | number[]) {
-  const layer = editorStore.selectedLayer
-  if (!layer) return
-  pendingOpticalDepth = {
-    layerId: layer.id,
-    value: Math.max(0, Math.min(100, scalarValue(value))) / 100
+  const normValue = Math.max(0, Math.min(100, scalarValue(value))) / 100
+  if (isGroupTarget.value && activeSelectedGroup.value) {
+    pendingOpticalDepth = {
+      targetType: 'group',
+      targetId: activeSelectedGroup.value.id,
+      value: normValue
+    }
+  } else {
+    const layer = activeSelectedLayer.value ?? editorStore.selectedLayer
+    if (!layer) return
+    pendingOpticalDepth = {
+      targetType: 'layer',
+      targetId: layer.id,
+      value: normValue
+    }
   }
   if (opticalDepthFrame !== null) return
   opticalDepthFrame = window.requestAnimationFrame(flushOpticalDepthUpdate)
@@ -362,21 +474,26 @@ function beginOpticalDepthKeyboard(event: KeyboardEvent) {
 }
 
 function resetSelectedOpticalDepth() {
-  const layer = editorStore.selectedLayer
+  if (isGroupTarget.value && activeSelectedGroup.value) {
+    editorStore.setGroupDepthRole(activeSelectedGroup.value.id, 'auto')
+    return
+  }
+  const layer = activeSelectedLayer.value ?? editorStore.selectedLayer
   if (!layer) return
   editorStore.setLayerDepthRole(layer.id, 'auto')
 }
 
 function toggleOpticalDepthEditor() {
+  if (!depthOfField.value.enabled) {
+    editorStore.updateDepthOfField({ ...depthOfField.value, enabled: true })
+  }
   isOpticalDepthEditorOpen.value = !isOpticalDepthEditorOpen.value
-  if (isOpticalDepthEditorOpen.value) {
-    void nextTick(() => opticalDepthFloating.constrain())
-  } else {
+  if (!isOpticalDepthEditorOpen.value) {
     finishOpticalDepthInteraction()
   }
 }
 
-watch(selectedLayerId, () => {
+watch([selectedLayerId, () => editorStore.selectedGroupId], () => {
   finishOpticalDepthInteraction()
   isOpticalDepthEditorOpen.value = false
 })
@@ -452,6 +569,24 @@ function commitDepthOfFieldUpdate(value: DepthOfFieldOverlayValue) {
     hasDepthOfFieldGesture = false
     editorStore.endGesture()
   }
+}
+
+function finishDepthOfFieldInteraction(): void {
+  flushDepthOfFieldUpdate()
+  if (hasDepthOfFieldGesture) {
+    hasDepthOfFieldGesture = false
+    editorStore.endGesture()
+  }
+}
+
+function updateDofBlurRadius(value: number | number[]): void {
+  const blurRadius = Array.isArray(value) ? (value[0] ?? 0) : value
+  scheduleDepthOfFieldUpdate({ ...depthOfField.value, blurRadius })
+}
+
+function updateDofFeather(value: number | number[]): void {
+  const feather = Array.isArray(value) ? (value[0] ?? 0) : value
+  scheduleDepthOfFieldUpdate({ ...depthOfField.value, feather })
 }
 
 // Calcul des bornes englobantes (Bounding Box) du groupe ou du calque individuel
@@ -554,7 +689,9 @@ useCanvasRenderer(
   isGroupTarget,
   showSelection,
   depthOfField,
-  colorGrading
+  colorGrading,
+  shaderSettings,
+  activeCamera
 )
 
 // --- GESTION DU DRAG & DROP ET DU REDIMENSIONNEMENT INTERACTIF ---
@@ -665,6 +802,9 @@ onUnmounted(() => {
   if (opticalDepthFrame !== null) window.cancelAnimationFrame(opticalDepthFrame)
   flushOpticalDepthUpdate()
   if (hasOpticalDepthGesture) editorStore.endGesture()
+  if (visualEffectsFrame !== null) window.cancelAnimationFrame(visualEffectsFrame)
+  flushVisualEffectsUpdate()
+  editorStore.endGesture()
 })
 
 const isSelectedFlippedHorizontally = computed(() => {
@@ -1077,7 +1217,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
 
 <template>
   <div
-    data-tour="stage"
+    data-tour="stage-canvas"
     class="relative flex items-center justify-center w-full h-full overflow-hidden p-4 select-none"
     @pointerdown.self="editorStore.clearStudioSelection()"
   >
@@ -1115,16 +1255,21 @@ function onCanvasDoubleClick(e: MouseEvent) {
       <DepthOfFieldOverlay
         v-if="depthOfField.enabled && isDepthOfFieldEditorOpen && !activeCamera.enabled"
         :model-value="depthOfField"
+        v-model:open="isDepthOfFieldEditorOpen"
+        :show-controls="false"
         :stage-height="stage.height"
         @interaction-start="beginDepthOfFieldInteraction"
         @update:model-value="scheduleDepthOfFieldUpdate"
         @commit="commitDepthOfFieldUpdate"
       />
 
-      <div
-        class="viewport-glass absolute top-3 right-3 z-40 flex items-center gap-1 rounded-xl border p-1 transition-all duration-300 ease-out"
-        @pointerdown.stop
-        @dblclick.stop
+      <FloatingGlassPanel
+        :open="true"
+        panel-id="viewport-top-actions"
+        title="Outils du studio"
+        default-placement="top-right"
+        chrome="toolbar"
+        data-tour="viewport-top-actions"
       >
         <Badge
           variant="neutral"
@@ -1177,24 +1322,25 @@ function onCanvasDoubleClick(e: MouseEvent) {
           @click="toggleDepthOfFieldEditor"
         />
         <IconButton
-          icon="palette"
+          icon="auto_fix_high"
           size="xs"
           variant="ghost"
           class="viewport-action"
-          :active="colorGrading.enabled || isColorGradingEditorOpen"
+          :active="hasVisualEffects || isVisualEffectsEditorOpen"
+          data-tour="visual-effects"
           :aria-label="
-            isColorGradingEditorOpen
-              ? 'Masquer les réglages de color grading'
-              : 'Afficher les réglages de color grading'
+            isVisualEffectsEditorOpen
+              ? 'Masquer les effets visuels'
+              : 'Afficher les effets visuels'
           "
           :title="
-            isColorGradingEditorOpen
-              ? 'Masquer les réglages de color grading'
-              : colorGrading.enabled
-                ? 'Color grading (Actif)'
-                : 'Color grading'
+            isVisualEffectsEditorOpen
+              ? 'Masquer les effets visuels'
+              : hasVisualEffects
+                ? 'Effets visuels (Actifs)'
+                : 'Effets visuels'
           "
-          @click="toggleColorGradingEditor"
+          @click="toggleVisualEffectsEditor"
         />
         <IconButton
           icon="crop_free"
@@ -1230,158 +1376,124 @@ function onCanvasDoubleClick(e: MouseEvent) {
           :disabled="!editorStore.canRedo || isDragging || isResizing"
           @click="redoCanvasTransform"
         />
-      </div>
 
-      <section
-        v-if="canEditSelectedOpticalDepth && isOpticalDepthEditorOpen"
-        :id="`${opticalDepthPanelTitleId}-panel`"
-        ref="opticalDepthPanel"
-        class="viewport-glass absolute z-50 flex w-80 max-w-[calc(100%-1rem)] flex-col overflow-hidden rounded-2xl border text-white/90 shadow-glass-xl animate-in fade-in zoom-in-95 duration-200"
-        :class="!opticalDepthFloating.isDragging.value && 'transition-all duration-300 ease-out'"
-        :style="opticalDepthFloating.style.value"
-        role="region"
-        :aria-labelledby="opticalDepthPanelTitleId"
-        @pointerdown.stop
-        @dblclick.stop
-      >
-        <header
-          class="flex items-center gap-2 border-b border-white/15 bg-black/15 px-3 py-2.5"
-        >
-          <IconButton
-            icon="drag_indicator"
-            size="xs"
-            variant="ghost"
-            class="viewport-action shrink-0 touch-none"
-            :class="opticalDepthFloating.isDragging.value ? 'cursor-grabbing' : 'cursor-grab'"
-            aria-label="Déplacer le panneau Distance caméra"
-            aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
-            title="Déplacer le panneau"
-            @pointerdown="opticalDepthFloating.beginDrag"
-            @pointermove="opticalDepthFloating.moveDrag"
-            @pointerup="opticalDepthFloating.endDrag"
-            @pointercancel="opticalDepthFloating.endDrag"
-            @keydown="opticalDepthFloating.nudge"
-          />
-          <div class="min-w-0 flex-1">
-            <Heading
-              :id="opticalDepthPanelTitleId"
-              as="h3"
-              variant="sm"
-              class="text-xs font-semibold text-white"
-            >
-              Distance caméra
-            </Heading>
-            <Text
-              as="p"
-              variant="caption"
-              class="mt-0.5 text-[10px] leading-snug text-white/60"
-            >
-              Affecte le flou, jamais l’ordre des calques.
-            </Text>
-          </div>
-          <IconButton
-            icon="close"
-            size="xs"
-            variant="ghost"
-            class="viewport-action shrink-0"
-            aria-label="Fermer les réglages de distance caméra"
-            title="Fermer"
-            @click="toggleOpticalDepthEditor"
-          />
-        </header>
-
-        <div class="flex flex-col gap-4 p-3">
-          <SegmentedControl
-            v-model="selectedOpticalPreset"
-            :options="opticalDepthPresetOptions"
-            size="sm"
-            variant="primary"
-            class="w-full justify-center"
-            aria-label="Préréglage de distance caméra"
+        <template #attached>
+          <!-- Panneau Effets Visuels Attaché sous la barre -->
+          <VisualEffectsOverlay
+            v-if="isVisualEffectsEditorOpen && !isRigCalibrationOpen"
+            v-model:color-grading="colorGradingModel"
+            v-model:shader-settings="shaderModel"
+            v-model:open="isVisualEffectsEditorOpen"
+            variant="attached"
+            @interaction-start="beginVisualEffectsInteraction"
+            @interaction-end="endVisualEffectsInteraction"
+            @reset-all="resetVisualEffects"
           />
 
+          <!-- Panneau Profondeur de Champ Attaché sous la barre -->
           <div
-            @pointerdown.capture="beginOpticalDepthInteraction"
-            @pointerup.capture="finishOpticalDepthInteraction"
-            @pointercancel.capture="finishOpticalDepthInteraction"
-            @keydown.capture="beginOpticalDepthKeyboard"
-            @keyup.capture="finishOpticalDepthInteraction"
+            v-else-if="depthOfField.enabled && isDepthOfFieldEditorOpen && !isRigCalibrationOpen && !activeCamera.enabled"
+            class="viewport-glass w-72 flex flex-col rounded-2xl border border-white/15 shadow-glass-xl overflow-hidden pointer-events-auto text-white/90"
+            data-depth-controls
           >
-            <Slider
-              :model-value="selectedOpticalDepthPercent"
-              :min="0"
-              :max="100"
-              :step="5"
-              size="sm"
-              variant="gradient"
-              label="Ajustement fin"
-              show-value
-              show-ticks
-              :ticks="[
-                { value: 0, label: 'Loin' },
-                { value: 50, label: 'Net' },
-                { value: 100, label: 'Proche' }
-              ]"
-              :formatter="(value) => `${value} %`"
-              @update:model-value="scheduleOpticalDepthUpdate"
-            />
-          </div>
+            <header class="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/15 px-3 py-2">
+              <div class="flex items-center gap-2 min-w-0">
+                <div class="flex size-7 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                  <Icon name="blur_on" size="xs" />
+                </div>
+                <div class="min-w-0">
+                  <Heading as="h3" variant="sm" class="text-xs font-semibold text-white">Profondeur de champ</Heading>
+                  <p class="truncate text-[10px] text-white/55">Plans lointains et proches</p>
+                </div>
+              </div>
+              <IconButton
+                icon="close"
+                size="xs"
+                variant="ghost"
+                class="viewport-action shrink-0 text-white/60 hover:text-white"
+                aria-label="Fermer le panneau Profondeur de champ"
+                @click="isDepthOfFieldEditorOpen = false"
+              />
+            </header>
 
-          <div class="flex items-center justify-between gap-3 text-[11px]">
-            <span class="text-white/60">
-              {{ selectedOpticalDepthLabel }} · {{ selectedOpticalDepthPercent }} %
-            </span>
-            <Button size="xs" variant="ghost" @click="resetSelectedOpticalDepth"> Auto </Button>
-          </div>
-        </div>
-      </section>
+            <div class="p-3">
+              <div
+                data-blur-control
+                @pointerdown.capture="beginDepthOfFieldInteraction('Régler le rayon du flou')"
+                @pointerup.capture="finishDepthOfFieldInteraction"
+                @pointercancel.capture="finishDepthOfFieldInteraction"
+                @keydown.capture="beginDepthOfFieldInteraction('Régler le rayon du flou')"
+                @keyup.capture="finishDepthOfFieldInteraction"
+              >
+                <Slider
+                  :model-value="depthOfField.blurRadius"
+                  :min="0"
+                  :max="32"
+                  :step="1"
+                  size="sm"
+                  label="Intensité"
+                  show-value
+                  tooltip="hover"
+                  :formatter="(value) => `${value} px`"
+                  @update:model-value="updateDofBlurRadius"
+                />
+              </div>
 
-      <ColorGradingOverlay
-        v-if="!isRigCalibrationOpen"
-        v-model="colorGradingModel"
-        v-model:open="isColorGradingEditorOpen"
-        @reset="editorStore.resetColorGrading"
-      />
+              <div
+                class="mt-2"
+                data-feather-control
+                @pointerdown.capture="beginDepthOfFieldInteraction('Régler la transition du flou')"
+                @pointerup.capture="finishDepthOfFieldInteraction"
+                @pointercancel.capture="finishDepthOfFieldInteraction"
+                @keydown.capture="beginDepthOfFieldInteraction('Régler la transition du flou')"
+                @keyup.capture="finishDepthOfFieldInteraction"
+              >
+                <Slider
+                  :model-value="depthOfField.feather"
+                  :min="0"
+                  :max="600"
+                  :step="10"
+                  size="sm"
+                  variant="accent"
+                  label="Douceur"
+                  show-value
+                  tooltip="hover"
+                  :formatter="(value) => `${value} px`"
+                  @update:model-value="updateDofFeather"
+                />
+              </div>
+            </div>
+          </div>
+        </template>
+      </FloatingGlassPanel>
 
       <!-- HUD contextuel d'Édition Directe (Bannière Inférieure) -->
-      <div
-        v-if="activeSelectedLayer && !isRigCalibrationOpen"
-        ref="viewportHud"
-        class="absolute z-40 flex max-w-[calc(100%-1rem)] items-center gap-2 pointer-events-auto animate-in fade-in duration-200"
-        :class="!viewportHudFloating.isDragging.value && 'transition-all duration-300 ease-out'"
-        :style="viewportHudFloating.style.value"
-        @pointerdown.stop
+      <FloatingGlassPanel
+        v-if="isSelectionToolsOpen && !isRigCalibrationOpen"
+        :open="isSelectionToolsOpen"
+        panel-id="selection-tools"
+        title="Outils du calque sélectionné"
+        default-placement="bottom-center"
+        chrome="toolbar"
+        class="max-w-[calc(100%-1rem)] gap-2 text-xs"
       >
-        <div
-          class="viewport-glass flex items-center gap-2 rounded-xl border px-2 py-1.5 text-xs"
-        >
-          <IconButton
-            icon="drag_indicator"
-            size="xs"
-            variant="ghost"
-            class="viewport-action shrink-0 touch-none"
-            :class="viewportHudFloating.isDragging.value ? 'cursor-grabbing' : 'cursor-grab'"
-            aria-label="Déplacer la barre d’outils du calque"
-            aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
-            title="Déplacer la barre"
-            @pointerdown="viewportHudFloating.beginDrag"
-            @pointermove="viewportHudFloating.moveDrag"
-            @pointerup="viewportHudFloating.endDrag"
-            @pointercancel="viewportHudFloating.endDrag"
-            @keydown="viewportHudFloating.nudge"
-          />
+        <div class="flex items-center gap-2">
 
           <!-- Nom & Icône du calque sélectionné -->
           <span class="flex items-center gap-1.5 font-semibold text-white/90">
             <Icon
-              :name="ASSET_CATEGORIES[activeSelectedLayer.category]?.icon || 'layers'"
+              :name="
+                activeSelectedLayer
+                  ? ASSET_CATEGORIES[activeSelectedLayer.category]?.icon || 'layers'
+                  : 'layers'
+              "
               size="xs"
               class="text-primary"
             />
             <span>{{
               isGroupTarget && activeSelectedGroup
                 ? activeSelectedGroup.name
-                : activeSelectedLayer.name || activeSelectedLayer.asset.name
+                : activeSelectedLayer?.name || activeSelectedLayer?.asset.name
             }}</span>
           </span>
 
@@ -1454,7 +1566,79 @@ function onCanvasDoubleClick(e: MouseEvent) {
             @click="editorStore.clearStudioSelection()"
           />
         </div>
-      </div>
+
+        <template #attached>
+          <!-- Panneau Distance Caméra Attaché au-dessus de la barre de calque -->
+          <div
+            v-if="canEditSelectedOpticalDepth && isOpticalDepthEditorOpen"
+            class="viewport-glass w-80 flex flex-col rounded-2xl border border-white/15 shadow-glass-xl overflow-hidden pointer-events-auto text-white/90"
+            data-optical-depth-controls
+          >
+            <header class="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/15 px-3 py-2">
+              <div class="flex items-center gap-2 min-w-0">
+                <Icon name="tune" size="xs" class="shrink-0 text-primary" />
+                <div class="min-w-0">
+                  <Heading as="h3" variant="sm" class="text-xs font-semibold text-white">Distance caméra</Heading>
+                  <p class="truncate text-[10px] text-white/55">Affecte le flou, jamais l’ordre des calques.</p>
+                </div>
+              </div>
+              <IconButton
+                icon="close"
+                size="xs"
+                variant="ghost"
+                class="viewport-action shrink-0 text-white/60 hover:text-white"
+                aria-label="Fermer la distance caméra"
+                @click="isOpticalDepthEditorOpen = false"
+              />
+            </header>
+
+            <div class="flex flex-col gap-4 p-3">
+              <SegmentedControl
+                v-model="selectedOpticalPreset"
+                :options="opticalDepthPresetOptions"
+                size="sm"
+                variant="primary"
+                class="w-full justify-center"
+                aria-label="Préréglage de distance caméra"
+              />
+
+              <div
+                @pointerdown.capture="beginOpticalDepthInteraction"
+                @pointerup.capture="finishOpticalDepthInteraction"
+                @pointercancel.capture="finishOpticalDepthInteraction"
+                @keydown.capture="beginOpticalDepthKeyboard"
+                @keyup.capture="finishOpticalDepthInteraction"
+              >
+                <Slider
+                  :model-value="selectedOpticalDepthPercent"
+                  :min="0"
+                  :max="100"
+                  :step="5"
+                  size="sm"
+                  variant="gradient"
+                  label="Ajustement fin"
+                  show-value
+                  show-ticks
+                  :ticks="[
+                    { value: 0, label: 'Loin' },
+                    { value: 50, label: 'Net' },
+                    { value: 100, label: 'Proche' }
+                  ]"
+                  :formatter="(value) => `${value} %`"
+                  @update:model-value="scheduleOpticalDepthUpdate"
+                />
+              </div>
+
+              <div class="flex items-center justify-between gap-3 text-[11px]">
+                <span class="text-white/60">
+                  {{ selectedOpticalDepthLabel }} · {{ selectedOpticalDepthPercent }} %
+                </span>
+                <Button size="xs" variant="ghost" @click="resetSelectedOpticalDepth"> Auto </Button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </FloatingGlassPanel>
     </div>
   </div>
 </template>

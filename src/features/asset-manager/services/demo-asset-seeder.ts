@@ -46,7 +46,7 @@ export async function cleanupObsoleteAndDuplicateAssets(): Promise<void> {
   }
 }
 
-export async function syncBundledDemoAssets(force = false): Promise<void> {
+export async function syncBundledDemoAssets(): Promise<void> {
   const spriteModules = import.meta.glob<string>(
     '@/assets/sprites/**/*.{png,PNG}',
     {

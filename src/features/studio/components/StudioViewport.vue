@@ -8,6 +8,10 @@ const rigCatalog = useRigCatalogStore()
 
 <template>
   <div class="relative flex-1 h-full bg-bg-base overflow-hidden">
+    <div
+      id="studio-overlay-host"
+      class="pointer-events-none absolute inset-0 z-[60] overflow-hidden"
+    />
     <div class="absolute inset-0 overflow-hidden bg-dot-pattern">
       <RigCalibrationViewportWorkspace v-if="rigCatalog.isCalibrationOpen" />
       <StageCanvas v-else />

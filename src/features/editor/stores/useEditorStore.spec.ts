@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { Asset } from '@core/types/asset.types'
 import type { CharacterGroup, ViewportSnapshot } from '@core/types/editor.types'
-import { DEFAULT_DEPTH_OF_FIELD_SETTINGS, DEFAULT_TRANSFORM } from '@core/constants/editor'
+import {
+  DEFAULT_COLOR_GRADING_SETTINGS,
+  DEFAULT_DEPTH_OF_FIELD_SETTINGS,
+  DEFAULT_SHADER_SETTINGS,
+  DEFAULT_TRANSFORM
+} from '@core/constants/editor'
 import { editorDocumentRepository } from '@infrastructure/db/repositories/editor-document.repository'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useEditorStore } from './useEditorStore'
@@ -269,6 +274,37 @@ describe('useEditorStore', () => {
     expect(store.currentDocument.layers[0]?.opticalDepth).toBeUndefined()
   })
 
+  it('applique et historise la distance optique et le rôle de profondeur sur un groupe entier', () => {
+    const store = useEditorStore()
+    const group = store.currentDocument.groups.find((candidate) => candidate.kind === 'character')!
+
+    store.setGroupOpticalDepth(group.id, 0.8)
+    const currentGroup = store.currentDocument.groups.find((candidate) => candidate.id === group.id)
+    expect(currentGroup?.opticalDepth).toBe(0.8)
+    const characterLayers = store.currentDocument.layers.filter((l) => l.groupId === group.id)
+    for (const l of characterLayers) {
+      expect(l.opticalDepth).toBe(0.8)
+    }
+
+    store.undo()
+    const undoneGroup = store.currentDocument.groups.find((candidate) => candidate.id === group.id)
+    expect(undoneGroup?.opticalDepth).toBeUndefined()
+    const undoneLayers = store.currentDocument.layers.filter((l) => l.groupId === group.id)
+    for (const l of undoneLayers) {
+      expect(l.opticalDepth).toBeUndefined()
+    }
+
+    store.setGroupDepthRole(group.id, 'background')
+    const backgroundGroup = store.currentDocument.groups.find(
+      (candidate) => candidate.id === group.id
+    )
+    expect(backgroundGroup?.depthRole).toBe('background')
+    const backgroundLayers = store.currentDocument.layers.filter((l) => l.groupId === group.id)
+    for (const l of backgroundLayers) {
+      expect(l.depthRole).toBe('background')
+    }
+  })
+
   it('historise le mode, le verrouillage et l’ordre des calques', () => {
     const store = useEditorStore()
     const first = store.assignAssetToGroup('prop-1', 'props_set')
@@ -336,6 +372,8 @@ describe('useEditorStore', () => {
       thumbnailDataUrl: '',
       camera: { enabled: true, x: 10, y: 20, width: 800, height: 600, aspectRatio: 'custom' },
       depthOfField: { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS, enabled: true },
+      colorGrading: { ...DEFAULT_COLOR_GRADING_SETTINGS },
+      shaderSettings: { ...DEFAULT_SHADER_SETTINGS },
       groups: store.currentDocument.groups,
       layers: [],
       createdAt: 1,
@@ -511,5 +549,39 @@ describe('useEditorStore', () => {
     expect(store.currentDocument.colorGrading.enabled).toBe(false)
     expect(store.currentDocument.colorGrading.preset).toBe('neutral')
   })
-})
 
+  it('réinitialise colorimétrie et shaders dans une seule entrée d’historique', () => {
+    const store = useEditorStore()
+    store.updateColorGrading({ enabled: true, preset: 'warm', temperature: 18 })
+    store.updateShaderSettings({ enabled: true, preset: 'vignette', vignette: 6 })
+    store.clearHistory()
+
+    store.resetVisualEffects()
+
+    expect(store.currentDocument.colorGrading).toEqual(DEFAULT_COLOR_GRADING_SETTINGS)
+    expect(store.currentDocument.shaderSettings).toEqual(DEFAULT_SHADER_SETTINGS)
+    store.undo()
+    expect(store.currentDocument.colorGrading).toMatchObject({ enabled: true, preset: 'warm' })
+    expect(store.currentDocument.shaderSettings).toMatchObject({ enabled: true, preset: 'vignette' })
+    expect(store.canUndo).toBe(false)
+  })
+
+  it('persiste et historise une seule fois un geste continu d’effet visuel', async () => {
+    const store = useEditorStore()
+    vi.mocked(editorDocumentRepository.save).mockClear()
+
+    store.beginGesture('Régler le vignettage')
+    store.updateShaderSettings({ enabled: true, preset: 'custom', vignette: 1 })
+    store.updateShaderSettings({ vignette: 3 })
+    store.updateShaderSettings({ vignette: 6 })
+    expect(editorDocumentRepository.save).not.toHaveBeenCalled()
+    store.endGesture()
+    await store.flushPersistence()
+
+    expect(editorDocumentRepository.save).toHaveBeenCalledTimes(1)
+    expect(store.currentDocument.shaderSettings.vignette).toBe(6)
+    store.undo()
+    expect(store.currentDocument.shaderSettings).toEqual(DEFAULT_SHADER_SETTINGS)
+    expect(store.canUndo).toBe(false)
+  })
+})

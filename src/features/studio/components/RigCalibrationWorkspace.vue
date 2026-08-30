@@ -32,6 +32,7 @@ import {
 } from '../rig-calibration/rig-catalog.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { suggestRigCalibration } from '../rig-calibration/rig-auto-calibration'
+import { useRigCalibrationSelection } from '../rig-calibration/useRigCalibrationSelection'
 
 interface RigCalibrationDraft {
   rigId: string
@@ -44,6 +45,7 @@ const assetStore = useAssetStore()
 const editorStore = useEditorStore()
 const rigCatalog = useRigCatalogStore()
 const rigRuntime = useRigRuntime()
+const calibrationSelection = useRigCalibrationSelection()
 
 const isDuplicateModalOpen = ref(false)
 const isEditingOrigin = ref(false)
@@ -54,12 +56,29 @@ const selectedAssetByCat = ref<Record<string, string>>({})
 const drafts = ref<Record<string, RigCalibrationDraft>>({})
 
 const activeGroup = computed<CharacterGroup | null>(() => {
-  const selected = editorStore.currentDocument.groups.find(
-    (group): group is CharacterGroup =>
-      group.kind === 'character' && group.id === editorStore.selectedGroupId
-  )
+  if (editorStore.selectedGroupId) {
+    const selected = editorStore.currentDocument.groups.find(
+      (group): group is CharacterGroup =>
+        group.kind === 'character' && group.id === editorStore.selectedGroupId
+    )
+    if (selected) return selected
+  }
+  if (editorStore.selectedLayerId) {
+    const layer = editorStore.currentDocument.layers.find(
+      (l) => l.id === editorStore.selectedLayerId
+    )
+    if (layer?.groupId) {
+      const selected = editorStore.currentDocument.groups.find(
+        (group): group is CharacterGroup =>
+          group.kind === 'character' && group.id === layer.groupId
+      )
+      if (selected) return selected
+    }
+  }
   return (
-    selected ??
+    editorStore.currentDocument.groups.find(
+      (group): group is CharacterGroup => group.kind === 'character' && group.activeMode === 'rig'
+    ) ??
     editorStore.currentDocument.groups.find(
       (group): group is CharacterGroup => group.kind === 'character'
     ) ??
@@ -250,13 +269,14 @@ async function selectRig(rigId: string): Promise<void> {
 async function selectPart(category: RigConfigurableCategory, assetId: string): Promise<void> {
   await persistAllDrafts()
   selectedAssetByCat.value[category] = assetId
-  rigCatalog.calibrationTargetId = assetId
   isEditingOrigin.value = false
 
   const rig = selectedRig.value
   const group = activeGroup.value
   const asset = assetStore.assets.find((candidate) => candidate.id === assetId)
   if (!rig || !group || !asset || asset.category === 'body') return
+
+  calibrationSelection.selectCalibrationAsset({ category, assetId, groupId: group.id })
 
   if (!rigCatalog.partForAsset(rig, asset)) {
     rigCatalog.setPartCompatibility(rig.id, asset, true)
@@ -275,7 +295,7 @@ async function selectPart(category: RigConfigurableCategory, assetId: string): P
     absoluteCalibration
   )
   editorStore.selectRigLayerForCalibration(layer.id)
-  assetStore.selectAsset(asset.id)
+  calibrationSelection.selectCalibrationAsset({ category, assetId, groupId: group.id })
 }
 
 function toggleCategoryEnabled(category: RigConfigurableCategory, enabled: boolean): void {
@@ -645,22 +665,69 @@ watch(selectedRig, (rig) => {
 })
 
 watch(
-  () => editorStore.selectedLayer,
-  (layer) => {
-    if (!rigCatalog.isCalibrationOpen || !layer || layer.groupId !== activeGroup.value?.id) return
-    if (isRigConfigurableCategory(layer.category)) {
-      selectedAssetByCat.value[layer.category] = layer.assetId
-      rigCatalog.calibrationTargetId = layer.assetId
-      isEditingOrigin.value = false
+  [
+    () => editorStore.selectedLayerId,
+    () => editorStore.selectedLayer?.assetId,
+    () => editorStore.selectedLayer?.category,
+    () => editorStore.selectedLayer?.groupId
+  ],
+  ([, assetId, category, groupId]) => {
+    if (
+      !rigCatalog.isCalibrationOpen ||
+      !assetId ||
+      !category ||
+      groupId !== activeGroup.value?.id ||
+      !isRigConfigurableCategory(category)
+    ) {
+      return
     }
+    if (selectedAssetByCat.value[category] !== assetId) {
+      selectedAssetByCat.value[category] = assetId
+    }
+    calibrationSelection.selectCalibrationAsset({ category, assetId, groupId })
+    isEditingOrigin.value = false
   }
+)
+
+watch(
+  () => rigCatalog.calibrationTargetId,
+  (assetId) => {
+    if (!assetId || assetId === 'origin') return
+    const asset = assetStore.assets.find((candidate) => candidate.id === assetId)
+    if (!asset || !isRigConfigurableCategory(asset.category)) return
+    if (selectedAssetByCat.value[asset.category] !== asset.id) {
+      selectedAssetByCat.value[asset.category] = asset.id
+    }
+    calibrationSelection.selectCalibrationAsset({
+      category: asset.category,
+      assetId: asset.id,
+      groupId: activeGroup.value?.id
+    })
+    isEditingOrigin.value = false
+  }
+)
+
+watch(
+  activeGroup,
+  (group) => {
+    if (!group) return
+    const activeRig = rigRuntime.activeRigForGroup(group)
+    if (activeRig && activeRig.id !== rigCatalog.selectedRigId) {
+      rigCatalog.selectedRigId = activeRig.id
+      chooseDefaultAssets()
+    }
+  },
+  { immediate: true }
 )
 
 onMounted(() => {
   rigCatalog.initialize(assetStore.assets)
-  const rig = selectedRig.value
-  if (!rig) return
-  rigCatalog.selectedRigId = rig.id
+  const group = activeGroup.value
+  const activeRig = group ? rigRuntime.activeRigForGroup(group) : undefined
+  const rig = activeRig ?? selectedRig.value
+  if (rig) {
+    rigCatalog.selectedRigId = rig.id
+  }
   chooseDefaultAssets()
 })
 

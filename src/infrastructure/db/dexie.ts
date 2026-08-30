@@ -14,6 +14,7 @@ import {
   DEFAULT_COLOR_GRADING_SETTINGS,
   DEFAULT_DEPTH_OF_FIELD_SETTINGS,
   DEFAULT_EDITOR_GROUPS,
+  DEFAULT_SHADER_SETTINGS,
   DEFAULT_TRANSFORM
 } from '@core/constants/editor'
 
@@ -337,6 +338,7 @@ export function migrateV4Document(raw: V4Document, assets: Map<string, Asset>): 
     camera: raw.camera,
     depthOfField: { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS },
     colorGrading: { ...DEFAULT_COLOR_GRADING_SETTINGS },
+    shaderSettings: { ...DEFAULT_SHADER_SETTINGS },
     groups,
     layers: migrateLayers(raw.layers, groups, assets),
     createdAt: raw.createdAt,
@@ -353,6 +355,7 @@ function migrateV4Snapshot(raw: V4Snapshot, assets: Map<string, Asset>): Viewpor
     camera: raw.camera,
     depthOfField: { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS },
     colorGrading: { ...DEFAULT_COLOR_GRADING_SETTINGS },
+    shaderSettings: { ...DEFAULT_SHADER_SETTINGS },
     groups,
     layers: migrateLayers(raw.layers, groups, assets),
     createdAt: raw.createdAt,

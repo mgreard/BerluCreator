@@ -24,10 +24,35 @@ const {
   class: className = undefined
 } = defineProps<SliderProps>()
 
-defineEmits<SliderEmits>()
+const emit = defineEmits<SliderEmits>()
 
 const isHovered = ref(false)
 const isDragging = ref(false)
+const isInteracting = ref(false)
+
+function beginInteraction(): void {
+  if (isInteracting.value) return
+  isInteracting.value = true
+  isDragging.value = true
+  emit('interaction-start')
+}
+
+function endInteraction(): void {
+  if (!isInteracting.value) return
+  isInteracting.value = false
+  isDragging.value = false
+  emit('interaction-end')
+}
+
+function handleKeyDown(event: KeyboardEvent): void {
+  if (
+    ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(
+      event.key
+    )
+  ) {
+    beginInteraction()
+  }
+}
 
 function normalizeModelValue(value: number | number[]): number[] {
   return Array.isArray(value) ? [...value] : [value]
@@ -142,11 +167,14 @@ function getTickPosition(tickVal: number): number {
             orientation === 'horizontal' ? 'w-full h-5' : 'h-full w-5 flex-col justify-center'
           )
         "
-        @pointerdown="isDragging = true"
-        @pointerup="isDragging = false"
-        @pointercancel="isDragging = false"
+        @pointerdown="beginInteraction"
+        @pointerup="endInteraction"
+        @pointercancel="endInteraction"
+        @keydown="handleKeyDown"
+        @keyup="endInteraction"
+        @blur="endInteraction"
         @update:model-value="updateValues"
-        @value-commit="isDragging = false"
+        @value-commit="endInteraction"
       >
         <!-- Piste (Track) -->
         <SliderTrack :class="cn(sliderTrackVariants({ size }))">

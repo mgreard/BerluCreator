@@ -207,7 +207,7 @@ function handleFile(event: Event): void {
       </section>
 
       <!-- Section 2 : Accordéon des Catégories de Sous-Éléments (Têtes, Yeux, Bouches, Accessoires, Bras...) -->
-      <div class="space-y-2">
+      <div data-tour="rig-accordion-categories" class="space-y-2">
         <div class="flex items-center justify-between px-1">
           <span class="text-[10px] font-bold uppercase tracking-wider text-text-muted">
             2. Sous-pièces du personnage
@@ -320,7 +320,7 @@ function handleFile(event: Event): void {
             </div>
 
             <!-- 3. Positionnement Relatif -->
-            <div class="space-y-2 rounded-lg border border-border-subtle/80 bg-bg-surface/60 p-2.5">
+            <div data-tour="rig-transform-controls" class="space-y-2 rounded-lg border border-border-subtle/80 bg-bg-surface/60 p-2.5">
               <div class="flex items-center justify-between gap-2">
                 <span class="text-[10px] font-bold uppercase tracking-wider text-text-muted"
                   >Position relative</span
@@ -407,6 +407,7 @@ function handleFile(event: Event): void {
 
               <!-- Bouton Sauvegarder explicite -->
               <Button
+                data-tour="rig-save-btn"
                 size="sm"
                 variant="primary"
                 class="w-full font-semibold shadow-glass-xs"
@@ -432,6 +433,7 @@ function handleFile(event: Event): void {
 
                 <div class="flex items-center gap-2">
                   <Button
+                    data-tour="rig-apply-all"
                     size="xs"
                     variant="secondary"
                     class="flex-1"

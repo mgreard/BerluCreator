@@ -94,4 +94,24 @@ describe('Slider (Colocated Unit Tests)', () => {
     expect(thumbClassList).toContain('touch-manipulation')
     expect(thumbClassList).toContain('after:min-w-[44px]')
   })
+
+  it('7. Borne un drag continu par une seule paire d’événements d’interaction', async () => {
+    const wrapper = mount(Slider, { props: { modelValue: 50 } })
+    const thumb = wrapper.get('[role="slider"]')
+    const element = thumb.element as HTMLElement & {
+      setPointerCapture: (pointerId: number) => void
+      hasPointerCapture: (pointerId: number) => boolean
+      releasePointerCapture: (pointerId: number) => void
+    }
+    element.setPointerCapture = () => undefined
+    element.hasPointerCapture = () => true
+    element.releasePointerCapture = () => undefined
+
+    await thumb.trigger('pointerdown', { pointerId: 1, button: 0 })
+    await thumb.trigger('pointerdown', { pointerId: 1, button: 0 })
+    await thumb.trigger('pointerup', { pointerId: 1, button: 0 })
+
+    expect(wrapper.emitted('interaction-start')).toHaveLength(1)
+    expect(wrapper.emitted('interaction-end')).toHaveLength(1)
+  })
 })

@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { useRigCatalogStore } from './rig-catalog.store'
-import { RIG_CATALOG_STORAGE_KEY } from './rig-catalog.types'
 
 function asset(
   id: string,

@@ -11,6 +11,7 @@ import type {
   EditorGroupColor,
   EditorLayer,
   LayerDepthRole,
+  ShaderSettings,
   Transform2D,
   ViewportSnapshot
 } from '@core/types/editor.types'
@@ -20,6 +21,7 @@ import {
   DEFAULT_COLOR_GRADING_SETTINGS,
   DEFAULT_DEPTH_OF_FIELD_SETTINGS,
   DEFAULT_EDITOR_GROUPS,
+  DEFAULT_SHADER_SETTINGS,
   DEFAULT_STAGE_RESOLUTION,
   DEFAULT_TRANSFORM,
   FREE_ACCESSORY_CATEGORIES
@@ -35,6 +37,7 @@ import { DEFAULT_RIG_CANVAS } from '@/features/studio/rig-calibration/rig-catalo
 interface StudioState {
   depthOfField: DepthOfFieldSettings
   colorGrading: ColorGradingSettings
+  shaderSettings: ShaderSettings
   groups: EditorGroup[]
   layers: EditorLayer[]
   rigCatalogSnapshot?: string
@@ -113,6 +116,34 @@ function normalizeColorGrading(settings?: Partial<ColorGradingSettings>): ColorG
   }
 }
 
+function normalizeShaderSettings(settings?: Partial<ShaderSettings>): ShaderSettings {
+  return {
+    enabled: settings?.enabled ?? DEFAULT_SHADER_SETTINGS.enabled,
+    preset: settings?.preset ?? DEFAULT_SHADER_SETTINGS.preset,
+    intensity: Number.isFinite(settings?.intensity)
+      ? Math.max(0, Math.min(100, settings!.intensity!))
+      : DEFAULT_SHADER_SETTINGS.intensity,
+    grain: Number.isFinite(settings?.grain)
+      ? Math.max(0, Math.min(10, settings!.grain!))
+      : DEFAULT_SHADER_SETTINGS.grain,
+    aberration: Number.isFinite(settings?.aberration)
+      ? Math.max(0, Math.min(1, settings!.aberration!))
+      : DEFAULT_SHADER_SETTINGS.aberration,
+    scanlines: Number.isFinite(settings?.scanlines)
+      ? Math.max(0, Math.min(5, settings!.scanlines!))
+      : DEFAULT_SHADER_SETTINGS.scanlines,
+    scanlinesDensity: Number.isFinite(settings?.scanlinesDensity)
+      ? Math.max(0.2, Math.min(5, settings!.scanlinesDensity!))
+      : DEFAULT_SHADER_SETTINGS.scanlinesDensity,
+    vignette: Number.isFinite(settings?.vignette)
+      ? Math.max(0, Math.min(10, settings!.vignette!))
+      : DEFAULT_SHADER_SETTINGS.vignette,
+    bloom: Number.isFinite(settings?.bloom)
+      ? Math.max(0, Math.min(20, settings!.bloom!))
+      : DEFAULT_SHADER_SETTINGS.bloom
+  }
+}
+
 function normalizeLayerDepthRole(role?: LayerDepthRole): LayerDepthRole {
   return role === 'background' || role === 'subject' ? role : 'auto'
 }
@@ -161,6 +192,7 @@ function normalizeDocument(document: EditorDocument): EditorDocument {
     ...document,
     depthOfField: normalizeDepthOfField(document.depthOfField),
     colorGrading: normalizeColorGrading(document.colorGrading),
+    shaderSettings: normalizeShaderSettings(document.shaderSettings),
     groups: document.groups.map((group) => ({
       ...group,
       transform: normalizeTransform(group.transform)
@@ -202,6 +234,7 @@ function createDefaultDocument(projectId = 'proj_default'): EditorDocument {
     },
     depthOfField: { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS },
     colorGrading: { ...DEFAULT_COLOR_GRADING_SETTINGS },
+    shaderSettings: { ...DEFAULT_SHADER_SETTINGS },
     groups: clone(DEFAULT_EDITOR_GROUPS),
     layers: [],
     createdAt: now,
@@ -213,6 +246,7 @@ function stateOf(document: EditorDocument): StudioState {
   return clone({
     depthOfField: document.depthOfField,
     colorGrading: document.colorGrading,
+    shaderSettings: document.shaderSettings,
     groups: document.groups,
     layers: document.layers,
     rigCatalogSnapshot: document.rigCatalogSnapshot
@@ -461,6 +495,7 @@ export const useEditorStore = defineStore('editor', () => {
     currentDocument.value.layers = clone(gesture.before.layers)
     currentDocument.value.depthOfField = clone(gesture.before.depthOfField)
     currentDocument.value.colorGrading = clone(gesture.before.colorGrading)
+    currentDocument.value.shaderSettings = clone(gesture.before.shaderSettings)
     activeGesture.value = null
   }
 
@@ -473,6 +508,7 @@ export const useEditorStore = defineStore('editor', () => {
   function restoreState(state: StudioState): void {
     currentDocument.value.depthOfField = clone(state.depthOfField)
     currentDocument.value.colorGrading = clone(state.colorGrading)
+    currentDocument.value.shaderSettings = clone(state.shaderSettings)
     currentDocument.value.groups = clone(state.groups)
     currentDocument.value.layers = clone(state.layers)
     currentDocument.value.rigCatalogSnapshot = state.rigCatalogSnapshot
@@ -892,6 +928,43 @@ export const useEditorStore = defineStore('editor', () => {
     )
   }
 
+  function setGroupDepthRole(groupId: string, depthRole: LayerDepthRole): void {
+    const normalizedRole = normalizeLayerDepthRole(depthRole)
+    mutateStudio(
+      normalizedRole === 'background'
+        ? 'Placer le groupe dans le décor'
+        : normalizedRole === 'subject'
+          ? 'Garder le groupe net'
+          : 'Rétablir la distance automatique du groupe',
+      () => {
+        const group = currentDocument.value.groups.find((candidate) => candidate.id === groupId)
+        if (!group) return
+        group.depthRole = normalizedRole
+        group.opticalDepth = undefined
+        for (const layer of currentDocument.value.layers) {
+          if (layer.groupId === groupId) {
+            layer.depthRole = normalizedRole
+            layer.opticalDepth = undefined
+          }
+        }
+      }
+    )
+  }
+
+  function setGroupOpticalDepth(groupId: string, opticalDepth: number): void {
+    const normalized = normalizeOpticalDepth(opticalDepth)
+    mutateStudio('Régler la distance caméra du groupe', () => {
+      const group = currentDocument.value.groups.find((candidate) => candidate.id === groupId)
+      if (!group) return
+      group.opticalDepth = normalized
+      for (const layer of currentDocument.value.layers) {
+        if (layer.groupId === groupId) {
+          layer.opticalDepth = normalized
+        }
+      }
+    })
+  }
+
   function moveLayer(layerId: string, direction: -1 | 1): void {
     mutateStudio(direction > 0 ? 'Monter un calque' : 'Descendre un calque', () => {
       const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
@@ -1066,6 +1139,29 @@ export const useEditorStore = defineStore('editor', () => {
     updateColorGrading({ ...DEFAULT_COLOR_GRADING_SETTINGS }, 'Réinitialiser le color grading')
   }
 
+  function updateShaderSettings(
+    changes: Partial<ShaderSettings>,
+    label = 'Régler les effets de shader'
+  ): void {
+    mutateStudio(label, () => {
+      currentDocument.value.shaderSettings = normalizeShaderSettings({
+        ...currentDocument.value.shaderSettings,
+        ...changes
+      })
+    })
+  }
+
+  function resetShaderSettings(): void {
+    updateShaderSettings({ ...DEFAULT_SHADER_SETTINGS }, 'Réinitialiser les shaders')
+  }
+
+  function resetVisualEffects(): void {
+    mutateStudio('Réinitialiser les effets visuels', () => {
+      currentDocument.value.colorGrading = { ...DEFAULT_COLOR_GRADING_SETTINGS }
+      currentDocument.value.shaderSettings = { ...DEFAULT_SHADER_SETTINGS }
+    })
+  }
+
   function selectLayerForEditing(layerId: string): void {
     const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
     if (!layer) return
@@ -1111,6 +1207,7 @@ export const useEditorStore = defineStore('editor', () => {
     currentDocument.value.camera = clone(snapshot.camera)
     currentDocument.value.depthOfField = normalizeDepthOfField(snapshot.depthOfField)
     currentDocument.value.colorGrading = normalizeColorGrading(snapshot.colorGrading)
+    currentDocument.value.shaderSettings = normalizeShaderSettings(snapshot.shaderSettings)
     const migrated = normalizeAndDetachAccessories({
       ...currentDocument.value,
       groups: clone(snapshot.groups),
@@ -1190,6 +1287,8 @@ export const useEditorStore = defineStore('editor', () => {
     setLayerLocked,
     setLayerDepthRole,
     setLayerOpticalDepth,
+    setGroupDepthRole,
+    setGroupOpticalDepth,
     moveLayer,
     createGroup,
     updateGroup,
@@ -1207,6 +1306,9 @@ export const useEditorStore = defineStore('editor', () => {
     updateDepthOfField,
     updateColorGrading,
     resetColorGrading,
+    updateShaderSettings,
+    resetShaderSettings,
+    resetVisualEffects,
     selectLayerForEditing,
     selectRigLayerForCalibration,
     selectGroupForEditing,

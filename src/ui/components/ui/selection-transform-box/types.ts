@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'vue'
+
 export type TransformHandleType =
   | 'nw' // Top-left
   | 'ne' // Top-right
@@ -27,6 +29,7 @@ export interface SelectionTransformBoxProps {
   scaleY?: number
   rotation?: number
   zoom?: number
+  zIndex?: number
   active?: boolean
   canResize?: boolean
   canRotate?: boolean
@@ -35,6 +38,7 @@ export interface SelectionTransformBoxProps {
   label?: string
   color?: string
   class?: string
+  style?: CSSProperties
 }
 
 export interface SelectionTransformBoxEmits {

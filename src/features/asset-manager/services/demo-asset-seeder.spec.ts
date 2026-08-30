@@ -96,7 +96,7 @@ describe('default sprite metadata', () => {
       {
         id: 'asset-3',
         name: 'Bouche',
-        category: 'mouth' as any, // Catégorie obsolète
+        category: 'mouth' as Asset['category'], // Catégorie obsolète
         tags: [],
         blobId: 'blob-3',
         width: 100,

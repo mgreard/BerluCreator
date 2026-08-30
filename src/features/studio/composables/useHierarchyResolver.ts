@@ -106,7 +106,9 @@ export function useHierarchyResolver() {
 }
 
 function sceneBand(layer: RenderableLayer): number {
-  return layer.category === 'foreground' ? 1 : 0
+  if (layer.category === 'foreground') return 2
+  if (layer.category === 'eyes' || layer.category === 'props_host') return 1
+  return 0
 }
 
 function resolveCharacterGeometries(
@@ -184,14 +186,18 @@ function commonLayer(
       ? 'subject'
       : layer.depthRole === 'background' || layer.depthRole === 'subject'
         ? layer.depthRole
-        : layer.category === 'background'
-          ? 'background'
-          : 'subject'
+        : group.depthRole === 'background' || group.depthRole === 'subject'
+          ? group.depthRole
+          : layer.category === 'background'
+            ? 'background'
+            : 'subject'
   const opticalDepth = Number.isFinite(layer.opticalDepth)
     ? Math.max(0, Math.min(1, layer.opticalDepth!))
-    : depthRole === 'background'
-      ? OPTICAL_DEPTH_PRESETS.far
-      : OPTICAL_DEPTH_PRESETS.focus
+    : Number.isFinite(group.opticalDepth)
+      ? Math.max(0, Math.min(1, group.opticalDepth!))
+      : depthRole === 'background'
+        ? OPTICAL_DEPTH_PRESETS.far
+        : OPTICAL_DEPTH_PRESETS.focus
 
   return {
     id: layer.id,

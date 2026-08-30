@@ -47,4 +47,6 @@ export interface SliderProps {
 
 export interface SliderEmits {
   (e: 'update:modelValue', value: number | number[]): void
+  (e: 'interaction-start'): void
+  (e: 'interaction-end'): void
 }

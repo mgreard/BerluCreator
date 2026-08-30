@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, useId, useTemplateRef, watch } from 'vue'
 import { cn } from '@/shared/utils/cn'
+import { FloatingGlassPanel } from '@/components/ui/floating-glass-panel'
 import { Icon } from '@/components/ui/icon'
-import { IconButton } from '@/components/ui/icon-button'
 import { Slider } from '@/components/ui/slider'
-import { useBoundedFloatingPanel } from '@/shared/composables/useBoundedFloatingPanel'
 import type {
   DepthOfFieldOverlayEmits,
   DepthOfFieldOverlayProps,
@@ -17,25 +16,20 @@ interface LineInteraction {
 }
 
 const model = defineModel<DepthOfFieldOverlayValue>({ required: true })
+const controlsOpen = defineModel<boolean>('open', { default: true })
 const {
   stageHeight,
+  showControls = true,
   disabled = false,
   class: className = undefined
 } = defineProps<DepthOfFieldOverlayProps>()
 const emit = defineEmits<DepthOfFieldOverlayEmits>()
 
 const overlayRef = useTemplateRef<HTMLDivElement>('overlay')
-const controlsRef = useTemplateRef<HTMLElement>('controls')
 const descriptionId = useId()
 const lineInteraction = ref<LineInteraction | null>(null)
 const controlInteraction = ref(false)
 const draft = ref<DepthOfFieldOverlayValue>({ ...model.value })
-const floatingControls = useBoundedFloatingPanel(
-  overlayRef,
-  controlsRef,
-  { right: '12px', bottom: '12px' },
-  8
-)
 
 watch(
   model,
@@ -200,49 +194,31 @@ onBeforeUnmount(() => {
     >
       <div class="w-full border-t-2 border-dashed border-primary/80" aria-hidden="true" />
       <div
-        class="viewport-glass absolute left-3 flex min-h-[44px] items-center gap-1.5 rounded-xl border border-primary/50 px-3 text-[11px] font-semibold text-white/90 transition-all duration-300 ease-out"
+        class="viewport-glass absolute left-3 flex min-h-[44px] items-center gap-1.5 rounded-xl border border-primary/50 px-3 text-[11px] font-semibold text-white/90"
       >
         <Icon name="height" size="xs" class="text-primary" />
         <span>Limite de netteté {{ focusPercent }} %</span>
       </div>
     </div>
 
-    <section
-      ref="controls"
-      class="viewport-glass pointer-events-auto absolute w-72 max-w-[calc(100%-1rem)] rounded-2xl border p-3 text-white/90"
-      :class="!floatingControls.isDragging.value && 'transition-all duration-300 ease-out'"
-      :style="floatingControls.style.value"
-      aria-label="Réglages du flou de profondeur"
+    <FloatingGlassPanel
+      v-if="showControls"
+      v-model:open="controlsOpen"
+      panel-id="depth-of-field"
+      title="Profondeur de champ"
+      subtitle="Plans lointains et proches"
+      default-placement="top-right"
+      class="w-72"
       data-depth-controls
-      @pointerdown.stop
-      @dblclick.stop
     >
-      <div class="mb-3 flex items-center gap-2">
-        <IconButton
-          icon="drag_indicator"
-          size="xs"
-          variant="ghost"
-          class="viewport-action shrink-0 touch-none"
-          :class="floatingControls.isDragging.value ? 'cursor-grabbing' : 'cursor-grab'"
-          aria-label="Déplacer les réglages du flou de profondeur"
-          aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
-          title="Déplacer le panneau"
-          @pointerdown="floatingControls.beginDrag"
-          @pointermove="floatingControls.moveDrag"
-          @pointerup="floatingControls.endDrag"
-          @pointercancel="floatingControls.endDrag"
-          @keydown="floatingControls.nudge"
-        />
+      <template #icon>
         <div class="flex size-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
           <Icon name="blur_on" size="sm" />
         </div>
-        <div class="min-w-0">
-          <p class="text-xs font-semibold">Profondeur de champ</p>
-          <p class="text-[10px] text-white/60">Plans lointains et proches</p>
-        </div>
-      </div>
+      </template>
 
-      <div
+      <div class="p-3">
+        <div
         data-blur-control
         @pointerdown.capture="beginControlInteraction('Régler le rayon du flou')"
         @pointerup.capture="finishControlInteraction"
@@ -263,9 +239,9 @@ onBeforeUnmount(() => {
           :disabled="disabled"
           @update:model-value="updateBlurRadius"
         />
-      </div>
+        </div>
 
-      <div
+        <div
         class="mt-2"
         data-feather-control
         @pointerdown.capture="beginControlInteraction('Régler la transition du flou')"
@@ -288,7 +264,8 @@ onBeforeUnmount(() => {
           :disabled="disabled"
           @update:model-value="updateFeather"
         />
+        </div>
       </div>
-    </section>
+    </FloatingGlassPanel>
   </div>
 </template>

@@ -624,6 +624,7 @@ onUnmounted(() => {
             :y="bodyOrigin.y + part.y"
             :scale="part.scale ?? 1"
             :rotation="part.rotation ?? 0"
+            :z-index="part.zIndex ?? 10"
             :zoom="zoom"
             :active="true"
             :can-resize="!disabled"

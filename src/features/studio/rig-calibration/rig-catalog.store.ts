@@ -52,6 +52,7 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
   const calibrationTargetId = ref<string | null>(null)
 
   function persist(): void {
+    rigs.value = [...rigs.value]
     if (typeof localStorage === 'undefined') return
     localStorage.setItem(
       RIG_CATALOG_STORAGE_KEY,

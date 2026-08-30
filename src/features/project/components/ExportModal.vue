@@ -4,7 +4,10 @@ import { useProjectStore } from '../stores/useProjectStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useHierarchyResolver } from '@/features/studio/composables/useHierarchyResolver'
-import { captureCleanFrame } from '@/features/studio/composables/useCanvasRenderer'
+import {
+  captureCleanFrame,
+  type FrameCaptureOptions
+} from '@/features/studio/composables/useCanvasRenderer'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
@@ -47,12 +50,20 @@ function get1080pExportResolution(
     : { width: Math.round(1080 * ratio), height: 1080 }
 }
 
-function getCaptureOptions() {
+function getCaptureOptions(): FrameCaptureOptions {
   const camera = applyCameraFrames.value ? editorStore.currentDocument.camera : undefined
   return {
     camera,
     depthOfField: editorStore.currentDocument.depthOfField,
     colorGrading: editorStore.currentDocument.colorGrading,
+    shaderSettings: editorStore.currentDocument.shaderSettings,
+    onShaderStatus: (status) => {
+      if (status === 'applied' || status === 'neutral') return
+      toast.warning(
+        'Shaders non appliqués',
+        'Le rendu colorimétrique a été conservé, mais WebGL est indisponible pour cet export.'
+      )
+    },
     outputResolution:
       resolutionMode.value === '1080p' ? get1080pExportResolution(stage.value, camera) : undefined
   }
@@ -128,7 +139,7 @@ async function captureCurrentFrame() {
           <Badge variant="accent" size="sm">PNG</Badge>
         </div>
 
-        <div class="grid gap-3 rounded-lg border border-border-subtle bg-bg-surface/50 p-3">
+        <div data-tour="export-resolution" class="grid gap-3 rounded-lg border border-border-subtle bg-bg-surface/50 p-3">
           <Switch
             v-model="applyCameraFrames"
             size="sm"
@@ -150,6 +161,7 @@ async function captureCurrentFrame() {
             {{ activeLayers.length }} calque(s) visible(s)
           </Text>
           <Button
+            data-tour="export-download-btn"
             size="sm"
             variant="primary"
             class="gap-1.5"

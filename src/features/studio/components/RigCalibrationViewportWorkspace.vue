@@ -15,6 +15,7 @@ import {
   effectiveCalibration,
   findAssetByRigIdentity,
   identityCalibration,
+  isRigConfigurableCategory,
   partCalibrationToAbsolute,
   rigAssetKey
 } from '../rig-calibration/rig-catalog.service'
@@ -22,11 +23,13 @@ import type { CharacterGroup } from '@core/types/editor.types'
 import type { Asset, AssetCalibration } from '@core/types/asset.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { RIG_CONFIGURABLE_CATEGORIES } from '../rig-calibration/rig-catalog.types'
+import { useRigCalibrationSelection } from '../rig-calibration/useRigCalibrationSelection'
 
 const assetStore = useAssetStore()
 const editorStore = useEditorStore()
 const rigCatalog = useRigCatalogStore()
 const rigRuntime = useRigRuntime()
+const calibrationSelection = useRigCalibrationSelection()
 
 const bodyBlobUrl = ref<string>()
 const blobUrls = ref<Record<string, string>>({})
@@ -41,12 +44,29 @@ const selectedTarget = computed({
 })
 
 const activeGroup = computed<CharacterGroup | null>(() => {
-  const selected = editorStore.currentDocument.groups.find(
-    (group): group is CharacterGroup =>
-      group.kind === 'character' && group.id === editorStore.selectedGroupId
-  )
+  if (editorStore.selectedGroupId) {
+    const selected = editorStore.currentDocument.groups.find(
+      (group): group is CharacterGroup =>
+        group.kind === 'character' && group.id === editorStore.selectedGroupId
+    )
+    if (selected) return selected
+  }
+  if (editorStore.selectedLayerId) {
+    const layer = editorStore.currentDocument.layers.find(
+      (l) => l.id === editorStore.selectedLayerId
+    )
+    if (layer?.groupId) {
+      const selected = editorStore.currentDocument.groups.find(
+        (group): group is CharacterGroup =>
+          group.kind === 'character' && group.id === layer.groupId
+      )
+      if (selected) return selected
+    }
+  }
   return (
-    selected ??
+    editorStore.currentDocument.groups.find(
+      (group): group is CharacterGroup => group.kind === 'character' && group.activeMode === 'rig'
+    ) ??
     editorStore.currentDocument.groups.find(
       (group): group is CharacterGroup => group.kind === 'character'
     ) ??
@@ -107,11 +127,17 @@ const activeCharacterParts = computed<Array<{ asset: Asset; calibration: AssetCa
         catDef?.template ??
         identityCalibration(activeAsset)
 
+      const resolvedZIndex =
+        calibration.zIndex ??
+        activeLayer?.zIndex ??
+        ASSET_CATEGORIES[catKey]?.defaultZIndex ??
+        10
+
       result.push({
         asset: activeAsset,
         calibration: {
           ...calibration,
-          zIndex: calibration.zIndex ?? ASSET_CATEGORIES[catKey]?.defaultZIndex ?? 10
+          zIndex: resolvedZIndex
         }
       })
     }
@@ -336,6 +362,14 @@ function onDragEnd(targetId: string): void {
 function onSelectTarget(targetId: string | null): void {
   selectedTarget.value = targetId
   if (!targetId || targetId === 'origin') return
+  const asset = assetStore.assets.find((candidate) => candidate.id === targetId)
+  if (asset && isRigConfigurableCategory(asset.category)) {
+    calibrationSelection.selectCalibrationAsset({
+      category: asset.category,
+      assetId: asset.id,
+      groupId: activeGroup.value?.id
+    })
+  }
   const layer = editorStore.currentDocument.layers.find(
     (candidate) =>
       candidate.groupId === activeGroup.value?.id && candidate.assetId === targetId
@@ -351,7 +385,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="relative h-full w-full">
+  <div data-tour="rig-workspace-canvas" class="relative h-full w-full">
     <RigCalibrationViewport
       :body-url="bodyBlobUrl"
       :body-width="bodyAsset?.width ?? selectedRig?.body.width ?? 800"

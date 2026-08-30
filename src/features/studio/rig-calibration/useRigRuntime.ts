@@ -29,19 +29,23 @@ export function useRigRuntime() {
   }
 
   function activeRigForGroup(group: CharacterGroup): RigDefinition | undefined {
-    const explicit = rigCatalog.rigById(group.activeRigId)
-    if (explicit) return explicit
     const bodyLayer = editorStore.currentDocument.layers.find(
-      (layer) => layer.groupId === group.id && layer.category === 'body'
+      (layer) => layer.groupId === group.id && layer.category === 'body' && !layer.muted
     )
     const bodyAsset = bodyLayer
       ? assetStore.assets.find((asset) => asset.id === bodyLayer.assetId)
       : undefined
-    return bodyAsset
-      ? rigCatalog
-          .rigsForCharacter(group.characterKey)
-          .find((rig) => assetsShareRigIdentity(rig.body, bodyAsset))
-      : rigCatalog.defaultRig(group.characterKey)
+    if (bodyAsset) {
+      const match = rigCatalog
+        .rigsForCharacter(group.characterKey)
+        .find((rig) => assetsShareRigIdentity(rig.body, bodyAsset))
+      if (match) return match
+    }
+
+    const explicit = rigCatalog.rigById(group.activeRigId)
+    if (explicit) return explicit
+
+    return rigCatalog.defaultRig(group.characterKey)
   }
 
   function presetsForRig(rig: RigDefinition, selectedAsset?: Asset): CharacterRigLayerPreset[] {

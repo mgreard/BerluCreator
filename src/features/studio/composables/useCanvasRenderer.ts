@@ -3,28 +3,39 @@ import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 import type { RenderableLayer } from './useHierarchyResolver'
 import type { StageSettings } from '@core/types/project.types'
 import type { BoxBounds } from '../engine/transform-matrix'
-import type { CameraFrame, ColorGradingSettings, DepthOfFieldSettings } from '@core/types/editor.types'
+import type {
+  CameraFrame,
+  ColorGradingSettings,
+  DepthOfFieldSettings,
+  ShaderSettings
+} from '@core/types/editor.types'
+import {
+  isShaderNeutral,
+  applyPostProcessingShader,
+  type ShaderRenderStatus
+} from '../engine/post-processing-shader.engine'
 
 const globalImageCache = new Map<string, HTMLImageElement>()
 
-interface ColorGradingBuffer {
+interface CanvasBuffer {
   width: number
   height: number
   canvas: HTMLCanvasElement
   context: CanvasRenderingContext2D
 }
 
-let colorGradingBuffer: ColorGradingBuffer | null = null
+let rawSceneBuffer: CanvasBuffer | null = null
+let gradedSceneBuffer: CanvasBuffer | null = null
+let shaderFrameBuffer: CanvasBuffer | null = null
+let shaderOutputBuffer: CanvasBuffer | null = null
 
-function getColorGradingBuffer(width: number, height: number): ColorGradingBuffer | null {
+function getCanvasBuffer(
+  current: CanvasBuffer | null,
+  width: number,
+  height: number
+): CanvasBuffer | null {
   if (typeof document === 'undefined') return null
-  if (
-    colorGradingBuffer &&
-    colorGradingBuffer.width === width &&
-    colorGradingBuffer.height === height
-  ) {
-    return colorGradingBuffer
-  }
+  if (current && current.width === width && current.height === height) return current
 
   const canvas = document.createElement('canvas')
   canvas.width = width
@@ -32,8 +43,27 @@ function getColorGradingBuffer(width: number, height: number): ColorGradingBuffe
   const context = canvas.getContext('2d')
   if (!context) return null
 
-  colorGradingBuffer = { width, height, canvas, context }
-  return colorGradingBuffer
+  return { width, height, canvas, context }
+}
+
+function ensureRawSceneBuffer(width: number, height: number): CanvasBuffer | null {
+  rawSceneBuffer = getCanvasBuffer(rawSceneBuffer, width, height)
+  return rawSceneBuffer
+}
+
+function ensureGradedSceneBuffer(width: number, height: number): CanvasBuffer | null {
+  gradedSceneBuffer = getCanvasBuffer(gradedSceneBuffer, width, height)
+  return gradedSceneBuffer
+}
+
+function ensureShaderFrameBuffer(width: number, height: number): CanvasBuffer | null {
+  shaderFrameBuffer = getCanvasBuffer(shaderFrameBuffer, width, height)
+  return shaderFrameBuffer
+}
+
+function ensureShaderOutputBuffer(width: number, height: number): CanvasBuffer | null {
+  shaderOutputBuffer = getCanvasBuffer(shaderOutputBuffer, width, height)
+  return shaderOutputBuffer
 }
 
 export function isColorGradingNeutral(settings?: ColorGradingSettings): boolean {
@@ -437,9 +467,76 @@ function drawRawSceneLayersOnContext(
   flushDepthRun()
 }
 
+export interface SceneShaderFrame {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface SceneRenderOptions {
+  /** `undefined` conserve la cible, `null` impose la transparence, une couleur peint le matte. */
+  backgroundColor?: string | null
+  /** Cadre dans lequel les effets spatiaux sont prévisualisés, typiquement le cadrage caméra. */
+  shaderFrame?: SceneShaderFrame | null
+}
+
+function prepareContextBackground(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  backgroundColor: string | null | undefined
+): void {
+  if (backgroundColor === undefined) return
+  ctx.clearRect(0, 0, width, height)
+  if (backgroundColor === null) return
+  ctx.fillStyle = backgroundColor
+  ctx.fillRect(0, 0, width, height)
+}
+
+function applyColorGradingToBuffer(
+  source: HTMLCanvasElement,
+  target: CanvasBuffer,
+  settings: ColorGradingSettings
+): void {
+  const { context, width, height } = target
+  context.clearRect(0, 0, width, height)
+  context.save()
+  const filter = buildColorGradingCssFilter(settings)
+  if (filter !== 'none' && 'filter' in context) context.filter = filter
+  context.drawImage(source, 0, 0, width, height)
+  context.restore()
+
+  if (settings.temperature === 0) return
+  const alpha = Math.min(0.4, (Math.abs(settings.temperature) / 100) * 0.28)
+  context.save()
+  context.globalCompositeOperation = 'source-atop'
+  context.fillStyle =
+    settings.temperature > 0
+      ? `rgba(255, 160, 40, ${alpha.toFixed(3)})`
+      : `rgba(40, 140, 255, ${alpha.toFixed(3)})`
+  context.fillRect(0, 0, width, height)
+  context.restore()
+}
+
+function normalizeShaderFrame(
+  frame: SceneShaderFrame,
+  width: number,
+  height: number
+): SceneShaderFrame {
+  const x = Math.max(0, Math.min(Math.round(frame.x), width - 1))
+  const y = Math.max(0, Math.min(Math.round(frame.y), height - 1))
+  return {
+    x,
+    y,
+    width: Math.max(1, Math.min(Math.round(frame.width), width - x)),
+    height: Math.max(1, Math.min(Math.round(frame.height), height - y))
+  }
+}
+
 /**
- * Dessine la scène par plans optiques et applique le color grading global si configuré.
- * Lorsque les effets sont neutres ou désactivés, le chemin direct n'alloue aucun buffer.
+ * Dessine la scène par plans optiques, compose réellement le grading dans un buffer,
+ * puis applique les effets WebGL sur ce résultat. Les aides d’édition restent au caller.
  */
 export function drawSceneLayersOnContext(
   ctx: CanvasRenderingContext2D,
@@ -448,47 +545,91 @@ export function drawSceneLayersOnContext(
   height: number,
   depthOfField?: DepthOfFieldSettings,
   imageCache: Map<string, HTMLImageElement> = globalImageCache,
-  colorGrading?: ColorGradingSettings
-): void {
-  if (isColorGradingNeutral(colorGrading)) {
+  colorGrading?: ColorGradingSettings,
+  shaderSettings?: ShaderSettings,
+  options: SceneRenderOptions = {}
+): ShaderRenderStatus {
+  const hasGrading = !isColorGradingNeutral(colorGrading)
+  const hasShader = !isShaderNeutral(shaderSettings)
+
+  if (!hasGrading && !hasShader) {
+    prepareContextBackground(ctx, width, height, options.backgroundColor)
     drawRawSceneLayersOnContext(ctx, layers, width, height, depthOfField, imageCache)
-    return
+    return 'neutral'
   }
 
-  const buffer = getColorGradingBuffer(width, height)
-  if (!buffer) {
+  const rawBuffer = ensureRawSceneBuffer(width, height)
+  if (!rawBuffer) {
+    prepareContextBackground(ctx, width, height, options.backgroundColor)
     drawRawSceneLayersOnContext(ctx, layers, width, height, depthOfField, imageCache)
-    return
+    return hasShader ? 'unsupported' : 'neutral'
   }
 
-  // 1. Rendu brut de la scène (avec profondeur de champ) dans le buffer
-  buffer.context.clearRect(0, 0, width, height)
-  drawRawSceneLayersOnContext(buffer.context, layers, width, height, depthOfField, imageCache)
+  rawBuffer.context.clearRect(0, 0, width, height)
+  prepareContextBackground(rawBuffer.context, width, height, options.backgroundColor ?? null)
+  drawRawSceneLayersOnContext(rawBuffer.context, layers, width, height, depthOfField, imageCache)
 
-  // 2. Température colorimétrique si demandée (overlay subtil chaud/froid sur pixels opaques)
-  if (colorGrading!.temperature !== 0) {
-    const temp = colorGrading!.temperature
-    const alpha = Math.min(0.4, (Math.abs(temp) / 100) * 0.28)
-    const color =
-      temp > 0
-        ? `rgba(255, 160, 40, ${alpha.toFixed(3)})`
-        : `rgba(40, 140, 255, ${alpha.toFixed(3)})`
-
-    buffer.context.save()
-    buffer.context.globalCompositeOperation = 'source-atop'
-    buffer.context.fillStyle = color
-    buffer.context.fillRect(0, 0, width, height)
-    buffer.context.restore()
+  let sourceCanvas = rawBuffer.canvas
+  if (hasGrading) {
+    const gradedBuffer = ensureGradedSceneBuffer(width, height)
+    if (gradedBuffer) {
+      applyColorGradingToBuffer(rawBuffer.canvas, gradedBuffer, colorGrading!)
+      sourceCanvas = gradedBuffer.canvas
+    }
   }
 
-  // 3. Dessin final avec filtre CSS Canvas 2D
-  ctx.save()
-  const filter = buildColorGradingCssFilter(colorGrading!)
-  if (filter !== 'none' && 'filter' in ctx) {
-    ctx.filter = filter
+  if (!hasShader) {
+    ctx.clearRect(0, 0, width, height)
+    ctx.drawImage(sourceCanvas, 0, 0, width, height)
+    return 'neutral'
   }
-  ctx.drawImage(buffer.canvas, 0, 0)
-  ctx.restore()
+
+  if (options.shaderFrame) {
+    const frame = normalizeShaderFrame(options.shaderFrame, width, height)
+    const frameBuffer = ensureShaderFrameBuffer(frame.width, frame.height)
+    const outputBuffer = ensureShaderOutputBuffer(frame.width, frame.height)
+    if (!frameBuffer || !outputBuffer) {
+      ctx.clearRect(0, 0, width, height)
+      ctx.drawImage(sourceCanvas, 0, 0, width, height)
+      return 'unsupported'
+    }
+
+    frameBuffer.context.clearRect(0, 0, frame.width, frame.height)
+    frameBuffer.context.drawImage(
+      sourceCanvas,
+      frame.x,
+      frame.y,
+      frame.width,
+      frame.height,
+      0,
+      0,
+      frame.width,
+      frame.height
+    )
+    const status = applyPostProcessingShader(
+      frameBuffer.canvas,
+      outputBuffer.context,
+      shaderSettings
+    )
+    ctx.clearRect(0, 0, width, height)
+    ctx.drawImage(sourceCanvas, 0, 0, width, height)
+    if (status === 'applied') {
+      ctx.drawImage(outputBuffer.canvas, frame.x, frame.y, frame.width, frame.height)
+    }
+    return status
+  }
+
+  const outputBuffer = ensureShaderOutputBuffer(width, height)
+  if (!outputBuffer) {
+    ctx.clearRect(0, 0, width, height)
+    ctx.drawImage(sourceCanvas, 0, 0, width, height)
+    return 'unsupported'
+  }
+
+  const status = applyPostProcessingShader(sourceCanvas, outputBuffer.context, shaderSettings)
+  ctx.clearRect(0, 0, width, height)
+  ctx.drawImage(status === 'applied' ? outputBuffer.canvas : sourceCanvas, 0, 0, width, height)
+  return status
 }
 
 /**
@@ -512,6 +653,8 @@ export interface FrameCaptureOptions {
   outputResolution?: ExportResolution
   depthOfField?: DepthOfFieldSettings
   colorGrading?: ColorGradingSettings
+  shaderSettings?: ShaderSettings
+  onShaderStatus?: (status: ShaderRenderStatus) => void
 }
 
 function normalizeCameraCrop(camera: CameraFrame, stage: StageSettings) {
@@ -542,18 +685,10 @@ export async function captureCleanFrame(
   const ctx = offscreenCanvas.getContext('2d')
   if (!ctx) throw new Error("Impossible d'initialiser le contexte 2D pour la capture.")
 
-  // 1. Fond du plateau
-  if (shouldFillExportBackground(layers, format)) {
-    ctx.fillStyle = backgroundColor || '#0c0d14'
-    ctx.fillRect(0, 0, width, height)
-  } else {
-    ctx.clearRect(0, 0, width, height)
-  }
-
-  // 2. Précharger tous les assets de la scène
+  // 1. Précharger tous les assets de la scène
   await Promise.all(layers.map((l) => fetchAndLoadImage(l.asset.blobId, globalImageCache)))
 
-  // 3. Dessiner strictement les calques avec DoF et Color Grading
+  // 2. Rendre la scène et le grading avant tout recadrage.
   drawSceneLayersOnContext(
     ctx,
     layers,
@@ -561,34 +696,53 @@ export async function captureCleanFrame(
     height,
     options.depthOfField,
     globalImageCache,
-    options.colorGrading
+    options.colorGrading,
+    undefined,
+    {
+      backgroundColor: shouldFillExportBackground(layers, format)
+        ? backgroundColor || '#0c0d14'
+        : null
+    }
   )
 
   const camera = options.camera?.enabled ? normalizeCameraCrop(options.camera, stage) : null
   const outputResolution = options.outputResolution
-  if (!camera && !outputResolution) return offscreenCanvas.toDataURL(format)
+  let outputCanvas = offscreenCanvas
 
-  const exportCanvas = document.createElement('canvas')
-  exportCanvas.width = Math.round(outputResolution?.width ?? camera?.width ?? width)
-  exportCanvas.height = Math.round(outputResolution?.height ?? camera?.height ?? height)
-  const exportContext = exportCanvas.getContext('2d')
-  if (!exportContext) throw new Error("Impossible d'initialiser le contexte 2D pour le cadrage.")
-  exportContext.imageSmoothingEnabled = true
-  exportContext.imageSmoothingQuality = 'high'
+  if (camera || outputResolution) {
+    outputCanvas = document.createElement('canvas')
+    outputCanvas.width = Math.round(outputResolution?.width ?? camera?.width ?? width)
+    outputCanvas.height = Math.round(outputResolution?.height ?? camera?.height ?? height)
+    const outputContext = outputCanvas.getContext('2d')
+    if (!outputContext) throw new Error("Impossible d'initialiser le contexte 2D pour le cadrage.")
+    outputContext.imageSmoothingEnabled = true
+    outputContext.imageSmoothingQuality = 'high'
+    outputContext.drawImage(
+      offscreenCanvas,
+      camera?.x ?? 0,
+      camera?.y ?? 0,
+      camera?.width ?? width,
+      camera?.height ?? height,
+      0,
+      0,
+      outputCanvas.width,
+      outputCanvas.height
+    )
+  }
 
-  exportContext.drawImage(
-    offscreenCanvas,
-    camera?.x ?? 0,
-    camera?.y ?? 0,
-    camera?.width ?? width,
-    camera?.height ?? height,
-    0,
-    0,
-    exportCanvas.width,
-    exportCanvas.height
-  )
+  // 3. Les effets spatiaux sont calculés dans le repère final après crop et résolution.
+  if (!isShaderNeutral(options.shaderSettings)) {
+    const shaderCanvas = document.createElement('canvas')
+    shaderCanvas.width = outputCanvas.width
+    shaderCanvas.height = outputCanvas.height
+    const shaderContext = shaderCanvas.getContext('2d')
+    if (!shaderContext) throw new Error("Impossible d'initialiser la sortie des shaders.")
+    const status = applyPostProcessingShader(outputCanvas, shaderContext, options.shaderSettings)
+    options.onShaderStatus?.(status)
+    if (status === 'applied') outputCanvas = shaderCanvas
+  }
 
-  return exportCanvas.toDataURL(format)
+  return outputCanvas.toDataURL(format)
 }
 
 export function useCanvasRenderer(
@@ -601,7 +755,9 @@ export function useCanvasRenderer(
   isGroupScope?: Ref<boolean>,
   showSelection?: Ref<boolean>,
   depthOfField?: Ref<DepthOfFieldSettings>,
-  colorGrading?: Ref<ColorGradingSettings>
+  colorGrading?: Ref<ColorGradingSettings>,
+  shaderSettings?: Ref<ShaderSettings>,
+  camera?: Ref<CameraFrame>
 ) {
   const isRendering = ref(false)
 
@@ -620,11 +776,7 @@ export function useCanvasRenderer(
       canvas.height = height
     }
 
-    // 1. Fond
-    ctx.fillStyle = backgroundColor || '#0c0d14'
-    ctx.fillRect(0, 0, width, height)
-
-    // 2. Dessiner chaque calque résolu
+    // 1. Dessiner chaque calque résolu
     const layers = activeLayers.value
 
     for (const layer of layers) {
@@ -643,10 +795,15 @@ export function useCanvasRenderer(
       height,
       depthOfField?.value,
       globalImageCache,
-      colorGrading?.value
+      colorGrading?.value,
+      shaderSettings?.value,
+      {
+        backgroundColor: backgroundColor || '#0c0d14',
+        shaderFrame: camera?.value.enabled ? camera.value : null
+      }
     )
 
-    // 3. Cadre de sélection interactif avec poignées d'angles et latérales.
+    // 2. Cadre de sélection interactif avec poignées d'angles et latérales.
     const bounds = showSelection?.value === false ? null : selectedBounds?.value
     if (bounds && bounds.width > 0 && bounds.height > 0) {
       ctx.save()
@@ -654,7 +811,6 @@ export function useCanvasRenderer(
       const primaryColor = isGroup ? '#6366f1' : '#38bdf8' // Indigo pour groupe, Cyan pour sprite individuel
       const handleSize = 10
       const centerX = bounds.x + bounds.width / 2
-      const centerY = bounds.y + bounds.height / 2
       const rotY = bounds.y - 24
 
       // 1. Tige verticale reliant le haut de la boîte à la poignée de rotation
@@ -750,6 +906,8 @@ export function useCanvasRenderer(
     void showSelection?.value
     void depthOfField?.value
     void colorGrading?.value
+    void shaderSettings?.value
+    void camera?.value
     render()
 
     onWatcherCleanup(() => {
