@@ -180,7 +180,7 @@ watchEffect(async () => {
           </Badge>
           <Badge
             v-if="asset.category === 'desk' && asset.deskSplit?.enabled"
-            variant="outline"
+            variant="accent"
             size="sm"
             class="shrink-0 text-[8px] px-1 py-0 border-primary/40 text-primary"
           >

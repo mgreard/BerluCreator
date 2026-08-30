@@ -199,18 +199,18 @@ function toggleDrawer(): void {
 
 <template>
   <nav
-    class="library-nav custom-scrollbar flex w-52 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border-subtle bg-bg-surface/30 p-2 select-none"
+    class="library-nav custom-scrollbar flex w-52 shrink-0 flex-col gap-3 overflow-y-auto border-r border-white/10 bg-black/20 backdrop-blur-2xl p-2 select-none text-white/90 shadow-glass-sm"
     aria-label="Catégories de sprites"
     data-tour="asset-library-nav"
   >
     <!-- En-tête avec raccourci pour ouvrir/fermer le tiroir d'assets -->
     <div class="flex items-center justify-between px-1 pt-1 pb-0.5">
-      <span class="text-[11px] font-bold uppercase tracking-wider text-text-muted">Catégories</span>
+      <span class="text-[11px] font-bold uppercase tracking-wider text-white/60">Catégories</span>
       <IconButton
         :icon="drawerOpen ? 'left_panel_close' : 'left_panel_open'"
         size="xs"
         variant="ghost"
-        class="size-6 text-text-muted hover:text-text-primary"
+        class="size-6 text-white/60 hover:text-white"
         :aria-label="drawerOpen ? 'Fermer le tiroir de sprites' : 'Ouvrir le tiroir de sprites'"
         :title="drawerOpen ? 'Fermer le tiroir de sprites' : 'Ouvrir le tiroir de sprites'"
         @click="toggleDrawer"
@@ -242,7 +242,7 @@ function toggleDrawer(): void {
         as="p"
         variant="caption"
         color="muted"
-        class="px-2 text-[10px] font-bold uppercase tracking-wider"
+        class="px-2 text-[10px] font-bold uppercase tracking-wider text-white/50"
       >
         Personnages
       </Text>
@@ -251,6 +251,7 @@ function toggleDrawer(): void {
         :key="character.key"
         variant="flat"
         padding="none"
+        class="bg-white/5 border border-white/10 rounded-xl overflow-hidden hover:border-white/20 transition-colors"
       >
         <NavigationItem
           as="div"
@@ -271,7 +272,7 @@ function toggleDrawer(): void {
               :icon="expandedCharacters[character.key] ? 'expand_more' : 'chevron_right'"
               size="xs"
               variant="ghost"
-              class="size-5"
+              class="size-5 text-white/60 hover:text-white"
               :aria-label="expandedCharacters[character.key] ? 'Replier' : 'Déplier'"
               @click.stop="toggleCharacter(character.key)"
             />
@@ -280,7 +281,7 @@ function toggleDrawer(): void {
 
         <div
           v-show="expandedCharacters[character.key]"
-          class="grid gap-1 border-t border-border-subtle bg-bg-base/25 p-1.5 pl-2"
+          class="grid gap-1 border-t border-white/10 bg-black/30 p-1.5 pl-2"
         >
           <NavigationItem
             v-for="category in availableCategoriesForCharacter(character.key)"
@@ -301,12 +302,12 @@ function toggleDrawer(): void {
       </Card>
     </section>
 
-    <section class="grid gap-1 border-t border-border-subtle pt-3">
+    <section class="grid gap-1 border-t border-white/10 pt-3">
       <Text
         as="p"
         variant="caption"
         color="muted"
-        class="px-2 text-[10px] font-bold uppercase tracking-wider"
+        class="px-2 text-[10px] font-bold uppercase tracking-wider text-white/50"
       >
         Plateau & décor
       </Text>
@@ -334,8 +335,8 @@ function toggleDrawer(): void {
 <style scoped>
 .library-nav {
   box-shadow:
-    inset -1px 0 0 rgb(255 255 255 / 3%),
-    inset 0 1px 0 rgb(255 255 255 / 8%);
+    inset -1px 0 0 rgb(255 255 255 / 6%),
+    inset 0 1px 0 rgb(255 255 255 / 10%);
 }
 
 .custom-scrollbar::-webkit-scrollbar {

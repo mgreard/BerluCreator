@@ -112,42 +112,52 @@ function formatDate(timestamp: number) {
 </script>
 
 <template>
-  <section
+  <aside
+    v-if="open"
     data-tour="saved-views-panel"
-    class="saved-views-panel flex h-full min-w-0 flex-col border-l border-border-subtle bg-bg-surface/30 backdrop-blur-xl"
+    class="viewport-glass absolute top-3 right-3 bottom-3 z-30 flex w-[380px] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-2xl border border-white/15 text-white/90 shadow-glass-xl pointer-events-auto select-none"
+    role="region"
     aria-label="Compositions et vues sauvegardées"
+    @pointerdown.stop
+    @dblclick.stop
+    @keydown.esc.stop="open = false"
   >
-    <header class="flex h-12 shrink-0 items-center gap-2 border-b border-border-subtle px-3">
-      <span class="panel-icon"><Icon name="collections_bookmark" size="sm" /></span>
-      <div class="min-w-0 flex-1">
-        <Text as="p" variant="caption" color="primary" weight="semibold" truncate class="text-xs"
-          >Compositions</Text
-        >
-        <Text as="p" variant="caption" color="muted" truncate class="text-[10px]"
-          >Vues sauvegardées</Text
-        >
+    <header class="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/15 px-3">
+      <div class="flex min-w-0 items-center gap-2">
+        <span class="panel-icon"><Icon name="collections_bookmark" size="sm" /></span>
+        <div class="min-w-0 flex-1">
+          <Text as="p" variant="caption" color="primary" weight="semibold" truncate class="text-xs font-bold text-white"
+            >Compositions</Text
+          >
+          <Text as="p" variant="caption" color="muted" truncate class="text-[10px] text-white/60"
+            >Vues sauvegardées</Text
+          >
+        </div>
       </div>
-      <Badge variant="neutral" size="sm" class="count-badge">{{
-        snapshotStore.snapshots.length
-      }}</Badge>
-      <IconButton
-        icon="right_panel_close"
-        size="sm"
-        variant="ghost"
-        aria-label="Replier le panneau des compositions"
-        title="Replier le panneau"
-        @click="open = false"
-      />
+      <div class="flex items-center gap-2 shrink-0">
+        <Badge variant="neutral" size="sm" class="count-badge">{{
+          snapshotStore.snapshots.length
+        }}</Badge>
+        <IconButton
+          icon="close"
+          size="sm"
+          variant="ghost"
+          class="viewport-action size-7 text-white/60 hover:text-white"
+          aria-label="Replier le panneau des compositions"
+          title="Replier le panneau"
+          @click="open = false"
+        />
+      </div>
     </header>
 
-    <div class="shrink-0 border-b border-border-subtle/70 p-3">
-      <FormGroup label="Nouvelle composition" :label-for="nameInputId" class="mb-0">
+    <div class="shrink-0 border-b border-white/10 bg-black/10 p-3">
+      <FormGroup label="Nouvelle composition" :label-for="nameInputId" class="mb-0 text-white/80">
         <div class="flex items-center gap-2">
           <Input
             :id="nameInputId"
             v-model="name"
             size="sm"
-            class="min-w-0 flex-1"
+            class="min-w-0 flex-1 bg-black/25 text-xs text-white placeholder:text-white/40 border-white/10"
             :placeholder="defaultName"
             @keydown.enter="saveCurrentViewport"
           />
@@ -155,7 +165,7 @@ function formatDate(timestamp: number) {
             data-tour="snapshots-create-btn"
             variant="primary"
             size="sm"
-            class="h-8 shrink-0 gap-1 px-2"
+            class="h-8 shrink-0 gap-1 px-2.5 shadow-sm"
             :disabled="isSaving"
             :loading="isSaving"
             title="Enregistrer la vue actuelle"
@@ -166,7 +176,7 @@ function formatDate(timestamp: number) {
           </Button>
         </div>
       </FormGroup>
-      <Text as="p" variant="caption" color="muted" class="mt-1.5 text-[10px]">
+      <Text as="p" variant="caption" color="muted" class="mt-1.5 text-[10px] text-white/50">
         {{ activeLayers.length }} élément(s) visible(s)
       </Text>
     </div>
@@ -176,10 +186,10 @@ function formatDate(timestamp: number) {
         <article
           v-for="snapshot in snapshotStore.snapshots"
           :key="snapshot.id"
-          class="snapshot-row group flex min-w-0 gap-2.5 rounded-xl border p-2"
+          class="snapshot-row group flex min-w-0 gap-2.5 rounded-xl border border-white/10 bg-white/5 p-2 transition-all duration-200 hover:border-primary/50 hover:bg-white/10"
         >
           <div
-            class="snapshot-thumbnail relative aspect-video w-28 shrink-0 overflow-hidden rounded-lg border border-border-subtle bg-bg-base"
+            class="snapshot-thumbnail relative aspect-video w-28 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/40"
           >
             <img
               v-if="snapshot.thumbnailDataUrl"
@@ -187,7 +197,7 @@ function formatDate(timestamp: number) {
               :alt="`Aperçu de ${snapshot.name}`"
               class="size-full object-cover"
             />
-            <div v-else class="flex size-full items-center justify-center text-text-muted">
+            <div v-else class="flex size-full items-center justify-center text-white/40">
               <Icon name="photo_camera" size="sm" />
             </div>
           </div>
@@ -200,11 +210,11 @@ function formatDate(timestamp: number) {
                 color="primary"
                 weight="semibold"
                 truncate
-                class="text-xs"
+                class="text-xs font-semibold text-white/95 group-hover:text-primary"
               >
                 {{ snapshot.name }}
               </Text>
-              <Text as="p" variant="caption" color="muted" class="mt-0.5 text-[9px] leading-tight">
+              <Text as="p" variant="caption" color="muted" class="mt-0.5 text-[9px] leading-tight text-white/60">
                 {{ snapshot.layers.length }} calque(s) · {{ formatDate(snapshot.createdAt) }}
               </Text>
             </div>
@@ -224,7 +234,7 @@ function formatDate(timestamp: number) {
                 icon="delete"
                 size="xs"
                 variant="ghost"
-                class="size-6 text-text-muted hover:text-danger"
+                class="size-6 text-white/60 hover:text-danger"
                 :aria-label="`Supprimer ${snapshot.name}`"
                 :title="`Supprimer ${snapshot.name}`"
                 @click="deleteSnapshot(snapshot)"
@@ -239,25 +249,19 @@ function formatDate(timestamp: number) {
         icon="collections_bookmark"
         title="Aucune composition"
         description="Enregistrez la vue actuelle pour la retrouver ici."
-        class="min-h-44 border border-dashed border-border-subtle bg-bg-base/20 px-3"
+        class="min-h-44 border border-dashed border-white/10 bg-white/5 px-3 text-white/70"
       />
     </div>
 
     <footer
-      class="shrink-0 border-t border-border-subtle/70 px-3 py-2 text-[9px] leading-snug text-text-muted"
+      class="shrink-0 border-t border-white/10 px-3 py-2 text-[9px] leading-snug text-white/50 bg-black/10"
     >
       Charger une vue remplace le contenu du document courant.
     </footer>
-  </section>
+  </aside>
 </template>
 
 <style scoped>
-.saved-views-panel {
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 15%),
-    -12px 0 32px rgb(0 0 0 / 14%);
-}
-
 .panel-icon {
   display: inline-flex;
   width: 1.75rem;
@@ -278,24 +282,6 @@ function formatDate(timestamp: number) {
   background: rgb(129 140 248 / 8%);
   color: rgb(165 180 252);
   font-size: 0.58rem;
-}
-
-.snapshot-row {
-  border-color: rgb(255 255 255 / 8%);
-  background: rgb(18 18 26 / 30%);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%);
-  transition:
-    border-color 300ms ease-out,
-    background-color 300ms ease-out,
-    box-shadow 300ms ease-out;
-}
-
-.snapshot-row:hover {
-  border-color: rgb(129 140 248 / 34%);
-  background: rgb(129 140 248 / 7%);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 15%),
-    0 8px 20px rgb(0 0 0 / 12%);
 }
 
 .snapshot-thumbnail img {

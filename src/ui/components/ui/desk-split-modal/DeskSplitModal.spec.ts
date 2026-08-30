@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import DeskSplitModal from './DeskSplitModal.vue'
-import type { Asset } from '@core/types/asset.types'
+import type { Asset, DeskSplitConfig } from '@core/types/asset.types'
 
 vi.mock('@infrastructure/storage/blob-cache.service', () => ({
   blobCacheService: {
@@ -61,7 +61,7 @@ describe('DeskSplitModal', () => {
 
     await vi.waitFor(() => {
       expect(wrapper.emitted('save')).toBeTruthy()
-      const savedConfig = wrapper.emitted('save')?.[0]?.[0]
+      const savedConfig = wrapper.emitted('save')?.[0]?.[0] as DeskSplitConfig
       expect(savedConfig).toMatchObject({
         enabled: true
       })

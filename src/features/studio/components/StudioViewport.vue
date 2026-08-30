@@ -2,6 +2,18 @@
 import StageCanvas from './StageCanvas.vue'
 import RigCalibrationViewportWorkspace from './RigCalibrationViewportWorkspace.vue'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
+import type { TourKey } from '@/features/project/services/tour-definitions'
+
+const { isSavedSnapshotsOpen = false } = defineProps<{
+  isSavedSnapshotsOpen?: boolean
+}>()
+
+const emit = defineEmits<{
+  (event: 'openSettings'): void
+  (event: 'openExport'): void
+  (event: 'toggleSavedSnapshots'): void
+  (event: 'startTour', key?: TourKey): void
+}>()
 
 const rigCatalog = useRigCatalogStore()
 </script>
@@ -14,7 +26,14 @@ const rigCatalog = useRigCatalogStore()
     />
     <div class="absolute inset-0 overflow-hidden bg-dot-pattern">
       <RigCalibrationViewportWorkspace v-if="rigCatalog.isCalibrationOpen" />
-      <StageCanvas v-else />
+      <StageCanvas
+        v-else
+        :is-saved-snapshots-open="isSavedSnapshotsOpen"
+        @open-settings="emit('openSettings')"
+        @open-export="emit('openExport')"
+        @toggle-saved-snapshots="emit('toggleSavedSnapshots')"
+        @start-tour="(key) => emit('startTour', key)"
+      />
     </div>
   </div>
 </template>

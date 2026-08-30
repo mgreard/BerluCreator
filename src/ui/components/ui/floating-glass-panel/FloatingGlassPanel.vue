@@ -87,6 +87,7 @@ function resetPosition(): void {
   const placements = {
     'top-left': { x: margin, y: margin },
     'top-right': { x: containerRect.width - panelRect.width - margin, y: margin },
+    'bottom-left': { x: margin, y: containerRect.height - panelRect.height - margin },
     'bottom-right': {
       x: containerRect.width - panelRect.width - margin,
       y: containerRect.height - panelRect.height - margin

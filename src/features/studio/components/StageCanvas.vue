@@ -18,25 +18,35 @@ import {
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
-import { Badge } from '@/components/ui/badge'
 import { SegmentedControl, type SegmentOption } from '@/components/ui/segmented-control'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
-import { Heading } from '@/components/ui/heading'
-import { FloatingGlassPanel, type StudioPanelId } from '@/components/ui/floating-glass-panel'
+import { Popover } from '@/components/ui/popover'
 import { CameraFrameOverlay } from '@/components/ui/camera-frame-overlay'
 import {
   DepthOfFieldOverlay,
   type DepthOfFieldOverlayValue
 } from '@/components/ui/depth-of-field-overlay'
-import { VisualEffectsOverlay } from '@/components/ui/visual-effects-overlay'
 import { DeskSplitModal } from '@/components/ui/desk-split-modal'
 import type { CameraFrame, CharacterGroup, ColorGradingSettings, ShaderSettings } from '@core/types/editor.types'
 import type { DeskSplitConfig } from '@core/types/asset.types'
+import type { TourKey } from '@/features/project/services/tour-definitions'
 import { OPTICAL_DEPTH_PRESETS } from '@core/constants/editor'
 import { toast } from '@/ui/shared/services/toast.service'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
 import { useRigRuntime } from '../rig-calibration/useRigRuntime'
+import StudioGlobalToolbar from './StudioGlobalToolbar.vue'
+
+const { isSavedSnapshotsOpen = false } = defineProps<{
+  isSavedSnapshotsOpen?: boolean
+}>()
+
+const emit = defineEmits<{
+  (event: 'openSettings'): void
+  (event: 'openExport'): void
+  (event: 'toggleSavedSnapshots'): void
+  (event: 'startTour', key?: TourKey): void
+}>()
 
 const projectStore = useProjectStore()
 const editorStore = useEditorStore()
@@ -46,7 +56,6 @@ const rigRuntime = useRigRuntime()
 
 const stage = computed(() => projectStore.currentProject.stage)
 const canvasRef = useTemplateRef<HTMLCanvasElement>('canvas')
-const stageViewportRef = useTemplateRef<HTMLDivElement>('stageViewport')
 const { activeLayers } = useHierarchyResolver()
 const isRigCalibrationOpen = computed(() => rigCatalog.isCalibrationOpen)
 
@@ -177,19 +186,6 @@ const activeCamera = computed<CameraFrame>({
 })
 
 const depthOfField = computed(() => editorStore.currentDocument.depthOfField)
-const activeGlobalToolbarPanel = ref<'visual-effects' | 'depth-of-field' | null>(null)
-const isVisualEffectsEditorOpen = computed({
-  get: () => activeGlobalToolbarPanel.value === 'visual-effects',
-  set: (open: boolean) => {
-    activeGlobalToolbarPanel.value = open ? 'visual-effects' : null
-  }
-})
-const isDepthOfFieldEditorOpen = computed({
-  get: () => activeGlobalToolbarPanel.value === 'depth-of-field',
-  set: (open: boolean) => {
-    activeGlobalToolbarPanel.value = open ? 'depth-of-field' : null
-  }
-})
 
 const isOpticalDepthEditorOpen = ref(false)
 const isSelectionToolsOpen = computed(() => Boolean(activeSelectedLayer.value))
@@ -233,10 +229,6 @@ const shaderModel = computed<ShaderSettings>({
 })
 
 const hasVisualEffects = computed(() => colorGrading.value.enabled || shaderSettings.value.enabled)
-
-function toggleVisualEffectsEditor(): void {
-  isVisualEffectsEditorOpen.value = !isVisualEffectsEditorOpen.value
-}
 
 function beginVisualEffectsInteraction(label: string): void {
   editorStore.beginGesture(label)
@@ -504,16 +496,6 @@ function resetSelectedOpticalDepth() {
   editorStore.setLayerDepthRole(layer.id, 'auto')
 }
 
-function toggleOpticalDepthEditor() {
-  if (!depthOfField.value.enabled) {
-    editorStore.updateDepthOfField({ ...depthOfField.value, enabled: true })
-  }
-  isOpticalDepthEditorOpen.value = !isOpticalDepthEditorOpen.value
-  if (!isOpticalDepthEditorOpen.value) {
-    finishOpticalDepthInteraction()
-  }
-}
-
 watch([selectedLayerId, () => editorStore.selectedGroupId], () => {
   finishOpticalDepthInteraction()
   isOpticalDepthEditorOpen.value = false
@@ -552,12 +534,6 @@ function commitCameraFrame(camera: CameraFrame) {
 function toggleDepthOfField() {
   const enabled = !depthOfField.value.enabled
   editorStore.updateDepthOfField({ enabled })
-  isDepthOfFieldEditorOpen.value = enabled
-}
-
-function toggleDepthOfFieldEditor() {
-  if (!depthOfField.value.enabled) return
-  isDepthOfFieldEditorOpen.value = !isDepthOfFieldEditorOpen.value
 }
 
 function beginDepthOfFieldInteraction(label: string) {
@@ -1274,9 +1250,8 @@ function onCanvasDoubleClick(e: MouseEvent) {
       />
 
       <DepthOfFieldOverlay
-        v-if="depthOfField.enabled && isDepthOfFieldEditorOpen && !activeCamera.enabled"
+        v-if="depthOfField.enabled && !activeCamera.enabled"
         :model-value="depthOfField"
-        v-model:open="isDepthOfFieldEditorOpen"
         :show-controls="false"
         :stage-height="stage.height"
         @interaction-start="beginDepthOfFieldInteraction"
@@ -1284,224 +1259,56 @@ function onCanvasDoubleClick(e: MouseEvent) {
         @commit="commitDepthOfFieldUpdate"
       />
 
-      <FloatingGlassPanel
-        :open="true"
-        panel-id="viewport-top-actions"
-        title="Outils du studio"
-        default-placement="top-right"
-        chrome="toolbar"
-        data-tour="viewport-top-actions"
+      <!-- Barre d'outils globale (Fixe, haut centré avec popovers ancrés) -->
+      <StudioGlobalToolbar
+        v-model:color-grading="colorGradingModel"
+        v-model:shader-settings="shaderModel"
+        :stage="stage"
+        :active-camera="activeCamera"
+        :depth-of-field="depthOfField"
+        :has-visual-effects="hasVisualEffects"
+        :is-saved-snapshots-open="isSavedSnapshotsOpen"
+        :is-rig-calibration-open="isRigCalibrationOpen"
+        :can-undo="Boolean(editorStore.canUndo && !isDragging && !isResizing)"
+        :can-redo="Boolean(editorStore.canRedo && !isDragging && !isResizing)"
+        @open-settings="emit('openSettings')"
+        @open-export="emit('openExport')"
+        @toggle-saved-snapshots="emit('toggleSavedSnapshots')"
+        @toggle-depth-of-field="toggleDepthOfField"
+        @update-dof-blur-radius="updateDofBlurRadius"
+        @update-dof-feather="updateDofFeather"
+        @begin-depth-interaction="beginDepthOfFieldInteraction"
+        @finish-depth-interaction="finishDepthOfFieldInteraction"
+        @toggle-camera-frame="toggleCameraFrame"
+        @toggle-rig-calibration="toggleRigCalibration"
+        @undo="undoCanvasTransform"
+        @redo="redoCanvasTransform"
+        @start-tour="(key) => emit('startTour', key)"
+        @interaction-start="beginVisualEffectsInteraction"
+        @interaction-end="endVisualEffectsInteraction"
+        @reset-visual-effects="resetVisualEffects"
+      />
+
+      <!-- HUD contextuel d'Édition Directe (Bannière Inférieure Fixe, bas centré avec Popovers ancrés au-dessus) -->
+      <Transition
+        enter-active-class="transition-all duration-200 ease-out"
+        enter-from-class="opacity-0 translate-y-4 scale-95"
+        enter-to-class="opacity-100 translate-y-0 scale-100"
+        leave-active-class="transition-all duration-150 ease-in"
+        leave-from-class="opacity-100 translate-y-0 scale-100"
+        leave-to-class="opacity-0 translate-y-4 scale-95"
       >
-        <Badge
-          variant="neutral"
-          size="sm"
-          class="mx-1 border-white/15 bg-black/30 font-mono text-[10px] text-white/90"
+        <div
+          v-if="isSelectionToolsOpen && !isRigCalibrationOpen"
+          class="viewport-glass absolute bottom-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-2xl border border-white/15 px-3 py-1.5 text-white/90 shadow-glass-xl pointer-events-auto select-none max-w-[calc(100%-1.5rem)] text-xs"
+          data-tour="selection-tools"
+          role="toolbar"
+          aria-label="Outils du calque sélectionné"
+          @pointerdown.stop
+          @dblclick.stop
         >
-          {{ stage.width }} × {{ stage.height }}
-        </Badge>
-        <IconButton
-          icon="construction"
-          size="xs"
-          variant="ghost"
-          class="viewport-action"
-          :active="isRigCalibrationOpen"
-          aria-label="Calibrer les sprites du rig"
-          title="Calibrer les sprites du rig"
-          @click="toggleRigCalibration"
-        />
-        <IconButton
-          icon="blur_on"
-          size="xs"
-          variant="ghost"
-          class="viewport-action"
-          :active="depthOfField.enabled"
-          :aria-label="
-            depthOfField.enabled
-              ? 'Désactiver le flou de profondeur'
-              : 'Activer le flou de profondeur'
-          "
-          :title="
-            depthOfField.enabled
-              ? 'Désactiver le flou de profondeur'
-              : 'Activer le flou de profondeur'
-          "
-          @click="toggleDepthOfField"
-        />
-        <IconButton
-          icon="tune"
-          size="xs"
-          variant="ghost"
-          class="viewport-action"
-          :active="isDepthOfFieldEditorOpen"
-          :disabled="!depthOfField.enabled"
-          :aria-label="
-            isDepthOfFieldEditorOpen
-              ? 'Masquer les réglages de profondeur de champ'
-              : 'Afficher les réglages de profondeur de champ'
-          "
-          :title="isDepthOfFieldEditorOpen ? 'Masquer les réglages' : 'Afficher les réglages'"
-          @click="toggleDepthOfFieldEditor"
-        />
-        <IconButton
-          icon="auto_fix_high"
-          size="xs"
-          variant="ghost"
-          class="viewport-action"
-          :active="hasVisualEffects || isVisualEffectsEditorOpen"
-          data-tour="visual-effects"
-          :aria-label="
-            isVisualEffectsEditorOpen
-              ? 'Masquer les effets visuels'
-              : 'Afficher les effets visuels'
-          "
-          :title="
-            isVisualEffectsEditorOpen
-              ? 'Masquer les effets visuels'
-              : hasVisualEffects
-                ? 'Effets visuels (Actifs)'
-                : 'Effets visuels'
-          "
-          @click="toggleVisualEffectsEditor"
-        />
-        <IconButton
-          icon="crop_free"
-          size="xs"
-          variant="ghost"
-          class="viewport-action"
-          :active="activeCamera.enabled"
-          :aria-label="
-            activeCamera.enabled ? 'Désactiver le cadrage caméra' : 'Activer le cadrage caméra'
-          "
-          :title="activeCamera.enabled ? 'Désactiver le cadrage' : 'Activer le cadrage caméra'"
-          @click="toggleCameraFrame"
-        />
-        <IconButton
-          icon="undo"
-          size="xs"
-          variant="ghost"
-          class="viewport-action"
-          aria-label="Annuler la dernière transformation"
-          aria-keyshortcuts="Control+Z Meta+Z"
-          title="Annuler (Ctrl/Cmd+Z)"
-          :disabled="!editorStore.canUndo || isDragging || isResizing"
-          @click="undoCanvasTransform"
-        />
-        <IconButton
-          icon="redo"
-          size="xs"
-          variant="ghost"
-          class="viewport-action"
-          aria-label="Rétablir la dernière transformation"
-          aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y"
-          title="Rétablir (Ctrl/Cmd+Shift+Z ou Ctrl+Y)"
-          :disabled="!editorStore.canRedo || isDragging || isResizing"
-          @click="redoCanvasTransform"
-        />
-
-        <template #attached>
-          <!-- Panneau Effets Visuels Attaché sous la barre -->
-          <VisualEffectsOverlay
-            v-if="isVisualEffectsEditorOpen && !isRigCalibrationOpen"
-            v-model:color-grading="colorGradingModel"
-            v-model:shader-settings="shaderModel"
-            v-model:open="isVisualEffectsEditorOpen"
-            variant="attached"
-            @interaction-start="beginVisualEffectsInteraction"
-            @interaction-end="endVisualEffectsInteraction"
-            @reset-all="resetVisualEffects"
-          />
-
-          <!-- Panneau Profondeur de Champ Attaché sous la barre -->
-          <div
-            v-else-if="depthOfField.enabled && isDepthOfFieldEditorOpen && !isRigCalibrationOpen && !activeCamera.enabled"
-            class="viewport-glass w-72 flex flex-col rounded-2xl border border-white/15 shadow-glass-xl overflow-hidden pointer-events-auto text-white/90"
-            data-depth-controls
-          >
-            <header class="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/15 px-3 py-2">
-              <div class="flex items-center gap-2 min-w-0">
-                <div class="flex size-7 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                  <Icon name="blur_on" size="xs" />
-                </div>
-                <div class="min-w-0">
-                  <Heading as="h3" variant="sm" class="text-xs font-semibold text-white">Profondeur de champ</Heading>
-                  <p class="truncate text-[10px] text-white/55">Plans lointains et proches</p>
-                </div>
-              </div>
-              <IconButton
-                icon="close"
-                size="xs"
-                variant="ghost"
-                class="viewport-action shrink-0 text-white/60 hover:text-white"
-                aria-label="Fermer le panneau Profondeur de champ"
-                @click="isDepthOfFieldEditorOpen = false"
-              />
-            </header>
-
-            <div class="p-3">
-              <div
-                data-blur-control
-                @pointerdown.capture="beginDepthOfFieldInteraction('Régler le rayon du flou')"
-                @pointerup.capture="finishDepthOfFieldInteraction"
-                @pointercancel.capture="finishDepthOfFieldInteraction"
-                @keydown.capture="beginDepthOfFieldInteraction('Régler le rayon du flou')"
-                @keyup.capture="finishDepthOfFieldInteraction"
-              >
-                <Slider
-                  :model-value="depthOfField.blurRadius"
-                  :min="0"
-                  :max="32"
-                  :step="1"
-                  size="sm"
-                  label="Intensité"
-                  show-value
-                  tooltip="hover"
-                  :formatter="(value) => `${value} px`"
-                  @update:model-value="updateDofBlurRadius"
-                />
-              </div>
-
-              <div
-                class="mt-2"
-                data-feather-control
-                @pointerdown.capture="beginDepthOfFieldInteraction('Régler la transition du flou')"
-                @pointerup.capture="finishDepthOfFieldInteraction"
-                @pointercancel.capture="finishDepthOfFieldInteraction"
-                @keydown.capture="beginDepthOfFieldInteraction('Régler la transition du flou')"
-                @keyup.capture="finishDepthOfFieldInteraction"
-              >
-                <Slider
-                  :model-value="depthOfField.feather"
-                  :min="0"
-                  :max="600"
-                  :step="10"
-                  size="sm"
-                  variant="accent"
-                  label="Douceur"
-                  show-value
-                  tooltip="hover"
-                  :formatter="(value) => `${value} px`"
-                  @update:model-value="updateDofFeather"
-                />
-              </div>
-            </div>
-          </div>
-        </template>
-      </FloatingGlassPanel>
-
-      <!-- HUD contextuel d'Édition Directe (Bannière Inférieure) -->
-      <FloatingGlassPanel
-        v-if="isSelectionToolsOpen && !isRigCalibrationOpen"
-        :open="isSelectionToolsOpen"
-        panel-id="selection-tools"
-        title="Outils du calque sélectionné"
-        default-placement="bottom-center"
-        chrome="toolbar"
-        class="max-w-[calc(100%-1rem)] gap-2 text-xs"
-      >
-        <div class="flex items-center gap-2">
-
           <!-- Nom & Icône du calque sélectionné -->
-          <span class="flex items-center gap-1.5 font-semibold text-white/90">
+          <span class="flex items-center gap-1.5 font-semibold text-white/90 pr-2 border-r border-white/15">
             <Icon
               :name="
                 activeSelectedLayer
@@ -1511,16 +1318,17 @@ function onCanvasDoubleClick(e: MouseEvent) {
               size="xs"
               class="text-primary"
             />
-            <span>{{
+            <span class="truncate max-w-[150px]">{{
               isGroupTarget && activeSelectedGroup
                 ? activeSelectedGroup.name
                 : activeSelectedLayer?.name || activeSelectedLayer?.asset.name
             }}</span>
           </span>
 
+          <!-- Position Bureau / Scène -->
           <div
             v-if="canEditSelectedDeskPlacement"
-            class="flex items-center gap-2 border-l border-white/15 pl-2"
+            class="flex items-center gap-1.5 pr-2 border-r border-white/15"
           >
             <span class="text-[10px] font-semibold text-white/60">Scène</span>
             <SegmentedControl
@@ -1528,110 +1336,48 @@ function onCanvasDoubleClick(e: MouseEvent) {
               :options="deskPlacementOptions"
               size="sm"
               variant="primary"
-              class="bg-bg-surface/30"
+              class="bg-black/30 border border-white/10"
               aria-label="Position de l’accessoire par rapport au bureau et aux personnages"
             />
           </div>
 
-          <IconButton
+          <!-- Distance Caméra (Flou Optique du calque) avec Popover side="top" -->
+          <Popover
             v-if="canEditSelectedOpticalDepth"
-            icon="tune"
-            size="xs"
-            variant="ghost"
-            class="viewport-action"
-            :active="isOpticalDepthEditorOpen"
-            :aria-label="
-              isOpticalDepthEditorOpen
-                ? 'Fermer les réglages de distance caméra'
-                : 'Régler la distance caméra du calque'
-            "
-            :title="isOpticalDepthEditorOpen ? 'Fermer Distance caméra' : 'Distance caméra'"
-            @click="toggleOpticalDepthEditor"
-          />
-
-          <IconButton
-            v-if="selectedDeskAsset"
-            icon="content_cut"
-            size="xs"
-            variant="ghost"
-            class="viewport-action"
-            :active="isDeskSplitModalOpen"
-            aria-label="Découper la profondeur du meuble (2.5D)"
-            title="Découper la profondeur du meuble (2.5D)"
-            @click="isDeskSplitModalOpen = true"
-          />
-
-          <IconButton
-            icon="flip"
-            size="xs"
-            variant="ghost"
-            class="viewport-action"
-            :active="isSelectedFlippedHorizontally"
-            :aria-label="
-              isSelectedFlippedHorizontally
-                ? 'Rétablir l’orientation normale'
-                : 'Retourner horizontalement'
-            "
-            :title="
-              isSelectedFlippedHorizontally
-                ? 'Rétablir l’orientation normale'
-                : 'Retourner horizontalement'
-            "
-            @click="flipSelectedHorizontal"
-          />
-
-          <IconButton
-            icon="delete"
-            size="xs"
-            variant="destructive"
-            :aria-label="deleteSelectionLabel"
-            :title="deleteSelectionLabel"
-            @click="removeSelectedFromViewport"
-          />
-
-          <!-- Bouton Désélectionner / Fermer HUD -->
-          <IconButton
-            icon="close"
-            size="xs"
-            variant="ghost"
-            class="viewport-action size-5 p-0"
-            title="Désélectionner"
-            @click="editorStore.clearStudioSelection()"
-          />
-        </div>
-
-        <template #attached>
-          <!-- Panneau Distance Caméra Attaché au-dessus de la barre de calque -->
-          <div
-            v-if="canEditSelectedOpticalDepth && isOpticalDepthEditorOpen"
-            class="viewport-glass w-80 flex flex-col rounded-2xl border border-white/15 shadow-glass-xl overflow-hidden pointer-events-auto text-white/90"
-            data-optical-depth-controls
+            v-model="isOpticalDepthEditorOpen"
+            side="top"
+            align="center"
+            surface="glass"
+            width="md"
+            :side-offset="10"
           >
-            <header class="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/15 px-3 py-2">
-              <div class="flex items-center gap-2 min-w-0">
-                <Icon name="tune" size="xs" class="shrink-0 text-primary" />
-                <div class="min-w-0">
-                  <Heading as="h3" variant="sm" class="text-xs font-semibold text-white">Distance caméra</Heading>
-                  <p class="truncate text-[10px] text-white/55">Affecte le flou, jamais l’ordre des calques.</p>
-                </div>
-              </div>
+            <template #trigger>
               <IconButton
-                icon="close"
+                icon="tune"
                 size="xs"
                 variant="ghost"
-                class="viewport-action shrink-0 text-white/60 hover:text-white"
-                aria-label="Fermer la distance caméra"
-                @click="isOpticalDepthEditorOpen = false"
+                class="viewport-action size-7"
+                :active="isOpticalDepthEditorOpen"
+                aria-label="Régler la distance caméra du calque"
+                title="Distance caméra (flou optique du calque)"
               />
-            </header>
+            </template>
 
-            <div class="flex flex-col gap-4 p-3">
+            <div class="p-3 text-white/90 space-y-3" data-optical-depth-controls>
+              <div class="flex items-center justify-between border-b border-white/10 pb-2">
+                <div class="flex items-center gap-1.5">
+                  <Icon name="tune" size="xs" class="text-primary" />
+                  <span class="text-xs font-semibold text-white">Distance caméra</span>
+                </div>
+                <span class="text-[10px] text-white/50">Affecte le flou, jamais l’ordre Z</span>
+              </div>
+
               <SegmentedControl
                 v-model="selectedOpticalPreset"
                 :options="opticalDepthPresetOptions"
                 size="sm"
                 variant="primary"
-                class="w-full justify-center"
+                class="w-full justify-center bg-black/30 border border-white/10"
                 aria-label="Préréglage de distance caméra"
               />
 
@@ -1662,16 +1408,64 @@ function onCanvasDoubleClick(e: MouseEvent) {
                 />
               </div>
 
-              <div class="flex items-center justify-between gap-3 text-[11px]">
+              <div class="flex items-center justify-between gap-3 text-[11px] pt-1 border-t border-white/10">
                 <span class="text-white/60">
                   {{ selectedOpticalDepthLabel }} · {{ selectedOpticalDepthPercent }} %
                 </span>
-                <Button size="xs" variant="ghost" @click="resetSelectedOpticalDepth"> Auto </Button>
+                <Button size="xs" variant="ghost" class="h-6 text-white/80 hover:text-white" @click="resetSelectedOpticalDepth">
+                  Auto
+                </Button>
               </div>
             </div>
-          </div>
-        </template>
-      </FloatingGlassPanel>
+          </Popover>
+
+          <!-- Découpe 2.5D pour les bureaux -->
+          <IconButton
+            v-if="selectedDeskAsset"
+            icon="content_cut"
+            size="xs"
+            variant="ghost"
+            class="viewport-action size-7 text-amber-400 hover:text-amber-300"
+            :active="isDeskSplitModalOpen"
+            aria-label="Découper la profondeur du meuble (2.5D)"
+            title="Découper la profondeur du meuble (2.5D)"
+            @click="isDeskSplitModalOpen = true"
+          />
+
+          <!-- Miroir Horizontal -->
+          <IconButton
+            icon="flip"
+            size="xs"
+            variant="ghost"
+            class="viewport-action size-7"
+            :active="isSelectedFlippedHorizontally"
+            :aria-label="isSelectedFlippedHorizontally ? 'Rétablir l’orientation' : 'Retourner horizontalement'"
+            :title="isSelectedFlippedHorizontally ? 'Rétablir l’orientation' : 'Retourner horizontalement'"
+            @click="flipSelectedHorizontal"
+          />
+
+          <!-- Supprimer -->
+          <IconButton
+            icon="delete"
+            size="xs"
+            variant="destructive"
+            class="size-7"
+            :aria-label="deleteSelectionLabel"
+            :title="deleteSelectionLabel"
+            @click="removeSelectedFromViewport"
+          />
+
+          <!-- Désélectionner / Fermer -->
+          <IconButton
+            icon="close"
+            size="xs"
+            variant="ghost"
+            class="viewport-action size-7 text-white/50 hover:text-white"
+            title="Désélectionner"
+            @click="editorStore.clearStudioSelection()"
+          />
+        </div>
+      </Transition>
     </div>
 
     <!-- Modale de calibrage de découpe 2.5D du bureau -->

@@ -2,7 +2,6 @@
 import { ref, computed, watch, onMounted, onUnmounted, useTemplateRef } from 'vue'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
-import { IconButton } from '@/components/ui/icon-button'
 import { Icon } from '@/components/ui/icon'
 import { Badge } from '@/components/ui/badge'
 import { Slider } from '@/components/ui/slider'
@@ -259,7 +258,7 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <Badge variant="outline" size="sm" class="text-[10px]">
+          <Badge variant="neutral" size="sm" class="text-[10px]">
             {{ asset?.name || 'Bureau' }}
           </Badge>
           <div class="flex items-center gap-1.5 pl-2 border-l border-white/10">

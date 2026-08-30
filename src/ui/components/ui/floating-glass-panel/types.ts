@@ -7,7 +7,7 @@ export type StudioPanelId =
   | 'selection-tools'
   | 'viewport-top-actions'
 
-export type FloatingPanelPlacement = 'top-left' | 'top-right' | 'bottom-center' | 'bottom-right'
+export type FloatingPanelPlacement = 'top-left' | 'top-right' | 'bottom-center' | 'bottom-right' | 'bottom-left'
 export type FloatingPanelChrome = 'panel' | 'toolbar'
 
 export interface FloatingGlassPanelProps {

@@ -6,7 +6,6 @@ import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useWorkspaceBackupStore } from '@/features/project/stores/useWorkspaceBackupStore'
 import { syncBundledAssets } from '@/features/asset-manager/services/demo-asset-seeder'
 
-import StudioHeader from '@/features/project/components/StudioHeader.vue'
 import AssetCategoryNav from '@/features/asset-manager/components/AssetCategoryNav.vue'
 import AssetCategoryDrawer from '@/features/asset-manager/components/AssetCategoryDrawer.vue'
 import type { ActiveSelection } from '@/features/asset-manager/types/asset-nav.types'
@@ -111,73 +110,71 @@ watch(isSavedSnapshotsOpen, (open) => {
 
 <template>
   <div
-    class="h-screen w-screen flex flex-col bg-bg-base text-text-primary overflow-hidden font-sans select-none"
+    class="h-screen w-screen flex bg-bg-base text-text-primary overflow-hidden font-sans select-none"
   >
-    <!-- Barre supérieure de navigation -->
-    <StudioHeader
-      @open-settings="isSettingsOpen = true"
-      @open-export="isExportOpen = true"
-      @open-saved-snapshots="isSavedSnapshotsOpen = true"
-      @start-tour="(key) => startTour(key)"
+    <!-- Rail de Catégories (Permanent à gauche, pleine hauteur) -->
+    <AssetCategoryNav
+      v-model:selection="activeAssetSelection"
+      v-model:drawer-open="showAssetDrawer"
+      data-tour="asset-library"
     />
 
-    <!-- Zone centrale du studio : rail permanent de catégories + viewport et tiroir d'assets -->
-    <div class="flex-1 flex overflow-hidden relative">
-      <!-- Rail de Catégories (Permanent à gauche) -->
-      <AssetCategoryNav
-        v-model:selection="activeAssetSelection"
-        v-model:drawer-open="showAssetDrawer"
-        data-tour="asset-library"
+    <!-- Viewport & Canvas de Composition (Occupe tout l'espace restant) -->
+    <div
+      class="relative flex-1 h-full overflow-hidden"
+      @pointerdown="showAssetDrawer = false"
+    >
+      <StudioViewport
+        :is-saved-snapshots-open="isSavedSnapshotsOpen"
+        @open-settings="isSettingsOpen = true"
+        @open-export="isExportOpen = true"
+        @toggle-saved-snapshots="isSavedSnapshotsOpen = !isSavedSnapshotsOpen"
+        @start-tour="(key) => startTour(key)"
       />
 
-      <!-- Viewport & Canvas de Composition (Occupe tout l'espace restant) -->
-      <div
-        class="relative flex-1 h-full overflow-hidden"
-        @pointerdown="showAssetDrawer = false"
+      <!-- Tiroir des assets d'une catégorie en Glassmorphism (Flottant sur le viewport à gauche) -->
+      <Transition
+        enter-active-class="transition-all duration-200 ease-out"
+        enter-from-class="opacity-0 -translate-x-4 scale-95"
+        enter-to-class="opacity-100 translate-x-0 scale-100"
+        leave-active-class="transition-all duration-150 ease-in"
+        leave-from-class="opacity-100 translate-x-0 scale-100"
+        leave-to-class="opacity-0 -translate-x-4 scale-95"
       >
-        <StudioViewport />
+        <AssetCategoryDrawer
+          v-if="showAssetDrawer"
+          v-model:open="showAssetDrawer"
+          :selection="activeAssetSelection"
+        />
+      </Transition>
 
-        <!-- Tiroir des assets d'une catégorie en Glassmorphism (Flottant sur le viewport) -->
-        <Transition
-          enter-active-class="transition-all duration-200 ease-out"
-          enter-from-class="opacity-0 -translate-x-4 scale-95"
-          enter-to-class="opacity-100 translate-x-0 scale-100"
-          leave-active-class="transition-all duration-150 ease-in"
-          leave-from-class="opacity-100 translate-x-0 scale-100"
-          leave-to-class="opacity-0 -translate-x-4 scale-95"
-        >
-          <AssetCategoryDrawer
-            v-if="showAssetDrawer"
-            v-model:open="showAssetDrawer"
-            :selection="activeAssetSelection"
-          />
-        </Transition>
-      </div>
-
-      <ResizableSidebar
-        v-if="rigCatalogStore.isCalibrationOpen"
-        v-model:open="rigCatalogStore.isCalibrationOpen"
-        side="right"
-        :default-width="420"
-        :min-width="360"
-        :max-width="560"
-        storage-key="berlu.rig-calibration-sidebar-width.v1"
+      <!-- Panneau des compositions en Glassmorphism (Flottant sur le viewport à droite) -->
+      <Transition
+        enter-active-class="transition-all duration-200 ease-out"
+        enter-from-class="opacity-0 translate-x-4 scale-95"
+        enter-to-class="opacity-100 translate-x-0 scale-100"
+        leave-active-class="transition-all duration-150 ease-in"
+        leave-from-class="opacity-100 translate-x-0 scale-100"
+        leave-to-class="opacity-0 translate-x-4 scale-95"
       >
-        <RigCalibrationWorkspace />
-      </ResizableSidebar>
-
-      <!-- Compositions et vues sauvegardées (Droite) -->
-      <ResizableSidebar
-        v-model:open="isSavedSnapshotsOpen"
-        side="right"
-        :default-width="380"
-        :min-width="320"
-        :max-width="520"
-        storage-key="berlu.saved-views-sidebar-width.v1"
-      >
-        <ViewportSnapshotsPanel v-model:open="isSavedSnapshotsOpen" />
-      </ResizableSidebar>
+        <ViewportSnapshotsPanel
+          v-if="isSavedSnapshotsOpen"
+          v-model:open="isSavedSnapshotsOpen"
+        />
+      </Transition>
     </div>
+
+    <ResizableSidebar
+      v-if="rigCatalogStore.isCalibrationOpen"
+      v-model:open="rigCatalogStore.isCalibrationOpen"
+      side="right"
+      :default-width="420"
+      :min-width="360"
+      :max-width="560"
+      storage-key="berlu.rig-calibration-sidebar-width.v1"
+    >
+      <RigCalibrationWorkspace />
+    </ResizableSidebar>
 
     <!-- Modales Globales -->
     <ProjectSettingsModal v-model:open="isSettingsOpen" />
