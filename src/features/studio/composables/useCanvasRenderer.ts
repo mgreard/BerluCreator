@@ -176,8 +176,34 @@ export function drawLayersOnContext(
         if (layer.scaleX !== undefined || layer.scaleY !== undefined) {
           ctx.scale(layer.scaleX ?? 1, layer.scaleY ?? 1)
         }
-        ctx.drawImage(img, layer.x - centerX, layer.y - centerY, layer.width, layer.height)
+
+        const localX = layer.x - centerX
+        const localY = layer.y - centerY
+
+        if (layer.clipPolygon && layer.clipPolygon.length >= 3) {
+          ctx.beginPath()
+          const [first, ...rest] = layer.clipPolygon
+          ctx.moveTo(localX + first.x, localY + first.y)
+          for (const pt of rest) {
+            ctx.lineTo(localX + pt.x, localY + pt.y)
+          }
+          ctx.closePath()
+          ctx.clip()
+        }
+
+        ctx.drawImage(img, localX, localY, layer.width, layer.height)
       } else {
+        if (layer.clipPolygon && layer.clipPolygon.length >= 3) {
+          ctx.beginPath()
+          const [first, ...rest] = layer.clipPolygon
+          ctx.moveTo(layer.x + first.x, layer.y + first.y)
+          for (const pt of rest) {
+            ctx.lineTo(layer.x + pt.x, layer.y + pt.y)
+          }
+          ctx.closePath()
+          ctx.clip()
+        }
+
         ctx.drawImage(img, layer.x, layer.y, layer.width, layer.height)
       }
 

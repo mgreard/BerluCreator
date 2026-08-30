@@ -30,7 +30,9 @@ import {
   type DepthOfFieldOverlayValue
 } from '@/components/ui/depth-of-field-overlay'
 import { VisualEffectsOverlay } from '@/components/ui/visual-effects-overlay'
+import { DeskSplitModal } from '@/components/ui/desk-split-modal'
 import type { CameraFrame, CharacterGroup, ColorGradingSettings, ShaderSettings } from '@core/types/editor.types'
+import type { DeskSplitConfig } from '@core/types/asset.types'
 import { OPTICAL_DEPTH_PRESETS } from '@core/constants/editor'
 import { toast } from '@/ui/shared/services/toast.service'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
@@ -299,6 +301,25 @@ const canEditSelectedDeskPlacement = computed(
     (editScope.value === 'layer' && editorStore.selectedLayer?.category === 'props_set') ||
     (isGroupTarget.value && activeSelectedGroup.value?.kind === 'character')
 )
+
+const isDeskSplitModalOpen = ref(false)
+
+const selectedDeskAsset = computed(() => {
+  if (activeSelectedLayer.value?.category === 'desk') {
+    return activeSelectedLayer.value.asset
+  }
+  if (editorStore.selectedLayer?.category === 'desk') {
+    const assetId = editorStore.selectedLayer.assetId
+    return assetStore.assets.find((a) => a.id === assetId) ?? null
+  }
+  return null
+})
+
+async function handleSaveDeskSplit(config: DeskSplitConfig) {
+  if (!selectedDeskAsset.value) return
+  await assetStore.updateAsset(selectedDeskAsset.value.id, { deskSplit: config })
+  toast.success('Découpe 2.5D enregistrée', 'La profondeur du meuble a été mise à jour.')
+}
 
 const selectedDeskPlacement = computed<string>({
   get: () => {
@@ -1529,6 +1550,18 @@ function onCanvasDoubleClick(e: MouseEvent) {
           />
 
           <IconButton
+            v-if="selectedDeskAsset"
+            icon="content_cut"
+            size="xs"
+            variant="ghost"
+            class="viewport-action"
+            :active="isDeskSplitModalOpen"
+            aria-label="Découper la profondeur du meuble (2.5D)"
+            title="Découper la profondeur du meuble (2.5D)"
+            @click="isDeskSplitModalOpen = true"
+          />
+
+          <IconButton
             icon="flip"
             size="xs"
             variant="ghost"
@@ -1640,5 +1673,13 @@ function onCanvasDoubleClick(e: MouseEvent) {
         </template>
       </FloatingGlassPanel>
     </div>
+
+    <!-- Modale de calibrage de découpe 2.5D du bureau -->
+    <DeskSplitModal
+      v-if="selectedDeskAsset"
+      v-model="isDeskSplitModalOpen"
+      :asset="selectedDeskAsset"
+      @save="handleSaveDeskSplit"
+    />
   </div>
 </template>

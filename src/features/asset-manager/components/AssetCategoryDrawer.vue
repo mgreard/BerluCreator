@@ -7,6 +7,8 @@ import { useAssetStore } from '../stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import AssetCard from './AssetCard.vue'
 import AssetUploadModal from './AssetUploadModal.vue'
+import { DeskSplitModal } from '@/components/ui/desk-split-modal'
+import type { DeskSplitConfig } from '@core/types/asset.types'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
@@ -43,6 +45,20 @@ const rigRuntime = useRigRuntime()
 const calibrationSelection = useRigCalibrationSelection()
 const isUploadModalOpen = ref(false)
 const drawerTitleId = useId()
+
+const calibratingDeskAsset = ref<Asset | null>(null)
+const isDeskSplitModalOpen = ref(false)
+
+function onSplitAsset(asset: Asset) {
+  calibratingDeskAsset.value = asset
+  isDeskSplitModalOpen.value = true
+}
+
+async function handleSaveDeskSplit(config: DeskSplitConfig) {
+  if (!calibratingDeskAsset.value) return
+  await assetStore.updateAsset(calibratingDeskAsset.value.id, { deskSplit: config })
+  toast.success('Découpe 2.5D enregistrée', 'La profondeur du meuble a été mise à jour.')
+}
 
 function characterKey(asset: Asset): string {
   return asset.character?.key || 'berlu'
@@ -326,6 +342,7 @@ function close(): void {
           @select="onSelectAsset"
           @duplicate="onDuplicateAsset"
           @delete="onDeleteAsset"
+          @split="onSplitAsset"
         />
       </div>
 
@@ -347,6 +364,13 @@ function close(): void {
       v-model:open="isUploadModalOpen"
       :initial-category="uploadInitialCategory"
       :initial-character-key="uploadInitialCharacterKey"
+    />
+
+    <DeskSplitModal
+      v-if="calibratingDeskAsset"
+      v-model="isDeskSplitModalOpen"
+      :asset="calibratingDeskAsset"
+      @save="handleSaveDeskSplit"
     />
   </aside>
 </template>

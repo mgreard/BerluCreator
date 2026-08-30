@@ -13,6 +13,8 @@ import { clampBackgroundCover } from '../engine/background-cover.engine'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
 import { DEFAULT_RIG_CANVAS } from '../rig-calibration/rig-catalog.service'
 import { OPTICAL_DEPTH_PRESETS } from '@core/constants/editor'
+import type { Point2D } from '../engine/transform-matrix'
+import { buildSplitPolygons, isSplitConfigValid } from '../engine/desk-split.engine'
 
 export interface RenderableLayer {
   id: string
@@ -47,6 +49,8 @@ export interface RenderableLayer {
   isMovable: boolean
   depthRole: Exclude<LayerDepthRole, 'auto'>
   opticalDepth: number
+  splitRole?: 'back' | 'front'
+  clipPolygon?: Point2D[]
 }
 
 interface CharacterGeometry {
@@ -90,7 +94,43 @@ export function useHierarchyResolver() {
       const asset = assets.get(layer.assetId)
       if (!group || !asset || layer.muted || group.muted) continue
       if (group.kind === 'character' && !isLayerActiveForCharacter(layer, group)) continue
-      result.push(resolveLayer(layer, asset, group, stage, characterGeometries.get(group.id)))
+
+      const resolved = resolveLayer(layer, asset, group, stage, characterGeometries.get(group.id))
+      const splitConfig = layer.deskSplitOverride ?? asset.deskSplit
+      const isSplitActive =
+        asset.category === 'desk' &&
+        layer.deskSplitEnabled !== false &&
+        isSplitConfigValid(splitConfig)
+
+      if (isSplitActive && splitConfig) {
+        const { backPolygon, frontPolygon } = buildSplitPolygons(
+          splitConfig.cutline,
+          resolved.width,
+          resolved.height,
+          { smoothness: splitConfig.smoothness }
+        )
+        const deskBack: RenderableLayer = {
+          ...resolved,
+          id: `${resolved.id}__back`,
+          splitRole: 'back',
+          clipPolygon: backPolygon,
+          sceneZIndex: Math.min(resolved.sceneZIndex - 1, 5),
+          layerZIndex: Math.min(resolved.layerZIndex - 1, 5),
+          order: resolved.order
+        }
+        const deskFront: RenderableLayer = {
+          ...resolved,
+          id: `${resolved.id}__front`,
+          splitRole: 'front',
+          clipPolygon: frontPolygon,
+          sceneZIndex: resolved.sceneZIndex,
+          layerZIndex: resolved.layerZIndex,
+          order: resolved.order + 0.1
+        }
+        result.push(deskBack, deskFront)
+      } else {
+        result.push(resolved)
+      }
     }
 
     return result.sort(

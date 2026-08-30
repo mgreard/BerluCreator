@@ -28,6 +28,7 @@ const emit = defineEmits<{
   (e: 'select', asset: Asset): void
   (e: 'duplicate', asset: Asset): void
   (e: 'delete', asset: Asset): void
+  (e: 'split', asset: Asset): void
 }>()
 
 const previewContainerRef = useTemplateRef<HTMLElement>('previewContainer')
@@ -144,6 +145,17 @@ watchEffect(async () => {
         class="asset-duplicate absolute left-1.5 top-1.5 z-10 size-7 border border-border-default bg-bg-elevated/90 p-0 text-text-muted shadow-sm hover:border-primary/40 hover:text-primary"
         @click.stop="emit('duplicate', asset)"
       />
+      <IconButton
+        v-if="asset.category === 'desk'"
+        icon="content_cut"
+        size="xs"
+        variant="ghost"
+        :aria-label="`Découper la profondeur de ${asset.name}`"
+        title="Découpe de profondeur 2.5D"
+        class="asset-split absolute left-1.5 top-1.5 z-10 size-7 border border-border-default bg-bg-elevated/90 p-0 text-text-muted shadow-sm hover:border-primary/40 hover:text-primary"
+        :class="{ '!text-primary !border-primary/60': asset.deskSplit?.enabled }"
+        @click.stop="emit('split', asset)"
+      />
     </div>
 
     <div class="min-w-0 pt-0.5">
@@ -156,15 +168,25 @@ watchEffect(async () => {
         {{ asset.name }}
       </Heading>
       <div class="mt-1 flex min-w-0 items-center justify-between gap-1.5">
-        <Badge
-          variant="neutral"
-          size="sm"
-          class="asset-category min-w-0 max-w-[68%] px-1.5 py-0 text-[8px]"
-          :title="category.label"
-        >
-          <Icon :name="category.icon" size="xs" class="shrink-0" />
-          <span class="truncate">{{ category.label }}</span>
-        </Badge>
+        <div class="flex items-center gap-1 min-w-0 max-w-[70%]">
+          <Badge
+            variant="neutral"
+            size="sm"
+            class="asset-category min-w-0 px-1.5 py-0 text-[8px]"
+            :title="category.label"
+          >
+            <Icon :name="category.icon" size="xs" class="shrink-0" />
+            <span class="truncate">{{ category.label }}</span>
+          </Badge>
+          <Badge
+            v-if="asset.category === 'desk' && asset.deskSplit?.enabled"
+            variant="outline"
+            size="sm"
+            class="shrink-0 text-[8px] px-1 py-0 border-primary/40 text-primary"
+          >
+            2.5D
+          </Badge>
+        </div>
         <span class="shrink-0 text-[9px] text-text-muted font-mono">
           {{ asset.width }}&times;{{ asset.height }}
         </span>
@@ -233,6 +255,12 @@ watchEffect(async () => {
   transition: opacity 200ms ease-out, transform 200ms ease-out, color 200ms ease-out, border-color 200ms ease-out;
 }
 
+.asset-split {
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 200ms ease-out, transform 200ms ease-out, color 200ms ease-out, border-color 200ms ease-out;
+}
+
 .asset-card:hover .asset-delete,
 .asset-card:focus-within .asset-delete,
 .asset-card[data-selected='true'] .asset-delete {
@@ -243,6 +271,13 @@ watchEffect(async () => {
 .asset-card:hover .asset-duplicate,
 .asset-card:focus-within .asset-duplicate,
 .asset-card[data-selected='true'] .asset-duplicate {
+  opacity: 0.82;
+  transform: translateY(0);
+}
+
+.asset-card:hover .asset-split,
+.asset-card:focus-within .asset-split,
+.asset-card[data-selected='true'] .asset-split {
   opacity: 0.82;
   transform: translateY(0);
 }

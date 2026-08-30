@@ -74,6 +74,19 @@ export interface AssetCalibration {
   zIndex?: number
 }
 
+export interface NormalizedPoint {
+  x: number
+  y: number
+}
+
+export interface DeskSplitConfig {
+  enabled: boolean
+  /** Points de la ligne de délimitation de gauche à droite (coordonnées normalisées 0..1) */
+  cutline: NormalizedPoint[]
+  /** Facteur de lissage de courbe (0 = polygone direct) */
+  smoothness?: number
+}
+
 export interface Asset {
   id: string
   name: string
@@ -84,6 +97,7 @@ export interface Asset {
   height: number
   character?: CharacterAssetMetadata
   calibration?: AssetCalibration
+  deskSplit?: DeskSplitConfig
   isMovable: boolean
   createdAt: number
   updatedAt: number

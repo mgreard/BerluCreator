@@ -1,4 +1,4 @@
-import type { AssetCategory } from './asset.types'
+import type { AssetCategory, DeskSplitConfig } from './asset.types'
 
 export interface Transform2D {
   x: number
@@ -88,6 +88,10 @@ export interface EditorLayer {
   depthRole?: LayerDepthRole
   /** Distance optique indépendante du z-index : 0 = lointain, 0.5 = net, 1 = proche. */
   opticalDepth?: number
+  /** Activation locale de la découpe 2.5D pour les bureaux */
+  deskSplitEnabled?: boolean
+  /** Surcharge locale de la découpe 2.5D */
+  deskSplitOverride?: DeskSplitConfig
   transform: Transform2D
 }
 

@@ -245,4 +245,45 @@ describe('useHierarchyResolver', () => {
     const { activeLayers } = useHierarchyResolver()
     expect(activeLayers.value[0]).toMatchObject({ category: 'desk', isMovable: true })
   })
+
+  it('scinde un bureau configuré en 2 sous-calques prenant le personnage en sandwich', () => {
+    const editor = useEditorStore()
+    const assets = useAssetStore()
+    const deskAsset = asset('pool', 'desk', undefined, 1000, 500)
+    deskAsset.deskSplit = {
+      enabled: true,
+      cutline: [
+        { x: 0, y: 0.5 },
+        { x: 1, y: 0.5 }
+      ]
+    }
+    assets.assets = [deskAsset, asset('char', 'character_full', 'full', 400, 600)]
+
+    const charLayer = editor.assignAssetToGroup('char', 'character_full')
+    const deskLayer = editor.assignAssetToGroup('pool', 'desk')
+
+    const { activeLayers } = useHierarchyResolver()
+    expect(activeLayers.value).toHaveLength(3)
+
+    const deskBack = activeLayers.value.find((l) => l.id === `${deskLayer.id}__back`)
+    const char = activeLayers.value.find((l) => l.id === charLayer.id)
+    const deskFront = activeLayers.value.find((l) => l.id === `${deskLayer.id}__front`)
+
+    expect(deskBack).toBeDefined()
+    expect(char).toBeDefined()
+    expect(deskFront).toBeDefined()
+
+    expect(deskBack?.splitRole).toBe('back')
+    expect(deskFront?.splitRole).toBe('front')
+    expect(deskBack?.clipPolygon).toBeDefined()
+    expect(deskFront?.clipPolygon).toBeDefined()
+
+    // Ordre de rendu dans activeLayers : desk_back -> character -> desk_front
+    const backIndex = activeLayers.value.indexOf(deskBack!)
+    const charIndex = activeLayers.value.indexOf(char!)
+    const frontIndex = activeLayers.value.indexOf(deskFront!)
+
+    expect(backIndex).toBeLessThan(charIndex)
+    expect(charIndex).toBeLessThan(frontIndex)
+  })
 })

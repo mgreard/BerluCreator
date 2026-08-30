@@ -67,4 +67,17 @@ describe('AssetCard', () => {
     expect(wrapper.emitted('duplicate')).toHaveLength(1)
     expect(wrapper.emitted('select')).toBeUndefined()
   })
+
+  it('affiche le bouton de découpe 2.5D pour les meubles de catégorie desk', async () => {
+    const deskAsset: Asset = { ...headAsset, category: 'desk' }
+    const wrapper = mount(AssetCard, {
+      props: { asset: deskAsset }
+    })
+    await flushPromises()
+
+    const splitBtn = wrapper.find('button[aria-label^="Découper la profondeur"]')
+    expect(splitBtn.exists()).toBe(true)
+    await splitBtn.trigger('click')
+    expect(wrapper.emitted('split')).toEqual([[deskAsset]])
+  })
 })
