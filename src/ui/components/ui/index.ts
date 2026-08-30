@@ -27,13 +27,6 @@ export * from './alert-dialog'
 export * from './drawer'
 export * from './dropdown-menu'
 export * from './lightbox-modal'
-export * from './camera-frame-overlay'
-export * from './depth-of-field-overlay'
-export * from './visual-effects-overlay'
-export * from './floating-glass-panel'
-export * from './desk-split-modal'
-export * from './rig-calibration-panel'
-export * from './rig-calibration-viewport'
 export * from './selection-transform-box'
 
 // Data Display

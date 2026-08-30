@@ -12,7 +12,7 @@ import {
   type RigCalibrationPanelItem,
   type RigCalibrationPanelRig,
   type RigCalibrationPanelValue
-} from '@/components/ui/rig-calibration-panel'
+} from '../rig-calibration/components/rig-calibration-panel'
 import { toast } from '@/ui/shared/services/toast.service'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
 import { useRigRuntime } from '../rig-calibration/useRigRuntime'
@@ -199,6 +199,13 @@ const categoriesConfig = computed<RigCalibrationCategoryConfig[]>(() => {
       value
     }
   })
+})
+
+const activeCalibrationCategory = computed<RigConfigurableCategory | undefined>(() => {
+  const targetId = rigCatalog.calibrationTargetId
+  if (!targetId || targetId === 'origin') return undefined
+  const category = assetStore.assets.find((asset) => asset.id === targetId)?.category
+  return category && isRigConfigurableCategory(category) ? category : undefined
 })
 
 const canDuplicate = computed(
@@ -745,6 +752,7 @@ onBeforeUnmount(() => {
     :body-origin="selectedRig?.bodyOrigin"
     :is-editing-origin="isEditingOrigin"
     :categories="categoriesConfig"
+    :active-category="activeCalibrationCategory"
     :busy="busy"
     :can-duplicate="canDuplicate"
     @select-rig="selectRig"

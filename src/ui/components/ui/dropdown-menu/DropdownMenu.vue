@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useAttrs } from 'vue'
 import {
   DropdownMenuRoot,
   DropdownMenuTrigger,
@@ -13,12 +13,16 @@ import {
   DropdownMenuSub,
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
-  DropdownMenuArrow
+  DropdownMenuArrow,
+  useForwardPropsEmits,
+  type DropdownMenuContentProps
 } from 'reka-ui'
 import { cva } from 'class-variance-authority'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/shared/utils/cn'
 import type { DropdownMenuProps, DropdownMenuEmits, DropdownMenuItemDef } from './types'
+
+defineOptions({ inheritAttrs: false })
 
 const dropdownMenuVariants = cva(
   'z-50 min-w-[200px] overflow-hidden rounded-[var(--radius-md,12px)] border p-1.5 text-text-primary outline-none select-none',
@@ -55,12 +59,38 @@ const {
   surface = 'solid',
   modal = true,
   portal = true,
+  portalTo = 'body',
+  portalDefer = true,
+  avoidCollisions = true,
+  collisionBoundary = undefined,
+  collisionPadding = 8,
+  positionStrategy = 'fixed',
+  sticky = 'partial',
+  hideWhenDetached = true,
+  updatePositionStrategy = 'optimized',
   arrow = false,
   disabled = false,
   class: className = undefined
 } = defineProps<DropdownMenuProps>()
 
 const emit = defineEmits<DropdownMenuEmits>()
+const attrs = useAttrs()
+
+const contentPositionProps = computed<DropdownMenuContentProps>(() => ({
+  align,
+  side,
+  sideOffset,
+  alignOffset,
+  avoidCollisions,
+  collisionBoundary,
+  collisionPadding,
+  positionStrategy,
+  sticky,
+  hideWhenDetached,
+  updatePositionStrategy
+}))
+const forwardedContentProps = useForwardPropsEmits(contentPositionProps)
+const forwardedContent = computed(() => ({ ...forwardedContentProps.value, ...attrs }))
 
 const widthClass = computed(() => {
   if (width === 'auto') return 'w-auto'
@@ -91,6 +121,10 @@ function handleItemSelect(item: DropdownMenuItemDef) {
   }
   emit('select', item)
 }
+
+function handleCheckboxChange(item: DropdownMenuItemDef, checked: boolean) {
+  handleItemSelect({ ...item, checked })
+}
 </script>
 
 <template>
@@ -99,14 +133,15 @@ function handleItemSelect(item: DropdownMenuItemDef) {
       <slot name="trigger" :open="isOpen" />
     </DropdownMenuTrigger>
 
-    <component :is="portal ? DropdownMenuPortal : 'template'">
+    <component
+      :is="portal ? DropdownMenuPortal : 'template'"
+      :to="portal ? portalTo : undefined"
+      :defer="portal ? portalDefer : undefined"
+    >
       <DropdownMenuContent
+        v-bind="forwardedContent"
         :class="contentClasses"
         :data-surface="surface"
-        :align="align"
-        :side="side"
-        :side-offset="sideOffset"
-        :align-offset="alignOffset"
       >
         <!-- Slot d'en-tête personnalisé -->
         <slot name="header" />
@@ -145,7 +180,7 @@ function handleItemSelect(item: DropdownMenuItemDef) {
                 <Icon name="chevron_right" size="xs" class="text-text-muted ml-auto shrink-0" />
               </DropdownMenuSubTrigger>
 
-              <DropdownMenuPortal>
+              <DropdownMenuPortal :to="portalTo" :defer="portalDefer">
                 <DropdownMenuSubContent
                   :class="
                     cn(
@@ -156,6 +191,13 @@ function handleItemSelect(item: DropdownMenuItemDef) {
                   :data-surface="surface"
                   :side-offset="4"
                   :align-offset="-4"
+                  :avoid-collisions="avoidCollisions"
+                  :collision-boundary="collisionBoundary"
+                  :collision-padding="collisionPadding"
+                  :position-strategy="positionStrategy"
+                  :sticky="sticky"
+                  :hide-when-detached="hideWhenDetached"
+                  :update-position-strategy="updatePositionStrategy"
                 >
                   <template
                     v-for="(subItem, subIndex) in item.children"
@@ -196,7 +238,7 @@ function handleItemSelect(item: DropdownMenuItemDef) {
             <!-- 4. Option Checkbox -->
             <DropdownMenuCheckboxItem
               v-else-if="item.type === 'checkbox'"
-              :checked="item.checked"
+              :model-value="item.checked"
               :disabled="item.disabled"
               :class="
                 cn(
@@ -205,8 +247,7 @@ function handleItemSelect(item: DropdownMenuItemDef) {
                   item.disabled && 'opacity-50 pointer-events-none'
                 )
               "
-              @select="handleItemSelect(item)"
-              @update:checked="(val: boolean) => handleItemSelect({ ...item, checked: val })"
+              @update:model-value="(val: boolean) => handleCheckboxChange(item, val)"
             >
               <DropdownMenuItemIndicator
                 class="inline-flex items-center justify-center text-primary font-bold text-xs shrink-0 w-4"

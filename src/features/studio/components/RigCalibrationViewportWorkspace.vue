@@ -9,7 +9,7 @@ import {
   type RigViewportHeadTransform,
   type RigViewportPartItem,
   type RigViewportPoint
-} from '@/components/ui/rig-calibration-viewport'
+} from '../rig-calibration/components/rig-calibration-viewport'
 import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 import {
   effectiveCalibration,

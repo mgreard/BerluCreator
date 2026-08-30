@@ -20,8 +20,16 @@ const state = ref<PopoverProps>({
   surface: 'solid',
   arrow: true,
   showClose: true,
-  modal: false
+  modal: false,
+  portalTo: 'body',
+  portalDefer: true,
+  collisionPadding: 8,
+  positionStrategy: 'fixed',
+  sticky: 'partial',
+  hideWhenDetached: true
 })
+
+const customPortalOpen = ref(false)
 </script>
 
 <template>
@@ -69,6 +77,26 @@ const state = ref<PopoverProps>({
       </div>
     </Variant>
 
+    <Variant title="Custom Deferred Portal">
+      <div
+        class="relative flex min-h-48 items-start justify-center p-12 bg-bg-surface border border-border-default rounded-xl"
+      >
+        <Popover
+          v-model="customPortalOpen"
+          title="Portal local"
+          portal-to="#popover-story-portal"
+          :portal-defer="true"
+          position-strategy="fixed"
+        >
+          <template #trigger>
+            <Button variant="secondary">Ouvrir dans la cible</Button>
+          </template>
+          <p class="text-xs text-text-secondary">Le contenu est téléporté dans la cible déclarée.</p>
+        </Popover>
+        <div id="popover-story-portal" />
+      </div>
+    </Variant>
+
     <Variant title="Interactive Playground">
       <template #default>
         <div
@@ -100,6 +128,13 @@ const state = ref<PopoverProps>({
         <HstCheckbox v-model="state.arrow" title="Arrow" />
         <HstCheckbox v-model="state.showClose" title="Show Close" />
         <HstCheckbox v-model="state.modal" title="Modal" />
+        <HstNumber v-model="state.collisionPadding" title="Collision Padding" :min="0" />
+        <HstSelect
+          v-model="state.positionStrategy"
+          title="Position Strategy"
+          :options="['fixed', 'absolute']"
+        />
+        <HstCheckbox v-model="state.hideWhenDetached" title="Hide When Detached" />
       </template>
     </Variant>
   </Story>

@@ -1,6 +1,11 @@
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import Popover from './Popover.vue'
+import { guardPopoverOutsideInteraction } from './outside-interaction'
+
+afterEach(() => {
+  document.querySelectorAll('[data-test-portal]').forEach((element) => element.remove())
+})
 
 describe('Popover (Colocated Unit Tests)', () => {
   it('1. Rend le contenu du popover lorsque modelValue est vrai', async () => {
@@ -68,5 +73,61 @@ describe('Popover (Colocated Unit Tests)', () => {
       expect(content?.classList.contains('glass-premium')).toBe(true)
     })
     glassWrapper.unmount()
+  })
+
+  it('4. Téléporte vers une cible dédiée et transmet les attributs au contenu positionné', async () => {
+    const portalTarget = document.createElement('div')
+    portalTarget.id = 'popover-test-portal'
+    portalTarget.dataset.testPortal = 'true'
+    document.body.appendChild(portalTarget)
+
+    const wrapper = mount(Popover, {
+      props: {
+        modelValue: true,
+        portalTo: '#popover-test-portal',
+        bodyClass: 'custom-popover-body',
+        positionStrategy: 'fixed'
+      },
+      attrs: {
+        'aria-label': 'Réglages téléportés',
+        'data-testid': 'teleported-popover'
+      },
+      slots: {
+        default: 'Contenu téléporté'
+      },
+      attachTo: document.body
+    })
+
+    await vi.waitFor(() => {
+      const content = portalTarget.querySelector('[data-testid="teleported-popover"]')
+      expect(content?.getAttribute('aria-label')).toBe('Réglages téléportés')
+      expect(content?.textContent).toContain('Contenu téléporté')
+      expect(portalTarget.querySelector('.custom-popover-body')).not.toBeNull()
+      expect(
+        (portalTarget.querySelector('[data-reka-popper-content-wrapper]') as HTMLElement | null)
+          ?.style.position
+      ).toBe('fixed')
+    })
+
+    wrapper.unmount()
+  })
+
+  it('5. Ignore le dismissal pour une zone extérieure explicitement autorisée', () => {
+    const protectedZone = document.createElement('div')
+    protectedZone.dataset.depthOverlay = ''
+    document.body.appendChild(protectedZone)
+
+    const originalEvent = new Event('pointerdown')
+    Object.defineProperty(originalEvent, 'target', { value: protectedZone })
+    const outsideEvent = new CustomEvent('pointerDownOutside', {
+      cancelable: true,
+      detail: { originalEvent }
+    })
+
+    const guarded = guardPopoverOutsideInteraction(outsideEvent, '[data-depth-overlay]')
+
+    expect(guarded).toBe(true)
+    expect(outsideEvent.defaultPrevented).toBe(true)
+    protectedZone.remove()
   })
 })

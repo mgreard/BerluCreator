@@ -7,6 +7,7 @@ import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import AssetCategoryNav from './AssetCategoryNav.vue'
 import { NavigationItem } from '@/components/ui/navigation-item'
+import { Tabs } from '@/components/ui/tabs'
 
 vi.mock('@infrastructure/db/repositories/editor-document.repository', () => ({
   editorDocumentRepository: {
@@ -77,7 +78,16 @@ describe('AssetCategoryNav', () => {
 
     expect(wrapper.text()).toContain('Catégories')
     expect(wrapper.text()).toContain('Tous les sprites')
-    expect(wrapper.text()).toContain('Personnages')
+    const tabs = wrapper.getComponent(Tabs)
+    expect(tabs.props('variant')).toBe('rail')
+    expect(tabs.props('orientation')).toBe('vertical')
+
+    const characterTab = wrapper
+      .findAll('[role="tab"]')
+      .find((tab) => tab.attributes('title')?.startsWith('Personnages'))
+    expect(characterTab).toBeDefined()
+    await characterTab?.trigger('mousedown', { button: 0, ctrlKey: false })
+
     expect(wrapper.text()).toContain('Corps')
     expect(wrapper.text()).toContain('Têtes')
 
@@ -98,8 +108,15 @@ describe('AssetCategoryNav', () => {
       }
     })
 
-    const navItems = wrapper.findAllComponents(NavigationItem)
-    const bgNav = navItems.find((item) => item.props('label') === 'Arrière-plans')
+    const stageTab = wrapper
+      .findAll('[role="tab"]')
+      .find((tab) => tab.attributes('title')?.startsWith('Plateau'))
+    expect(stageTab).toBeDefined()
+    await stageTab?.trigger('mousedown', { button: 0, ctrlKey: false })
+
+    const bgNav = wrapper
+      .findAllComponents(NavigationItem)
+      .find((item) => item.props('label') === 'Arrière-plans')
     expect(bgNav).toBeDefined()
 
     await bgNav?.trigger('click')
@@ -108,7 +125,7 @@ describe('AssetCategoryNav', () => {
     expect(wrapper.emitted('update:drawerOpen')?.at(-1)).toEqual([true])
   })
 
-  it('renders the importer button in the category navigation', () => {
+  it('renders compact import and rig actions below the project menu', () => {
     const wrapper = mount(AssetCategoryNav, {
       props: {
         selection: { type: 'all' },
@@ -116,8 +133,15 @@ describe('AssetCategoryNav', () => {
       }
     })
 
-    const importBtn = wrapper.find('button.bg-primary')
-    expect(importBtn.exists()).toBe(true)
-    expect(importBtn.text()).toContain('Importer')
+    const buttons = wrapper.findAll('button')
+    const projectIndex = buttons.findIndex((button) => button.text().includes('Projet'))
+    const importIndex = buttons.findIndex((button) => button.text().includes('Importer'))
+    const calibrationIndex = buttons.findIndex((button) =>
+      button.text().includes('Rigs')
+    )
+
+    expect(projectIndex).toBe(0)
+    expect(calibrationIndex).toBe(importIndex + 1)
+    expect(buttons[calibrationIndex]?.attributes('aria-pressed')).toBe('false')
   })
 })

@@ -4,12 +4,14 @@ import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { useAssetStore } from '../stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
-import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
 import { NavigationItem } from '@/components/ui/navigation-item'
+import { Tabs, type TabItem } from '@/components/ui/tabs'
 import { Text } from '@/components/ui/text'
+import { toast } from '@/ui/shared/services/toast.service'
+import WorkspaceBackupMenu from '@/features/project/components/WorkspaceBackupMenu.vue'
 import AssetUploadModal from './AssetUploadModal.vue'
 import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import { useRigRuntime } from '@/features/studio/rig-calibration/useRigRuntime'
@@ -28,12 +30,15 @@ const selection = defineModel<ActiveSelection>('selection', {
   default: () => ({ type: 'all' })
 })
 const drawerOpen = defineModel<boolean>('drawerOpen', { default: true })
+const emit = defineEmits<{
+  (event: 'openSettings'): void
+  (event: 'projectMenuOpen', open: boolean): void
+}>()
 
 const assetStore = useAssetStore()
 const editorStore = useEditorStore()
 const rigCatalog = useRigCatalogStore()
 const rigRuntime = useRigRuntime()
-const expandedCharacters = ref<Record<string, boolean>>({})
 const isUploadModalOpen = ref(false)
 
 const uploadInitialCategory = computed<AssetCategory | null>(() => {
@@ -101,18 +106,6 @@ const availableCharacters = computed<CharacterSummary[]>(() => {
   }
   return [...characters.values()].sort((left, right) => left.name.localeCompare(right.name, 'fr'))
 })
-
-watch(
-  availableCharacters,
-  (characters) => {
-    for (const character of characters) {
-      if (expandedCharacters.value[character.key] === undefined) {
-        expandedCharacters.value[character.key] = true
-      }
-    }
-  },
-  { immediate: true }
-)
 
 watch(
   () => editorStore.currentDocument.groups.map((g) => (g.kind === 'character' ? g.activeRigId : null)),
@@ -188,141 +181,262 @@ function selectStage(category: AssetCategory): void {
   drawerOpen.value = true
 }
 
-function toggleCharacter(key: string): void {
-  expandedCharacters.value[key] = !expandedCharacters.value[key]
-}
-
 function toggleDrawer(): void {
   drawerOpen.value = !drawerOpen.value
+}
+
+const categoryTabs = computed<TabItem[]>(() => [
+  {
+    key: 'all',
+    label: 'Tous les sprites',
+    icon: 'apps',
+    badge: assetStore.assets.length,
+    tone: 'indigo'
+  },
+  {
+    key: 'characters',
+    label: 'Personnages',
+    icon: 'person',
+    badge: availableCharacters.value.reduce(
+      (total, character) => total + characterAssets(character.key).length,
+      0
+    ),
+    tone: 'amber'
+  },
+  {
+    key: 'stage',
+    label: 'Plateau',
+    icon: 'landscape',
+    badge: STAGE_CATEGORIES.reduce(
+      (total, category) => total + stageCategoryCount(category.category),
+      0
+    ),
+    tone: 'sky'
+  }
+])
+
+const activeCategoryTab = computed(() => {
+  if (selection.value.type === 'character') return 'characters'
+  if (selection.value.type === 'stage') return 'stage'
+  return 'all'
+})
+
+function selectCategoryTab(key: string | number): void {
+  const value = String(key)
+  if (value === 'all') {
+    selectAll()
+    return
+  }
+  if (value === 'characters') {
+    if (selection.value.type === 'character') {
+      drawerOpen.value = true
+      return
+    }
+    const character = availableCharacters.value[0]
+    if (character) selectCharacter(character.key, null)
+    return
+  }
+  if (value === 'stage') {
+    if (selection.value.type === 'stage') {
+      drawerOpen.value = true
+      return
+    }
+    const category = STAGE_CATEGORIES[0]
+    if (category) selectStage(category.category)
+  }
+}
+
+function toggleRigCalibration(): void {
+  if (rigCatalog.isCalibrationOpen) {
+    rigCatalog.closeCalibration()
+    const selectedGroup = editorStore.currentDocument.groups.find(
+      (group): group is CharacterGroup =>
+        group.kind === 'character' && group.id === editorStore.selectedGroupId
+    )
+    if (selectedGroup) editorStore.selectGroupForEditing(selectedGroup.id)
+    return
+  }
+
+  const group =
+    editorStore.currentDocument.groups.find(
+      (candidate): candidate is CharacterGroup =>
+        candidate.kind === 'character' && candidate.id === editorStore.selectedGroupId
+    ) ??
+    editorStore.currentDocument.groups.find(
+      (candidate): candidate is CharacterGroup =>
+        candidate.kind === 'character' && candidate.activeMode === 'rig'
+    )
+  if (!group) return
+
+  const rig = rigRuntime.activeRigForGroup(group) ?? rigCatalog.defaultRig(group.characterKey)
+  if (!rig) {
+    toast.warning('Rig indisponible', 'Aucune configuration de corps n’est disponible.')
+    return
+  }
+
+  let preferredLayer =
+    editorStore.currentDocument.layers.find(
+      (layer) => layer.groupId === group.id && !layer.muted && layer.category === 'body'
+    ) ??
+    editorStore.currentDocument.layers.find(
+      (layer) =>
+        layer.groupId === group.id && !layer.muted && layer.category !== 'character_full'
+    )
+  if (!preferredLayer || group.activeMode !== 'rig') {
+    preferredLayer = rigRuntime.activateRig(rig) ?? undefined
+  }
+  if (!preferredLayer) return
+
+  rigCatalog.selectedRigId = rig.id
+  rigCatalog.openCalibration(rig.id)
+  editorStore.selectRigLayerForCalibration(preferredLayer.id)
+  assetStore.selectAsset(preferredLayer.assetId)
 }
 </script>
 
 <template>
   <nav
-    class="library-nav custom-scrollbar flex w-52 shrink-0 flex-col gap-3 overflow-y-auto border-r border-white/10 bg-black/20 backdrop-blur-2xl p-2 select-none text-white/90 shadow-glass-sm"
+    class="library-nav viewport-glass m-3 flex w-64 min-h-0 shrink-0 flex-col gap-3 overflow-hidden rounded-2xl border border-white/15 p-3 text-white/90 shadow-glass-xl select-none transition-all duration-300 ease-out"
     aria-label="Catégories de sprites"
     data-tour="asset-library-nav"
   >
-    <!-- En-tête avec raccourci pour ouvrir/fermer le tiroir d'assets -->
-    <div class="flex items-center justify-between px-1 pt-1 pb-0.5">
-      <span class="text-[11px] font-bold uppercase tracking-wider text-white/60">Catégories</span>
-      <IconButton
-        :icon="drawerOpen ? 'left_panel_close' : 'left_panel_open'"
-        size="xs"
-        variant="ghost"
-        class="size-6 text-white/60 hover:text-white"
-        :aria-label="drawerOpen ? 'Fermer le tiroir de sprites' : 'Ouvrir le tiroir de sprites'"
-        :title="drawerOpen ? 'Fermer le tiroir de sprites' : 'Ouvrir le tiroir de sprites'"
-        @click="toggleDrawer"
-      />
-    </div>
-
-    <!-- Bouton Importer accessible en permanence -->
-    <Button
-      variant="primary"
-      size="sm"
-      class="w-full gap-2 text-xs font-semibold justify-center shadow-sm"
-      @click="isUploadModalOpen = true"
-    >
-      <Icon name="cloud_upload" size="xs" />
-      <span>Importer</span>
-    </Button>
-
-    <NavigationItem
-      label="Tous les sprites"
-      icon="apps"
-      :count="assetStore.assets.length"
-      accent="#a78bfa"
-      :selected="selection.type === 'all'"
-      @click="selectAll"
+    <WorkspaceBackupMenu
+      @open-settings="emit('openSettings')"
+      @open-change="emit('projectMenuOpen', $event)"
     />
 
-    <section class="grid gap-1.5">
-      <Text
-        as="p"
-        variant="caption"
-        color="muted"
-        class="px-2 text-[10px] font-bold uppercase tracking-wider text-white/50"
+    <div class="grid grid-cols-2 gap-2">
+      <Button
+        variant="secondary"
+        size="sm"
+        class="justify-center gap-1.5 border-white/10 bg-white/5 px-2 text-[11px] font-semibold hover:bg-white/10"
+        title="Importer des sprites"
+        @click="isUploadModalOpen = true"
       >
-        Personnages
-      </Text>
-      <Card
-        v-for="character in availableCharacters"
-        :key="character.key"
-        variant="flat"
-        padding="none"
-        class="bg-white/5 border border-white/10 rounded-xl overflow-hidden hover:border-white/20 transition-colors"
-      >
-        <NavigationItem
-          as="div"
-          :label="character.name"
-          icon="person"
-          :count="characterAssets(character.key).length"
-          accent="#f59e0b"
-          density="compact"
-          :selected="
-            selection.type === 'character' &&
-            selection.characterKey === character.key &&
-            selection.categoryId === null
-          "
-          @click="selectCharacter(character.key, null)"
-        >
-          <template #prefix>
-            <IconButton
-              :icon="expandedCharacters[character.key] ? 'expand_more' : 'chevron_right'"
-              size="xs"
-              variant="ghost"
-              class="size-5 text-white/60 hover:text-white"
-              :aria-label="expandedCharacters[character.key] ? 'Replier' : 'Déplier'"
-              @click.stop="toggleCharacter(character.key)"
-            />
-          </template>
-        </NavigationItem>
+        <Icon name="cloud_upload" size="xs" class="text-primary" />
+        <span>Importer</span>
+      </Button>
 
-        <div
-          v-show="expandedCharacters[character.key]"
-          class="grid gap-1 border-t border-white/10 bg-black/30 p-1.5 pl-2"
-        >
-          <NavigationItem
-            v-for="category in availableCategoriesForCharacter(character.key)"
-            :key="category.id"
-            :label="category.label"
-            :icon="category.icon"
-            :count="characterCategoryCount(character.key, category) || undefined"
-            :accent="ASSET_CATEGORIES[category.category].color"
-            density="compact"
-            :selected="
-              selection.type === 'character' &&
-              selection.characterKey === character.key &&
-              selection.categoryId === category.id
-            "
-            @click="selectCharacter(character.key, category.id)"
-          />
+      <Button
+        variant="secondary"
+        size="sm"
+        class="justify-center gap-1.5 border-white/10 bg-white/5 px-2 text-[11px] font-semibold transition-all duration-300 ease-out hover:bg-white/10"
+        :class="rigCatalog.isCalibrationOpen ? 'border-primary/60 bg-primary/20 text-white' : undefined"
+        :aria-pressed="rigCatalog.isCalibrationOpen"
+        title="Calibrer les rigs de personnages"
+        @click="toggleRigCalibration"
+      >
+        <Icon name="construction" size="xs" class="text-primary" />
+        <span>Rigs</span>
+      </Button>
+    </div>
+
+    <div class="h-px shrink-0 bg-white/10" aria-hidden="true" />
+
+    <!-- Seule la navigation des catégories occupe la zone scrollable. -->
+    <div class="flex min-h-0 flex-1 flex-col gap-2">
+      <div class="flex shrink-0 items-center justify-between px-1">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-white/60">Catégories</span>
+        <IconButton
+          :icon="drawerOpen ? 'left_panel_close' : 'left_panel_open'"
+          size="xs"
+          variant="ghost"
+          class="size-6 text-white/60 hover:text-white"
+          :aria-label="drawerOpen ? 'Fermer le tiroir de sprites' : 'Ouvrir le tiroir de sprites'"
+          :title="drawerOpen ? 'Fermer le tiroir de sprites' : 'Ouvrir le tiroir de sprites'"
+          @click="toggleDrawer"
+        />
+      </div>
+
+      <div
+        class="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-black/15"
+      >
+        <Tabs
+          :model-value="activeCategoryTab"
+          :tabs="categoryTabs"
+          variant="rail"
+          orientation="vertical"
+          aria-label="Catégories de sprites"
+          class="custom-scrollbar h-full border-r-0 bg-transparent px-1.5 py-2"
+          @update:model-value="selectCategoryTab"
+        />
+
+        <div class="custom-scrollbar min-w-0 flex-1 overflow-y-auto border-l border-white/10 p-1.5">
+          <div v-if="selection.type === 'all'" class="grid gap-2 p-2">
+            <Text as="p" variant="caption" color="inherit" class="text-[11px] font-semibold text-white/85">
+              Toute la bibliothèque
+            </Text>
+            <Text as="p" variant="caption" color="inherit" class="text-[10px] leading-relaxed text-white/45">
+              {{ assetStore.assets.length }} sprites disponibles, toutes catégories confondues.
+            </Text>
+          </div>
+
+          <div v-else-if="selection.type === 'character'" class="grid gap-2">
+            <Text
+              as="p"
+              variant="caption"
+              color="inherit"
+              class="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-300/80"
+            >
+              Personnages
+            </Text>
+            <div class="grid gap-1">
+              <template v-for="character in availableCharacters" :key="character.key">
+                <NavigationItem
+                  :label="character.name"
+                  icon="person"
+                  :count="characterAssets(character.key).length"
+                  accent="#f59e0b"
+                  density="compact"
+                  :selected="selection.characterKey === character.key && selection.categoryId === null"
+                  @click="selectCharacter(character.key, null)"
+                />
+                <div
+                  v-if="selection.characterKey === character.key"
+                  class="ml-2 grid gap-1 border-l border-amber-400/20 pl-1.5"
+                >
+                  <NavigationItem
+                    v-for="category in availableCategoriesForCharacter(character.key)"
+                    :key="category.id"
+                    :label="category.label"
+                    :icon="category.icon"
+                    :count="characterCategoryCount(character.key, category) || undefined"
+                    :accent="ASSET_CATEGORIES[category.category].color"
+                    density="compact"
+                    :selected="selection.categoryId === category.id"
+                    @click="selectCharacter(character.key, category.id)"
+                  />
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div v-else class="grid gap-2">
+            <Text
+              as="p"
+              variant="caption"
+              color="inherit"
+              class="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-sky-300/80"
+            >
+              Plateau
+            </Text>
+            <div class="grid gap-1">
+              <NavigationItem
+                v-for="category in STAGE_CATEGORIES"
+                :key="category.category"
+                :label="category.label"
+                :icon="category.icon"
+                :count="stageCategoryCount(category.category) || undefined"
+                :accent="ASSET_CATEGORIES[category.category].color"
+                density="compact"
+                :selected="selection.category === category.category"
+                @click="selectStage(category.category)"
+              />
+            </div>
+          </div>
         </div>
-      </Card>
-    </section>
-
-    <section class="grid gap-1 border-t border-white/10 pt-3">
-      <Text
-        as="p"
-        variant="caption"
-        color="muted"
-        class="px-2 text-[10px] font-bold uppercase tracking-wider text-white/50"
-      >
-        Plateau & décor
-      </Text>
-      <NavigationItem
-        v-for="category in STAGE_CATEGORIES"
-        :key="category.category"
-        :label="category.label"
-        :icon="category.icon"
-        :count="stageCategoryCount(category.category) || undefined"
-        :accent="ASSET_CATEGORIES[category.category].color"
-        density="compact"
-        :selected="selection.type === 'stage' && selection.category === category.category"
-        @click="selectStage(category.category)"
-      />
-    </section>
+      </div>
+    </div>
 
     <AssetUploadModal
       v-model:open="isUploadModalOpen"
@@ -333,12 +447,6 @@ function toggleDrawer(): void {
 </template>
 
 <style scoped>
-.library-nav {
-  box-shadow:
-    inset -1px 0 0 rgb(255 255 255 / 6%),
-    inset 0 1px 0 rgb(255 255 255 / 10%);
-}
-
 .custom-scrollbar::-webkit-scrollbar {
   width: 5px;
 }

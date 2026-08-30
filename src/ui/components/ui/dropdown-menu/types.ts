@@ -2,6 +2,12 @@ export type DropdownMenuAlign = 'start' | 'center' | 'end'
 export type DropdownMenuSide = 'top' | 'right' | 'bottom' | 'left'
 export type DropdownMenuWidth = 'auto' | 'sm' | 'md' | 'lg' | 'trigger' | string
 export type DropdownMenuSurface = 'solid' | 'glass'
+export type DropdownMenuPositionStrategy = 'absolute' | 'fixed'
+export type DropdownMenuSticky = 'partial' | 'always'
+export type DropdownMenuCollisionPadding =
+  | number
+  | Partial<Record<DropdownMenuSide, number>>
+export type DropdownMenuCollisionBoundary = Element | (Element | null)[] | null
 
 export interface DropdownMenuItemDef {
   /** Identifiant unique de l'action */
@@ -13,11 +19,9 @@ export interface DropdownMenuItemDef {
   /** Raccourci clavier indicatif (ex: ⌘K, Ctrl+S) */
   shortcut?: string
   /** Type d'élément dans le menu */
-  type?: 'item' | 'checkbox' | 'radio' | 'label' | 'separator'
+  type?: 'item' | 'checkbox' | 'label' | 'separator'
   /** État sélectionné pour les types checkbox */
   checked?: boolean
-  /** Valeur pour les types radio */
-  value?: string
   /** Action destructive (affichée en rouge) */
   destructive?: boolean
   /** Désactive l'élément */
@@ -47,6 +51,24 @@ export interface DropdownMenuProps {
   modal?: boolean
   /** Téléporte le menu dans un portail document.body */
   portal?: boolean
+  /** Cible native du Teleport Reka (`body` par défaut) */
+  portalTo?: string | HTMLElement
+  /** Diffère la résolution de la cible du Teleport jusqu'au montage Vue */
+  portalDefer?: boolean
+  /** Active le repositionnement automatique lorsque le menu rencontre une limite */
+  avoidCollisions?: boolean
+  /** Élément(s) délimitant la zone de collision ; le viewport est utilisé par défaut */
+  collisionBoundary?: DropdownMenuCollisionBoundary
+  /** Marge conservée entre le menu et les limites de collision */
+  collisionPadding?: DropdownMenuCollisionPadding
+  /** Stratégie CSS du contenu positionné */
+  positionStrategy?: DropdownMenuPositionStrategy
+  /** Maintient le menu dans ses limites sur l'axe d'alignement */
+  sticky?: DropdownMenuSticky
+  /** Masque le menu lorsque son déclencheur n'est plus visible */
+  hideWhenDetached?: boolean
+  /** Stratégie de recalcul de la position */
+  updatePositionStrategy?: 'always' | 'optimized'
   /** Affiche une flèche pointant vers le déclencheur */
   arrow?: boolean
   /** Désactive le déclencheur */

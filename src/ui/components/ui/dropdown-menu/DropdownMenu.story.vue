@@ -6,12 +6,14 @@ import type { DropdownMenuProps, DropdownMenuItemDef } from './types'
 
 const isOpen = ref(false)
 const isGlassOpen = ref(false)
+const isPortalOpen = ref(false)
 
 const items: DropdownMenuItemDef[] = [
   { type: 'label', label: 'Mon Compte' },
   { id: 'profile', label: 'Profil', icon: 'person', shortcut: '⇧⌘P' },
   { id: 'billing', label: 'Facturation', icon: 'credit_card', shortcut: '⌘B' },
   { id: 'settings', label: 'Paramètres', icon: 'settings', shortcut: '⌘S' },
+  { id: 'notifications', label: 'Notifications', icon: 'notifications', type: 'checkbox', checked: true },
   { type: 'separator' },
   {
     id: 'team',
@@ -31,7 +33,9 @@ const state = ref<DropdownMenuProps>({
   align: 'start',
   side: 'bottom',
   width: 'md',
-  surface: 'solid'
+  surface: 'solid',
+  collisionPadding: 8,
+  positionStrategy: 'fixed'
 })
 </script>
 
@@ -58,6 +62,25 @@ const state = ref<DropdownMenuProps>({
             <Button variant="secondary">Menu vitré optionnel</Button>
           </template>
         </DropdownMenu>
+      </div>
+    </Variant>
+
+    <Variant title="Custom Deferred Portal">
+      <div
+        class="relative flex min-h-48 items-start justify-center p-16 bg-bg-base border border-border-default rounded-2xl"
+      >
+        <DropdownMenu
+          v-model:open="isPortalOpen"
+          :items="items"
+          portal-to="#dropdown-story-portal"
+          :portal-defer="true"
+          surface="glass"
+        >
+          <template #trigger>
+            <Button variant="secondary">Menu téléporté localement</Button>
+          </template>
+        </DropdownMenu>
+        <div id="dropdown-story-portal" />
       </div>
     </Variant>
   </Story>

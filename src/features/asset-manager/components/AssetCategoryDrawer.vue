@@ -7,7 +7,7 @@ import { useAssetStore } from '../stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import AssetCard from './AssetCard.vue'
 import AssetUploadModal from './AssetUploadModal.vue'
-import { DeskSplitModal } from '@/components/ui/desk-split-modal'
+import { DeskSplitModal } from '@/features/desk-split'
 import type { DeskSplitConfig } from '@core/types/asset.types'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
@@ -286,7 +286,7 @@ function close(): void {
   <aside
     v-if="open"
     data-tour="asset-library-drawer"
-    class="viewport-glass absolute top-3 left-3 bottom-3 z-30 flex w-[360px] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-2xl border border-white/15 text-white/90 shadow-glass-xl pointer-events-auto select-none"
+    class="viewport-glass absolute top-3 left-3 bottom-3 z-30 flex w-[420px] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-2xl border border-white/15 text-white/90 shadow-glass-xl pointer-events-auto select-none transition-all duration-300 ease-out"
     role="region"
     :aria-labelledby="drawerTitleId"
     @pointerdown.stop
@@ -306,6 +306,9 @@ function close(): void {
         <Heading :id="drawerTitleId" as="h3" variant="sm" class="truncate text-xs font-bold text-white">
           {{ currentTitle }}
         </Heading>
+        <span class="shrink-0 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold text-white/50">
+          {{ displayedAssets.length }}
+        </span>
       </div>
 
       <div class="flex items-center gap-1.5 shrink-0">
@@ -331,8 +334,8 @@ function close(): void {
     </div>
 
     <!-- Grille de sprites -->
-    <div class="custom-scrollbar flex-1 min-h-0 overflow-y-auto p-2.5">
-      <div class="grid grid-cols-2 gap-2">
+    <div class="custom-scrollbar flex-1 min-h-0 overflow-y-auto p-3">
+      <div class="grid grid-cols-2 gap-3">
         <AssetCard
           v-for="asset in displayedAssets"
           :key="asset.id"

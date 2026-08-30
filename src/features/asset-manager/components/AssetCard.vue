@@ -205,14 +205,14 @@ watchEffect(async () => {
 
 .asset-card:hover {
   border-color: color-mix(in srgb, var(--asset-accent) 42%, transparent);
-  background: color-mix(in srgb, var(--asset-accent) 7%, rgb(20 20 28 / 32%));
+  background: color-mix(in srgb, var(--asset-accent) 4%, rgb(20 20 28 / 32%));
   box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 15%), 0 10px 24px rgb(0 0 0 / 16%);
 }
 
 .asset-card[data-selected='true'] {
   border-color: color-mix(in srgb, var(--asset-accent) 80%, white 10%);
-  background: color-mix(in srgb, var(--asset-accent) 13%, rgb(20 20 28 / 34%));
-  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 18%), 0 0 0 1px color-mix(in srgb, var(--asset-accent) 45%, transparent), 0 0 22px color-mix(in srgb, var(--asset-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--asset-accent) 7%, rgb(20 20 28 / 34%));
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 18%), 0 0 0 1px color-mix(in srgb, var(--asset-accent) 48%, transparent), 0 0 18px color-mix(in srgb, var(--asset-accent) 12%, transparent);
 }
 
 .asset-preview {

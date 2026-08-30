@@ -10,6 +10,8 @@ Composant de menu contextuel déroulant et sous-menus en cascade basé sur **Rek
 - **Support des Sous-Menus en Cascade :** Propriété `children` imbriquée avec ouverture latérale intelligente.
 - **Éléments Polyvalents :** Actions simples (`item`), cases à cocher (`checkbox`), labels de section (`label`), séparateurs (`separator`), actions destructives (`destructive`) et raccourcis clavier (`shortcut`).
 - **Positionnement Adaptatif :** Alignement (`start`, `center`, `end`), côté (`bottom`, `top`, `left`, `right`) et largeurs configurables (`sm`, `md`, `lg`, `trigger`, `auto`).
+- **Portal configurable :** Téléportation vers `body` ou une cible `string | HTMLElement`, avec résolution différée Vue 3.5.
+- **Collisions maîtrisées :** Position fixe par défaut, marge de 8 px, comportement sticky et masquage lorsque le trigger disparaît.
 - **Surface explicite :** Fond opaque `solid` par défaut ; glassmorphism conservé via `surface="glass"`.
 
 ---
@@ -27,6 +29,15 @@ Composant de menu contextuel déroulant et sous-menus en cascade basé sur **Rek
 | `sideOffset` | `number`                                                | `6`         | Décalage en pixels                           |
 | `modal`      | `boolean`                                               | `true`      | Bloque les clics en dehors du menu           |
 | `portal`     | `boolean`                                               | `true`      | Téléporte dans `document.body`               |
+| `portalTo`   | `string \| HTMLElement`                                | `'body'`    | Cible native du Teleport Reka                |
+| `portalDefer` | `boolean`                                              | `true`      | Diffère la résolution de la cible             |
+| `avoidCollisions` | `boolean`                                          | `true`      | Active le repositionnement automatique        |
+| `collisionBoundary` | `Element \| (Element \| null)[] \| null`        | `undefined` | Limite utilisée pour les collisions           |
+| `collisionPadding` | `number \| Partial<Record<DropdownMenuSide, number>>` | `8`      | Marge avec les limites                        |
+| `positionStrategy` | `'fixed' \| 'absolute'`                           | `'fixed'`   | Stratégie CSS de positionnement               |
+| `sticky`     | `'partial' \| 'always'`                               | `'partial'` | Maintien dans les limites                     |
+| `hideWhenDetached` | `boolean`                                         | `true`      | Masque si le trigger disparaît                |
+| `updatePositionStrategy` | `'always' \| 'optimized'`                   | `'optimized'` | Fréquence de recalcul                       |
 | `arrow`      | `boolean`                                               | `false`     | Affiche la flèche d'ancrage                  |
 | `disabled`   | `boolean`                                               | `false`     | Désactive le menu                            |
 | `class`      | `string`                                                | `undefined` | Classes CSS complémentaires sur le conteneur |

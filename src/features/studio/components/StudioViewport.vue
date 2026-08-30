@@ -9,7 +9,6 @@ const { isSavedSnapshotsOpen = false } = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (event: 'openSettings'): void
   (event: 'openExport'): void
   (event: 'toggleSavedSnapshots'): void
   (event: 'startTour', key?: TourKey): void
@@ -29,7 +28,6 @@ const rigCatalog = useRigCatalogStore()
       <StageCanvas
         v-else
         :is-saved-snapshots-open="isSavedSnapshotsOpen"
-        @open-settings="emit('openSettings')"
         @open-export="emit('openExport')"
         @toggle-saved-snapshots="emit('toggleSavedSnapshots')"
         @start-tour="(key) => emit('startTour', key)"

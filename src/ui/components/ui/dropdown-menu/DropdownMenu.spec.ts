@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import DropdownMenu from './DropdownMenu.vue'
 import type { DropdownMenuItemDef } from './types'
@@ -8,6 +8,10 @@ const mockItems: DropdownMenuItemDef[] = [
   { type: 'separator' },
   { id: 'delete', label: 'Supprimer', icon: 'delete', destructive: true }
 ]
+
+afterEach(() => {
+  document.querySelectorAll('[data-test-portal]').forEach((element) => element.remove())
+})
 
 describe('DropdownMenu (Colocated Unit Tests)', () => {
   it('1. Rend le déclencheur et les éléments de menu lorsque open est vrai', async () => {
@@ -85,5 +89,69 @@ describe('DropdownMenu (Colocated Unit Tests)', () => {
       ).toBe(true)
     })
     glassWrapper.unmount()
+  })
+
+  it('4. Téléporte vers une cible dédiée et transmet les attributs au menu', async () => {
+    const portalTarget = document.createElement('div')
+    portalTarget.id = 'dropdown-test-portal'
+    portalTarget.dataset.testPortal = 'true'
+    document.body.appendChild(portalTarget)
+
+    const wrapper = mount(DropdownMenu, {
+      props: {
+        open: true,
+        items: mockItems,
+        portalTo: '#dropdown-test-portal',
+        positionStrategy: 'fixed'
+      },
+      attrs: {
+        'aria-label': 'Actions téléportées',
+        'data-testid': 'teleported-menu'
+      },
+      slots: {
+        trigger: '<button>Menu téléporté</button>'
+      },
+      attachTo: document.body
+    })
+
+    await vi.waitFor(() => {
+      const menu = portalTarget.querySelector('[data-testid="teleported-menu"]')
+      expect(menu?.getAttribute('aria-label')).toBe('Actions téléportées')
+      expect(menu?.textContent).toContain('Modifier')
+      expect(
+        (portalTarget.querySelector('[data-reka-popper-content-wrapper]') as HTMLElement | null)
+          ?.style.position
+      ).toBe('fixed')
+    })
+
+    wrapper.unmount()
+  })
+
+  it('5. Émet une seule sélection avec le nouvel état d’une checkbox', async () => {
+    const checkboxItem: DropdownMenuItemDef = {
+      id: 'snap',
+      label: 'Magnétisme',
+      type: 'checkbox',
+      checked: false
+    }
+    const wrapper = mount(DropdownMenu, {
+      props: { open: true, items: [checkboxItem] },
+      slots: { trigger: '<button>Options</button>' },
+      attachTo: document.body
+    })
+
+    const checkbox = await vi.waitFor(() => {
+      const element = document.body.querySelector('[role="menuitemcheckbox"]') as HTMLElement | null
+      expect(element).not.toBeNull()
+      return element
+    })
+    checkbox?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+    await vi.waitFor(() => {
+      const selections = wrapper.emitted('select')
+      expect(selections).toHaveLength(1)
+      expect(selections?.[0]?.[0]).toMatchObject({ id: 'snap', checked: true })
+    })
+    wrapper.unmount()
   })
 })

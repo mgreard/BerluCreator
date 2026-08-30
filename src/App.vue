@@ -106,6 +106,10 @@ watch(
 watch(isSavedSnapshotsOpen, (open) => {
   if (open) rigCatalogStore.closeCalibration()
 })
+
+function handleProjectMenuOpen(open: boolean): void {
+  if (open) showAssetDrawer.value = false
+}
 </script>
 
 <template>
@@ -117,6 +121,8 @@ watch(isSavedSnapshotsOpen, (open) => {
       v-model:selection="activeAssetSelection"
       v-model:drawer-open="showAssetDrawer"
       data-tour="asset-library"
+      @open-settings="isSettingsOpen = true"
+      @project-menu-open="handleProjectMenuOpen"
     />
 
     <!-- Viewport & Canvas de Composition (Occupe tout l'espace restant) -->
@@ -126,7 +132,6 @@ watch(isSavedSnapshotsOpen, (open) => {
     >
       <StudioViewport
         :is-saved-snapshots-open="isSavedSnapshotsOpen"
-        @open-settings="isSettingsOpen = true"
         @open-export="isExportOpen = true"
         @toggle-saved-snapshots="isSavedSnapshotsOpen = !isSavedSnapshotsOpen"
         @start-tour="(key) => startTour(key)"

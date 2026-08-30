@@ -14,7 +14,10 @@ import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
 import { DEFAULT_RIG_CANVAS } from '../rig-calibration/rig-catalog.service'
 import { OPTICAL_DEPTH_PRESETS } from '@core/constants/editor'
 import type { Point2D } from '../engine/transform-matrix'
-import { buildSplitPolygons, isSplitConfigValid } from '../engine/desk-split.engine'
+import {
+  buildSplitPolygons,
+  isSplitConfigValid
+} from '@/features/desk-split/engine/desk-split.engine'
 
 export interface RenderableLayer {
   id: string

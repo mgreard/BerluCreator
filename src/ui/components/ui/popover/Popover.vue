@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useAttrs } from 'vue'
 import {
   PopoverRoot,
   PopoverTrigger,
@@ -7,12 +7,17 @@ import {
   PopoverPortal,
   PopoverContent,
   PopoverArrow,
-  PopoverClose
+  PopoverClose,
+  useForwardPropsEmits,
+  type PopoverContentProps
 } from 'reka-ui'
 import { IconButton } from '@/components/ui/icon-button'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/shared/utils/cn'
 import type { PopoverProps, PopoverEmits } from './types'
+import { guardPopoverOutsideInteraction } from './outside-interaction'
+
+defineOptions({ inheritAttrs: false })
 
 const isOpen = defineModel<boolean>({ default: false })
 
@@ -28,12 +33,40 @@ const {
   arrow = false,
   modal = false,
   portal = true,
+  portalTo = 'body',
+  portalDefer = true,
+  avoidCollisions = true,
+  collisionBoundary = undefined,
+  collisionPadding = 8,
+  positionStrategy = 'fixed',
+  sticky = 'partial',
+  hideWhenDetached = true,
+  ignoreOutsideInteractionSelector = undefined,
+  updatePositionStrategy = 'optimized',
   showClose = true,
   disabled = false,
-  class: className = undefined
+  class: className = undefined,
+  bodyClass = undefined
 } = defineProps<PopoverProps>()
 
 const emit = defineEmits<PopoverEmits>()
+const attrs = useAttrs()
+
+const contentPositionProps = computed<PopoverContentProps>(() => ({
+  side,
+  align,
+  sideOffset,
+  alignOffset,
+  avoidCollisions,
+  collisionBoundary,
+  collisionPadding,
+  positionStrategy,
+  sticky,
+  hideWhenDetached,
+  updatePositionStrategy
+}))
+const forwardedContentProps = useForwardPropsEmits(contentPositionProps)
+const forwardedContent = computed(() => ({ ...forwardedContentProps.value, ...attrs }))
 
 const widthClasses = computed(() => {
   switch (width) {
@@ -80,6 +113,10 @@ function toggle() {
     handleOpenChange(!isOpen.value)
   }
 }
+
+function handlePointerDownOutside(event: Event): void {
+  guardPopoverOutsideInteraction(event, ignoreOutsideInteractionSelector)
+}
 </script>
 
 <template>
@@ -92,14 +129,16 @@ function toggle() {
       <slot name="anchor" />
     </PopoverAnchor>
 
-    <component :is="portal ? PopoverPortal : 'template'">
+    <component
+      :is="portal ? PopoverPortal : 'template'"
+      :to="portal ? portalTo : undefined"
+      :defer="portal ? portalDefer : undefined"
+    >
       <PopoverContent
+        v-bind="forwardedContent"
         :class="contentClasses"
         :data-surface="surface"
-        :side="side"
-        :align="align"
-        :side-offset="sideOffset"
-        :align-offset="alignOffset"
+        @pointer-down-outside="handlePointerDownOutside"
       >
         <!-- En-tête du Popover -->
         <header
@@ -153,7 +192,7 @@ function toggle() {
 
         <!-- Corps du Popover (défilement fluide) -->
         <div
-          class="flex-1 overflow-y-auto overscroll-contain max-h-[min(var(--reka-popover-content-available-height,400px),420px)] p-3"
+          :class="cn('flex-1 overflow-y-auto overscroll-contain max-h-[min(var(--reka-popover-content-available-height,400px),420px)] p-3', bodyClass)"
         >
           <slot />
         </div>

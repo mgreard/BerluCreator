@@ -81,6 +81,12 @@ describe('AssetLibraryPanel - Filtrage par rig actif', () => {
       props: { open: true }
     })
 
+    const characterTab = wrapper
+      .findAll('[role="tab"]')
+      .find((tab) => tab.attributes('title')?.startsWith('Personnages'))
+    expect(characterTab).toBeDefined()
+    await characterTab?.trigger('mousedown', { button: 0, ctrlKey: false })
+
     expect(wrapper.text()).toContain('Corps')
     expect(wrapper.text()).toContain('Têtes')
 
