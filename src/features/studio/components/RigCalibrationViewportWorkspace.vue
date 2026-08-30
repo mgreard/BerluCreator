@@ -34,6 +34,9 @@ const calibrationSelection = useRigCalibrationSelection()
 const bodyBlobUrl = ref<string>()
 const blobUrls = ref<Record<string, string>>({})
 const acquiredPartBlobs = new Map<string, string>()
+let bodyLoadGeneration = 0
+let partsLoadGeneration = 0
+let acquiredBodyBlobId: string | null = null
 const partDrafts = ref<Record<string, AssetCalibration>>({})
 const activeDragTarget = ref<string | null>(null)
 const selectedTarget = computed({
@@ -165,16 +168,26 @@ watch(
 // Chargement réactif des blobs
 watch(
   bodyAsset,
-  async (asset, oldAsset) => {
-    if (oldAsset?.blobId) blobCacheService.release(oldAsset.blobId)
+  async (asset) => {
+    const generation = ++bodyLoadGeneration
+    if (acquiredBodyBlobId) {
+      blobCacheService.release(acquiredBodyBlobId)
+      acquiredBodyBlobId = null
+    }
+    bodyBlobUrl.value = undefined
     if (asset?.blobId) {
       try {
-        bodyBlobUrl.value = await blobCacheService.acquire(asset.blobId)
+        const blobId = asset.blobId
+        const url = await blobCacheService.acquire(blobId)
+        if (generation !== bodyLoadGeneration || bodyAsset.value?.blobId !== blobId) {
+          blobCacheService.release(blobId)
+          return
+        }
+        acquiredBodyBlobId = blobId
+        bodyBlobUrl.value = url
       } catch {
-        bodyBlobUrl.value = undefined
+        if (generation === bodyLoadGeneration) bodyBlobUrl.value = undefined
       }
-    } else {
-      bodyBlobUrl.value = undefined
     }
   },
   { immediate: true }
@@ -183,9 +196,10 @@ watch(
 watch(
   activeCharacterParts,
   async (partsList) => {
-    const nextAssetIds = new Set(partsList.map(({ asset }) => asset.id))
+    const generation = ++partsLoadGeneration
+    const nextBlobs = new Map(partsList.map(({ asset }) => [asset.id, asset.blobId]))
     for (const [assetId, blobId] of acquiredPartBlobs) {
-      if (nextAssetIds.has(assetId)) continue
+      if (nextBlobs.get(assetId) === blobId) continue
       blobCacheService.release(blobId)
       acquiredPartBlobs.delete(assetId)
       const nextUrls = { ...blobUrls.value }
@@ -197,7 +211,10 @@ watch(
       if (asset.blobId && !acquiredPartBlobs.has(asset.id)) {
         try {
           const url = await blobCacheService.acquire(asset.blobId)
-          if (!nextAssetIds.has(asset.id)) {
+          if (
+            generation !== partsLoadGeneration ||
+            nextBlobs.get(asset.id) !== asset.blobId
+          ) {
             blobCacheService.release(asset.blobId)
             continue
           }
@@ -378,7 +395,10 @@ function onSelectTarget(targetId: string | null): void {
 }
 
 onBeforeUnmount(() => {
-  if (bodyAsset.value?.blobId) blobCacheService.release(bodyAsset.value.blobId)
+  bodyLoadGeneration += 1
+  partsLoadGeneration += 1
+  if (acquiredBodyBlobId) blobCacheService.release(acquiredBodyBlobId)
+  acquiredBodyBlobId = null
   for (const blobId of acquiredPartBlobs.values()) blobCacheService.release(blobId)
   acquiredPartBlobs.clear()
 })

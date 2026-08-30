@@ -6,6 +6,12 @@ interface CacheEntry {
   timerId?: ReturnType<typeof setTimeout>
 }
 
+export interface BlobCacheDiagnostics {
+  entries: number
+  activeReferences: number
+  pendingRevocations: number
+}
+
 export class BlobUrlCacheService {
   private cache = new Map<string, CacheEntry>()
   private readonly REVOCATION_DELAY_MS = 2000 // Révocation différée pour éviter le clignotement
@@ -87,6 +93,16 @@ export class BlobUrlCacheService {
    */
   get size(): number {
     return this.cache.size
+  }
+
+  get diagnostics(): Readonly<BlobCacheDiagnostics> {
+    let activeReferences = 0
+    let pendingRevocations = 0
+    for (const entry of this.cache.values()) {
+      activeReferences += entry.refCount
+      if (entry.timerId) pendingRevocations += 1
+    }
+    return Object.freeze({ entries: this.cache.size, activeReferences, pendingRevocations })
   }
 }
 

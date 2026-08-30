@@ -30,4 +30,17 @@ describe('BlobUrlCacheService', () => {
     cacheService.clear()
     expect(cacheService.size).toBe(0)
   })
+
+  it('exposes immutable reference diagnostics', async () => {
+    const dummyBlob = new Blob(['data'], { type: 'image/png' })
+    await cacheService.acquire('blob_1', dummyBlob)
+    await cacheService.acquire('blob_1')
+
+    expect(cacheService.diagnostics).toEqual({
+      entries: 1,
+      activeReferences: 2,
+      pendingRevocations: 0
+    })
+    expect(Object.isFrozen(cacheService.diagnostics)).toBe(true)
+  })
 })

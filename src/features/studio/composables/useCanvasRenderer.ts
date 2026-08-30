@@ -1,4 +1,4 @@
-import { ref, watchEffect, onWatcherCleanup, type Ref } from 'vue'
+import { ref, watchEffect, onScopeDispose, type Ref } from 'vue'
 import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 import type { RenderableLayer } from './useHierarchyResolver'
 import type { StageSettings } from '@core/types/project.types'
@@ -16,6 +16,61 @@ import {
 } from '../engine/post-processing-shader.engine'
 
 const globalImageCache = new Map<string, HTMLImageElement>()
+const pendingImageLoads = new Map<string, Promise<HTMLImageElement>>()
+const imageCacheOwners = new Map<symbol, Set<string>>()
+
+export interface CanvasImageCacheDiagnostics {
+  readyImages: number
+  pendingLoads: number
+  owners: number
+  blobReferences: number
+}
+
+export function getCanvasImageCacheDiagnostics(): Readonly<CanvasImageCacheDiagnostics> {
+  return Object.freeze({
+    readyImages: globalImageCache.size,
+    pendingLoads: pendingImageLoads.size,
+    owners: imageCacheOwners.size,
+    blobReferences: blobCacheService.diagnostics.activeReferences
+  })
+}
+
+export function clearCanvasImageCache(): void {
+  imageCacheOwners.clear()
+  for (const image of globalImageCache.values()) {
+    image.onload = null
+    image.onerror = null
+    image.src = ''
+  }
+  globalImageCache.clear()
+}
+
+function isImageOwned(blobId: string): boolean {
+  for (const blobIds of imageCacheOwners.values()) {
+    if (blobIds.has(blobId)) return true
+  }
+  return false
+}
+
+function evictUnusedImages(): void {
+  for (const [blobId, image] of globalImageCache) {
+    if (isImageOwned(blobId)) continue
+    image.onload = null
+    image.onerror = null
+    image.src = ''
+    globalImageCache.delete(blobId)
+  }
+}
+
+function syncImageCacheOwner(owner: symbol, blobIds: Iterable<string>): void {
+  imageCacheOwners.set(owner, new Set(blobIds))
+  evictUnusedImages()
+}
+
+function releaseImageCacheOwner(owner: symbol): void {
+  imageCacheOwners.delete(owner)
+  evictUnusedImages()
+}
 
 interface CanvasBuffer {
   width: number
@@ -28,6 +83,51 @@ let rawSceneBuffer: CanvasBuffer | null = null
 let gradedSceneBuffer: CanvasBuffer | null = null
 let shaderFrameBuffer: CanvasBuffer | null = null
 let shaderOutputBuffer: CanvasBuffer | null = null
+let activeRendererCount = 0
+
+function releaseCanvasBuffer(buffer: CanvasBuffer | null): null {
+  if (buffer) {
+    buffer.canvas.width = 0
+    buffer.canvas.height = 0
+  }
+  return null
+}
+
+export function releaseCanvasRendererBuffers(): void {
+  rawSceneBuffer = releaseCanvasBuffer(rawSceneBuffer)
+  gradedSceneBuffer = releaseCanvasBuffer(gradedSceneBuffer)
+  shaderFrameBuffer = releaseCanvasBuffer(shaderFrameBuffer)
+  shaderOutputBuffer = releaseCanvasBuffer(shaderOutputBuffer)
+  if (depthOfFieldBuffers) {
+    depthOfFieldBuffers.sharpCanvas.width = 0
+    depthOfFieldBuffers.sharpCanvas.height = 0
+    depthOfFieldBuffers.blurredCanvas.width = 0
+    depthOfFieldBuffers.blurredCanvas.height = 0
+    depthOfFieldBuffers.maskedCanvas.width = 0
+    depthOfFieldBuffers.maskedCanvas.height = 0
+    depthOfFieldBuffers = null
+  }
+}
+
+function releasePostProcessingBuffers(options: { grading: boolean; shader: boolean }): void {
+  if (!options.grading) gradedSceneBuffer = releaseCanvasBuffer(gradedSceneBuffer)
+  if (!options.shader) {
+    shaderFrameBuffer = releaseCanvasBuffer(shaderFrameBuffer)
+    shaderOutputBuffer = releaseCanvasBuffer(shaderOutputBuffer)
+  }
+  if (!options.grading && !options.shader) rawSceneBuffer = releaseCanvasBuffer(rawSceneBuffer)
+}
+
+function releaseDepthOfFieldBuffers(): void {
+  if (!depthOfFieldBuffers) return
+  depthOfFieldBuffers.sharpCanvas.width = 0
+  depthOfFieldBuffers.sharpCanvas.height = 0
+  depthOfFieldBuffers.blurredCanvas.width = 0
+  depthOfFieldBuffers.blurredCanvas.height = 0
+  depthOfFieldBuffers.maskedCanvas.width = 0
+  depthOfFieldBuffers.maskedCanvas.height = 0
+  depthOfFieldBuffers = null
+}
 
 function getCanvasBuffer(
   current: CanvasBuffer | null,
@@ -133,18 +233,34 @@ export async function fetchAndLoadImage(
   const existing = cache.get(blobId)
   if (existing && existing.complete && existing.naturalWidth > 0) return existing
 
-  const url = await blobCacheService.acquire(blobId)
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.onload = () => {
-      cache.set(blobId, img)
-      resolve(img)
+  if (cache === globalImageCache) {
+    const pending = pendingImageLoads.get(blobId)
+    if (pending) return pending
+  }
+
+  const load = (async () => {
+    const url = await blobCacheService.acquire(blobId)
+    try {
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => resolve(img)
+        img.onerror = () => reject(new Error(`Impossible de décoder l’asset ${blobId}.`))
+        img.src = url
+      })
+      cache.set(blobId, image)
+      return image
+    } finally {
+      blobCacheService.release(blobId)
     }
-    img.onerror = () => {
-      resolve(img)
-    }
-    img.src = url
-  })
+  })()
+
+  if (cache !== globalImageCache) return load
+  pendingImageLoads.set(blobId, load)
+  try {
+    return await load
+  } finally {
+    if (pendingImageLoads.get(blobId) === load) pendingImageLoads.delete(blobId)
+  }
 }
 
 /**
@@ -448,6 +564,7 @@ function drawRawSceneLayersOnContext(
   imageCache: Map<string, HTMLImageElement> = globalImageCache
 ): void {
   if (!shouldApplyDepthOfField(layers, settings)) {
+    releaseDepthOfFieldBuffers()
     drawLayersOnContext(ctx, layers, imageCache)
     return
   }
@@ -577,6 +694,7 @@ export function drawSceneLayersOnContext(
 ): ShaderRenderStatus {
   const hasGrading = !isColorGradingNeutral(colorGrading)
   const hasShader = !isShaderNeutral(shaderSettings)
+  releasePostProcessingBuffers({ grading: hasGrading, shader: hasShader })
 
   if (!hasGrading && !hasShader) {
     prepareContextBackground(ctx, width, height, options.backgroundColor)
@@ -697,7 +815,7 @@ function normalizeCameraCrop(camera: CameraFrame, stage: StageSettings) {
 /**
  * Capture un instantané PNG/JPEG propre, sans aides d’édition.
  */
-export async function captureCleanFrame(
+async function captureCleanFrameWithRetainedImages(
   layers: RenderableLayer[],
   stage: StageSettings,
   format: string = 'image/png',
@@ -771,6 +889,24 @@ export async function captureCleanFrame(
   return outputCanvas.toDataURL(format)
 }
 
+export async function captureCleanFrame(
+  layers: RenderableLayer[],
+  stage: StageSettings,
+  format: string = 'image/png',
+  options: FrameCaptureOptions = {}
+): Promise<string> {
+  const cacheOwner = Symbol('canvas-export')
+  syncImageCacheOwner(
+    cacheOwner,
+    layers.map((layer) => layer.asset.blobId)
+  )
+  try {
+    return await captureCleanFrameWithRetainedImages(layers, stage, format, options)
+  } finally {
+    releaseImageCacheOwner(cacheOwner)
+  }
+}
+
 export function useCanvasRenderer(
   canvasRef: Ref<HTMLCanvasElement | null>,
   activeLayers: Ref<RenderableLayer[]>,
@@ -786,8 +922,22 @@ export function useCanvasRenderer(
   camera?: Ref<CameraFrame>
 ) {
   const isRendering = ref(false)
+  const cacheOwner = Symbol('canvas-renderer')
+  const awaitedLoads = new Set<string>()
+  let renderFrame: number | null = null
+  let disposed = false
+  activeRendererCount += 1
+
+  function scheduleRender(): void {
+    if (disposed || renderFrame !== null) return
+    renderFrame = window.requestAnimationFrame(() => {
+      renderFrame = null
+      render()
+    })
+  }
 
   function render() {
+    if (disposed) return
     const canvas = canvasRef.value
     if (!canvas) return
 
@@ -804,16 +954,27 @@ export function useCanvasRenderer(
 
     // 1. Dessiner chaque calque résolu
     const layers = activeLayers.value
+    syncImageCacheOwner(
+      cacheOwner,
+      layers.map((layer) => layer.asset.blobId)
+    )
 
     for (const layer of layers) {
-      const img = globalImageCache.get(layer.asset.blobId)
+      const blobId = layer.asset.blobId
+      const img = globalImageCache.get(blobId)
       if (!img || !img.complete || img.naturalWidth === 0) {
-        fetchAndLoadImage(layer.asset.blobId, globalImageCache).then(() => {
-          render()
-        })
+        if (awaitedLoads.has(blobId)) continue
+        awaitedLoads.add(blobId)
+        void fetchAndLoadImage(blobId, globalImageCache)
+          .catch(() => undefined)
+          .finally(() => {
+            awaitedLoads.delete(blobId)
+            scheduleRender()
+          })
       }
     }
 
+    isRendering.value = true
     drawSceneLayersOnContext(
       ctx,
       layers,
@@ -828,6 +989,7 @@ export function useCanvasRenderer(
         shaderFrame: camera?.value.enabled ? camera.value : null
       }
     )
+    isRendering.value = false
 
     // 2. Cadre de sélection interactif avec poignées d'angles et latérales.
     const bounds = showSelection?.value === false ? null : selectedBounds?.value
@@ -934,11 +1096,21 @@ export function useCanvasRenderer(
     void colorGrading?.value
     void shaderSettings?.value
     void camera?.value
-    render()
+    syncImageCacheOwner(
+      cacheOwner,
+      activeLayers.value.map((layer) => layer.asset.blobId)
+    )
+    scheduleRender()
+  })
 
-    onWatcherCleanup(() => {
-      // Nettoyage
-    })
+  onScopeDispose(() => {
+    disposed = true
+    if (renderFrame !== null) window.cancelAnimationFrame(renderFrame)
+    renderFrame = null
+    awaitedLoads.clear()
+    releaseImageCacheOwner(cacheOwner)
+    activeRendererCount = Math.max(0, activeRendererCount - 1)
+    if (activeRendererCount === 0) releaseCanvasRendererBuffers()
   })
 
   return {

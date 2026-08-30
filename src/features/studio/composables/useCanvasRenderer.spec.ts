@@ -1,11 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { effectScope, nextTick, ref } from 'vue'
 import type { StageSettings } from '@core/types/project.types'
 import type { RenderableLayer } from './useHierarchyResolver'
 import {
   captureCleanFrame,
+  clearCanvasImageCache,
   drawSceneLayersOnContext,
+  fetchAndLoadImage,
+  getCanvasImageCacheDiagnostics,
+  releaseCanvasRendererBuffers,
   shouldApplyDepthOfField,
-  shouldFillExportBackground
+  shouldFillExportBackground,
+  useCanvasRenderer
 } from './useCanvasRenderer'
 import {
   DEFAULT_COLOR_GRADING_SETTINGS,
@@ -13,6 +19,7 @@ import {
   DEFAULT_SHADER_SETTINGS
 } from '@core/constants/editor'
 import * as shaderEngine from '../engine/post-processing-shader.engine'
+import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 
 const stage: StageSettings = {
   width: 1792,
@@ -21,7 +28,106 @@ const stage: StageSettings = {
 }
 
 afterEach(() => {
+  clearCanvasImageCache()
+  releaseCanvasRendererBuffers()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
+
+class SuccessfulImage {
+  complete = true
+  naturalWidth = 64
+  naturalHeight = 64
+  onload: (() => void) | null = null
+  onerror: (() => void) | null = null
+  private source = ''
+
+  set src(value: string) {
+    this.source = value
+    if (value) queueMicrotask(() => this.onload?.())
+  }
+
+  get src(): string {
+    return this.source
+  }
+}
+
+describe('cycle de vie du cache d’images canvas', () => {
+  it('déduplique dix chargements et équilibre l’acquisition du Blob', async () => {
+    vi.stubGlobal('Image', SuccessfulImage)
+    const acquire = vi.spyOn(blobCacheService, 'acquire').mockResolvedValue('blob:test')
+    const release = vi.spyOn(blobCacheService, 'release').mockImplementation(() => undefined)
+
+    const images = await Promise.all(
+      Array.from({ length: 10 }, () => fetchAndLoadImage('same-blob'))
+    )
+
+    expect(new Set(images).size).toBe(1)
+    expect(acquire).toHaveBeenCalledTimes(1)
+    expect(release).toHaveBeenCalledTimes(1)
+    expect(getCanvasImageCacheDiagnostics().pendingLoads).toBe(0)
+  })
+
+  it('libère le Blob même quand le décodage échoue', async () => {
+    class FailingImage extends SuccessfulImage {
+      override set src(value: string) {
+        if (value) queueMicrotask(() => this.onerror?.())
+      }
+    }
+    vi.stubGlobal('Image', FailingImage)
+    vi.spyOn(blobCacheService, 'acquire').mockResolvedValue('blob:broken')
+    const release = vi.spyOn(blobCacheService, 'release').mockImplementation(() => undefined)
+
+    await expect(fetchAndLoadImage('broken-blob')).rejects.toThrow('Impossible de décoder')
+    expect(release).toHaveBeenCalledOnce()
+    expect(getCanvasImageCacheDiagnostics().pendingLoads).toBe(0)
+  })
+
+  it('évince une image quand elle quitte la scène active', async () => {
+    vi.stubGlobal('Image', SuccessfulImage)
+    vi.spyOn(blobCacheService, 'acquire').mockResolvedValue('blob:scene')
+    vi.spyOn(blobCacheService, 'release').mockImplementation(() => undefined)
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback)
+      return frames.length
+    })
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    const context = {
+      clearRect: vi.fn(),
+      fillRect: vi.fn(),
+      drawImage: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn()
+    } as unknown as CanvasRenderingContext2D
+    const canvas = {
+      width: stage.width,
+      height: stage.height,
+      getContext: vi.fn().mockReturnValue(context)
+    } as unknown as HTMLCanvasElement
+    const layers = ref([
+      {
+        asset: { blobId: 'scene-blob' },
+        opacity: 1,
+        x: 0,
+        y: 0,
+        width: 64,
+        height: 64,
+        transformOriginX: 32,
+        transformOriginY: 32,
+        rotation: 0
+      } as RenderableLayer
+    ])
+    const scope = effectScope()
+    scope.run(() => useCanvasRenderer(ref(canvas), layers, ref(stage)))
+    frames.shift()?.(0)
+    await vi.waitFor(() => expect(getCanvasImageCacheDiagnostics().readyImages).toBe(1))
+
+    layers.value = []
+    await nextTick()
+    expect(getCanvasImageCacheDiagnostics().readyImages).toBe(0)
+    scope.stop()
+  })
 })
 
 describe('export du canvas', () => {
