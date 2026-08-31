@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { deleteDatabase } = vi.hoisted(() => ({
-  deleteDatabase: vi.fn()
+const { clearTable } = vi.hoisted(() => ({
+  clearTable: vi.fn().mockResolvedValue(undefined)
 }))
 
 vi.mock('@infrastructure/db/dexie', () => ({
-  db: { delete: deleteDatabase }
+  db: {
+    isOpen: vi.fn().mockReturnValue(true),
+    open: vi.fn().mockResolvedValue(undefined),
+    tables: [{ clear: clearTable }]
+  }
 }))
 
 import {
@@ -15,7 +19,7 @@ import {
 
 describe('resetApplicationToFactoryDefaults', () => {
   beforeEach(() => {
-    deleteDatabase.mockReset().mockResolvedValue(undefined)
+    clearTable.mockReset().mockResolvedValue(undefined)
     localStorage.clear()
   })
 
@@ -25,7 +29,7 @@ describe('resetApplicationToFactoryDefaults', () => {
 
     await resetApplicationToFactoryDefaults()
 
-    expect(deleteDatabase).toHaveBeenCalledOnce()
+    expect(clearTable).toHaveBeenCalledOnce()
     for (const key of APPLICATION_STORAGE_KEYS) expect(localStorage.getItem(key)).toBeNull()
     expect(localStorage.getItem('unrelated.application.preference')).toBe('keep-me')
   })

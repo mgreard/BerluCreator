@@ -27,12 +27,12 @@ vi.mock('@infrastructure/db/repositories/asset.repository', () => ({
 
 const bodyAsset: Asset = {
   id: 'body-1',
-  name: 'Corps',
+  name: 'Micro 1 torse',
   category: 'body',
   tags: [],
   blobId: 'blob-body',
-  width: 800,
-  height: 900,
+  width: 758,
+  height: 555,
   character: { key: 'berlu', name: 'Berlu', form: 'rig' },
   isMovable: false,
   createdAt: 1,

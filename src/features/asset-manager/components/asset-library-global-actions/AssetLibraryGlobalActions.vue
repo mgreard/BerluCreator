@@ -180,6 +180,18 @@ function toggleRigCalibration(): void {
       <Icon name="construction" size="xs" class="text-primary" />
       <span>Rigs</span>
     </Button>
+
+    <Button
+      data-library-action="batch-export"
+      variant="ghost"
+      size="xs"
+      class="h-7 gap-1.5 px-2 text-[11px] font-medium"
+      title="Galerie d’exportation HD des assets & rigs (ZIP)"
+      @click="emit('openBatchExport')"
+    >
+      <Icon name="folder_zip" size="xs" class="text-primary" />
+      <span>Export HD</span>
+    </Button>
   </div>
 
   <AssetUploadModal

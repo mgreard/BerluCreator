@@ -15,7 +15,7 @@ import {
   type ShaderRenderStatus
 } from '../engine/post-processing-shader.engine'
 
-const globalImageCache = new Map<string, HTMLImageElement>()
+export const globalImageCache = new Map<string, HTMLImageElement>()
 const pendingImageLoads = new Map<string, Promise<HTMLImageElement>>()
 const imageCacheOwners = new Map<symbol, Set<string>>()
 

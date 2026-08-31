@@ -15,6 +15,7 @@ import {
 } from '@/features/studio/components/studio-workspace-layout'
 import ProjectSettingsModal from '@/features/project/components/ProjectSettingsModal.vue'
 import ExportModal from '@/features/project/components/ExportModal.vue'
+import { BatchExportModal } from '@/features/asset-manager/components/batch-export-modal'
 import { ViewportSnapshotsPanel } from '@/features/editor/components/viewport-snapshots-panel'
 import ResizableSidebar from '@/features/studio/components/ResizableSidebar.vue'
 import RigCalibrationWorkspace from '@/features/studio/components/RigCalibrationWorkspace.vue'
@@ -38,6 +39,7 @@ let stopRigCatalogWatch: WatchStopHandle | null = null
 
 const isSettingsOpen = ref(false)
 const isExportOpen = ref(false)
+const isBatchExportOpen = ref(false)
 const isSavedSnapshotsOpen = ref(false)
 const isAssetLibraryOpen = ref(true)
 const compactPane = ref<StudioWorkspacePane>('studio')
@@ -143,7 +145,10 @@ watch(
           class="flex min-h-12 w-full min-w-0 items-center bg-bg-elevated pl-3"
           data-studio-header
         >
-          <AssetLibraryGlobalActions @open-settings="isSettingsOpen = true" />
+          <AssetLibraryGlobalActions
+            @open-settings="isSettingsOpen = true"
+            @open-batch-export="isBatchExportOpen = true"
+          />
           <div class="mx-2 h-5 w-px shrink-0 bg-border-default" aria-hidden="true" />
           <div id="studio-global-toolbar-host" class="min-w-0 flex-1 self-stretch" />
         </div>
@@ -200,6 +205,7 @@ watch(
 
     <ProjectSettingsModal v-model:open="isSettingsOpen" />
     <ExportModal v-model:open="isExportOpen" />
+    <BatchExportModal v-model:open="isBatchExportOpen" />
 
     <ToastContainer />
     <ProductTour
