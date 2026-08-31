@@ -28,6 +28,7 @@ import type {
   CameraFrame,
   CharacterGroup,
   ColorGradingSettings,
+  LayerDepthRole,
   ShaderSettings
 } from '@core/types/editor.types'
 import type { Asset, DeskSplitConfig } from '@core/types/asset.types'
@@ -344,6 +345,33 @@ const selectedDeskPlacement = computed<DeskPlacement>({
     editorStore.updateLayerZIndex(layer.id, stagePlacementZIndexes.value[value])
   }
 })
+
+const selectedBlurEnabled = computed<boolean>({
+  get: () => {
+    if (isGroupTarget.value && activeSelectedGroup.value) {
+      return activeSelectedGroup.value.depthRole === 'background'
+    }
+    if (editorStore.selectedLayer) {
+      return editorStore.selectedLayer.depthRole === 'background'
+    }
+    return false
+  },
+  set: (enabled: boolean) => {
+    const role: LayerDepthRole = enabled ? 'background' : 'subject'
+    if (isGroupTarget.value && activeSelectedGroup.value) {
+      editorStore.setGroupDepthRole(activeSelectedGroup.value.id, role)
+      return
+    }
+    const layer = editorStore.selectedLayer
+    if (layer) {
+      editorStore.setLayerDepthRole(layer.id, role)
+    }
+  }
+})
+
+function toggleSelectedBlur(): void {
+  selectedBlurEnabled.value = !selectedBlurEnabled.value
+}
 
 function toggleCameraFrame() {
   const current = activeCamera.value
@@ -1141,10 +1169,12 @@ function onCanvasDoubleClick(e: MouseEvent) {
           :desk-placement="selectedDeskPlacement"
           :can-edit-desk-split="Boolean(selectedDeskAsset)"
           :desk-split-open="isDeskSplitModalOpen"
+          :blur-enabled="selectedBlurEnabled"
           :flipped="isSelectedFlippedHorizontally"
           :delete-label="deleteSelectionLabel"
           @update:desk-placement="selectedDeskPlacement = $event"
           @open-desk-split="openDeskSplitEditor"
+          @toggle-blur="toggleSelectedBlur"
           @flip="flipSelectedHorizontal"
           @delete="removeSelectedFromViewport"
           @clear-selection="editorStore.clearStudioSelection()"

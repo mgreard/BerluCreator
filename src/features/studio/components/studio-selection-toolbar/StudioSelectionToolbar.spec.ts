@@ -70,4 +70,31 @@ describe('StudioSelectionToolbar', () => {
     expect(wrapper.emitted('openDeskSplit')).toHaveLength(1)
     wrapper.unmount()
   })
+
+  it('affiche le bouton de bascule du flou et émet toggleBlur au clic', async () => {
+    const wrapper = mount(StudioSelectionToolbar, {
+      attachTo: document.body,
+      props: {
+        open: true,
+        layerName: 'Berlu',
+        layerIcon: 'person',
+        canEditDeskPlacement: false,
+        deskPlacement: 'front',
+        canEditDeskSplit: false,
+        deskSplitOpen: false,
+        blurEnabled: true,
+        flipped: false,
+        deleteLabel: 'Supprimer Berlu'
+      }
+    })
+
+    const blurButton = document.querySelector<HTMLButtonElement>(
+      '#studio-selection-overlay-host button[aria-label="Désactiver le flou (garder net)"]'
+    )
+    expect(blurButton).not.toBeNull()
+    expect(blurButton?.textContent).toContain('blur_on')
+    await blurButton?.click()
+    expect(wrapper.emitted('toggleBlur')).toHaveLength(1)
+    wrapper.unmount()
+  })
 })

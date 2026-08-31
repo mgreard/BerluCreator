@@ -8,6 +8,7 @@ export interface StudioSelectionToolbarProps {
   deskPlacement: DeskPlacement
   canEditDeskSplit: boolean
   deskSplitOpen: boolean
+  blurEnabled?: boolean
   flipped: boolean
   deleteLabel: string
 }

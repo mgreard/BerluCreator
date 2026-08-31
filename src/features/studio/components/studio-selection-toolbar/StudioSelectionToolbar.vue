@@ -5,11 +5,12 @@ import { IconButton } from '@/components/ui/icon-button'
 import { SegmentedControl, type SegmentOption } from '@/components/ui/segmented-control'
 import type { DeskPlacement, StudioSelectionToolbarProps } from './types'
 
-defineProps<StudioSelectionToolbarProps>()
+const { blurEnabled = false } = defineProps<StudioSelectionToolbarProps>()
 
 const emit = defineEmits<{
   (event: 'update:deskPlacement', value: DeskPlacement): void
   (event: 'openDeskSplit'): void
+  (event: 'toggleBlur'): void
   (event: 'flip'): void
   (event: 'delete'): void
   (event: 'clearSelection'): void
@@ -64,6 +65,27 @@ const deskPlacementOptions: SegmentOption[] = [
           aria-label="Découper la profondeur du meuble (2.5D)"
           title="Découper la profondeur du meuble (2.5D)"
           @click="emit('openDeskSplit')"
+        />
+      </ToolbarButton>
+
+      <ToolbarButton as-child>
+        <IconButton
+          :icon="blurEnabled ? 'blur_on' : 'blur_off'"
+          size="xs"
+          variant="ghost"
+          class="viewport-action size-7"
+          :active="blurEnabled"
+          :aria-label="
+            blurEnabled
+              ? 'Désactiver le flou (garder net)'
+              : 'Activer le flou (soumis au flou du viewport)'
+          "
+          :title="
+            blurEnabled
+              ? 'Flou activé (l’item est affecté par le flou du viewport)'
+              : 'Flou désactivé (l’item reste net)'
+          "
+          @click="emit('toggleBlur')"
         />
       </ToolbarButton>
 
