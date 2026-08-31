@@ -17,6 +17,7 @@ export * from './progress'
 export * from './alert'
 export * from './empty-state'
 export * from './loading-state'
+export * from './splash-screen'
 export * from './toast-container'
 
 // Overlay & Dialogs

@@ -21,7 +21,12 @@ import RigCalibrationWorkspace from '@/features/studio/components/RigCalibration
 import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import ToastContainer from '@/components/ui/toast-container/ToastContainer.vue'
 import { ProductTour } from '@/components/ui/product-tour'
+import { SplashScreen } from '@/components/ui/splash-screen'
 import { useProductTourManager } from '@/features/project/composables/useProductTourManager'
+
+const isAppLoading = ref(true)
+const splashStatus = ref('Initialisation du studio...')
+const splashProgress = ref<number | undefined>(15)
 
 const projectStore = useProjectStore()
 const assetStore = useAssetStore()
@@ -55,34 +60,48 @@ const { currentSteps, currentStorageKey, tourRef, startTour } = useProductTourMa
 )
 
 onMounted(async () => {
-  const project = await projectStore.loadInitialProject()
+  try {
+    splashStatus.value = 'Initialisation du projet...'
+    splashProgress.value = 25
+    const project = await projectStore.loadInitialProject()
 
-  await syncBundledAssets()
-  await assetStore.loadAssets()
-  rigCatalogStore.initialize(assetStore.assets)
+    splashStatus.value = 'Synchronisation des assets 2D & 3D...'
+    splashProgress.value = 55
+    await syncBundledAssets()
+    await assetStore.loadAssets()
+    rigCatalogStore.initialize(assetStore.assets)
 
-  await editorStore.loadDocument(project.editorDocumentId, project.id)
-  if (!editorStore.currentDocument.rigCatalogSnapshot) {
-    editorStore.syncRigCatalogSnapshot(JSON.stringify(rigCatalogStore.exportCatalog()))
+    splashStatus.value = 'Préparation de l’espace de travail...'
+    splashProgress.value = 80
+    await editorStore.loadDocument(project.editorDocumentId, project.id)
+    if (!editorStore.currentDocument.rigCatalogSnapshot) {
+      editorStore.syncRigCatalogSnapshot(JSON.stringify(rigCatalogStore.exportCatalog()))
+    }
+    stopRigCatalogWatch = watch(
+      [() => rigCatalogStore.rigs, () => rigCatalogStore.defaultRigByCharacter],
+      () => editorStore.syncRigCatalogSnapshot(JSON.stringify(rigCatalogStore.exportCatalog())),
+      { deep: true }
+    )
+
+    await workspaceBackupStore.initialize()
+    stopWorkspaceWatch = watch(
+      [
+        () => projectStore.currentProject,
+        () => editorStore.currentDocument,
+        () => assetStore.assets,
+        () => rigCatalogStore.rigs,
+        () => rigCatalogStore.defaultRigByCharacter
+      ],
+      () => workspaceBackupStore.markDirty(),
+      { deep: true }
+    )
+
+    splashStatus.value = 'Studio prêt !'
+    splashProgress.value = 100
+  } finally {
+    // Déclenche l'animation de sortie fluide
+    isAppLoading.value = false
   }
-  stopRigCatalogWatch = watch(
-    [() => rigCatalogStore.rigs, () => rigCatalogStore.defaultRigByCharacter],
-    () => editorStore.syncRigCatalogSnapshot(JSON.stringify(rigCatalogStore.exportCatalog())),
-    { deep: true }
-  )
-
-  await workspaceBackupStore.initialize()
-  stopWorkspaceWatch = watch(
-    [
-      () => projectStore.currentProject,
-      () => editorStore.currentDocument,
-      () => assetStore.assets,
-      () => rigCatalogStore.rigs,
-      () => rigCatalogStore.defaultRigByCharacter
-    ],
-    () => workspaceBackupStore.markDirty(),
-    { deep: true }
-  )
 })
 
 onBeforeUnmount(() => {
@@ -190,6 +209,13 @@ watch(
       :storage-key="currentStorageKey"
       :start-delay-ms="1400"
       :config="{ skipMissingElement: true }"
+    />
+
+    <SplashScreen
+      :is-loading="isAppLoading"
+      :status-message="splashStatus"
+      :progress="splashProgress"
+      :min-duration-ms="1100"
     />
   </div>
 </template>

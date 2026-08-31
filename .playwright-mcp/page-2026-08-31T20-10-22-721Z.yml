@@ -1,0 +1,90 @@
+- generic [ref=e1]:
+  - generic:
+    - generic:
+      - region "Studio de composition":
+        - heading "Studio de composition" [level=1]
+        - generic:
+          - generic:
+            - group "Projet et bibliothèque":
+              - button "Projet":
+                - generic:
+                  - generic: apps
+                  - generic: Projet
+                  - generic: expand_more
+              - button "Importer":
+                - generic:
+                  - generic: cloud_upload
+                  - generic: Importer
+              - button "Rigs":
+                - generic:
+                  - generic: construction
+                  - generic: Rigs
+            - generic:
+              - toolbar "Actions globales du studio":
+                - generic:
+                  - generic:
+                    - button "Annuler la dernière action (Ctrl+Z)" [disabled]:
+                      - generic: undo
+                    - button "Rétablir la dernière action (Ctrl+Shift+Z)" [disabled]:
+                      - generic: redo
+                  - separator
+                  - button "Flou":
+                    - generic:
+                      - generic: blur_on
+                      - generic: Flou
+                  - button "Effets":
+                    - generic:
+                      - generic: auto_fix_high
+                      - generic: Effets
+                  - button "Cadrage":
+                    - generic:
+                      - generic: crop_free
+                      - generic: Cadrage
+                - separator
+                - generic:
+                  - button "Vues":
+                    - generic:
+                      - generic: collections_bookmark
+                      - generic: Vues
+                  - button "Exporter":
+                    - generic:
+                      - generic: file_download
+                      - generic: Exporter
+                  - button "Visites guidées et aide":
+                    - generic: help
+        - navigation "Espaces de travail du Studio":
+          - group:
+            - button "Bibliothèque":
+              - generic: category
+            - button "Studio" [pressed]:
+              - generic: dashboard
+            - button "Inspecteur" [disabled]:
+              - generic: tune
+        - generic:
+          - main
+      - status:
+        - generic:
+          - generic:
+            - img "Incroyaux News Studio":
+              - generic:
+                - generic: Incroyaux
+                - generic: News
+              - generic:
+                - generic: Incroyaux
+                - generic: News
+                - generic: Incroyaux
+                - generic: News
+              - generic: STUDIO
+          - generic:
+            - generic: Synchronisation des assets 2D & 3D...
+            - progressbar
+            - generic: 55%
+  - dialog [ref=e2]:
+    - button "Close" [active] [ref=e3] [cursor=pointer]: ×
+    - banner [ref=e5]: 1. Bibliothèque de sprites
+    - generic [ref=e6]: Parcourez les catégories et cliquez sur un sprite pour l’ajouter sur le plateau. Un corps charge automatiquement son profil de personnage.
+    - contentinfo [ref=e7]:
+      - generic [ref=e8]: 1 / 6
+      - generic [ref=e9]:
+        - button "Précédent" [disabled]
+        - button "Suivant" [ref=e10] [cursor=pointer]
