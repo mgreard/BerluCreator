@@ -18,6 +18,7 @@ import {
   workspaceBackupFilename
 } from '@/features/project/services/workspace-backup-file.service'
 import { resetApplicationToFactoryDefaults } from '@/features/project/services/factory-reset.service'
+import { syncBundledAssets } from '@/features/asset-manager/services/demo-asset-seeder'
 import type { WorkspaceSnapshotSummary } from '@core/types/project.types'
 import { toast } from '@/ui/shared/services/toast.service'
 
@@ -162,6 +163,9 @@ export function useWorkspaceBackupActions() {
     try {
       await resetApplicationToFactoryDefaults()
       snapshotSummary.value = null
+      await syncBundledAssets()
+      await assetStore.loadAssets()
+      rigCatalogStore.resetToDefaultCatalog(assetStore.assets)
       await reloadRestoredWorkspace()
       await backupStore.refresh()
       toast.success('Application réinitialisée', 'L’espace de travail d’origine a été restauré.')

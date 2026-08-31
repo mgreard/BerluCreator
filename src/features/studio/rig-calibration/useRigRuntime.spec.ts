@@ -46,17 +46,18 @@ describe('useRigRuntime (v6)', () => {
     const otherHead = asset('head-b', 'Tête B', 'head')
     assetStore.assets = [bodyA, bodyB, sharedHead, otherHead]
     catalog.initialize(assetStore.assets)
-    const [rigA, rigB] = catalog.rigs
-    catalog.setPartCompatibility(rigA!.id, otherHead, false)
+    const rigA = catalog.rigs.find((r) => r.body.name === 'Corps A')!
+    const rigB = catalog.rigs.find((r) => r.body.name === 'Corps B')!
+    catalog.setPartCompatibility(rigA.id, otherHead, false)
     const runtime = useRigRuntime()
 
-    runtime.activateRig(rigA!)
+    runtime.activateRig(rigA)
     const group = editor.currentDocument.groups.find(
       (candidate) => candidate.kind === 'character' && candidate.characterKey === 'berlu'
     )
     expect(group?.kind).toBe('character')
     if (!group || group.kind !== 'character') throw new Error('Groupe personnage introuvable')
-    expect(group.activeRigId).toBe(rigA!.id)
+    expect(group.activeRigId).toBe(rigA.id)
     expect(
       editor.currentDocument.layers.find(
         (layer) => layer.groupId === group.id && layer.category === 'body'
@@ -64,7 +65,7 @@ describe('useRigRuntime (v6)', () => {
     ).toBe(bodyA.id)
 
     runtime.selectCharacterAsset(sharedHead)
-    expect(group.activeRigId).toBe(rigA!.id)
+    expect(group.activeRigId).toBe(rigA.id)
     expect(
       editor.currentDocument.layers.filter(
         (layer) => layer.groupId === group.id && layer.category === 'head'
@@ -72,7 +73,7 @@ describe('useRigRuntime (v6)', () => {
     ).toHaveLength(1)
 
     runtime.selectCharacterAsset(otherHead)
-    expect(group.activeRigId).toBe(rigB!.id)
+    expect(group.activeRigId).toBe(rigB.id)
     expect(
       editor.currentDocument.layers.find(
         (layer) => layer.groupId === group.id && layer.category === 'body'
@@ -93,11 +94,11 @@ describe('useRigRuntime (v6)', () => {
     const head = asset('head-1', 'Tête', 'head')
     assetStore.assets = [body, head]
     catalog.initialize(assetStore.assets)
-    const [rig] = catalog.rigs
+    const rig = catalog.rigs.find((r) => r.body.name === 'Corps A')!
 
-    catalog.setCategoryEnabled(rig!.id, 'head', false)
+    catalog.setCategoryEnabled(rig.id, 'head', false)
     const runtime = useRigRuntime()
-    runtime.activateRig(rig!)
+    runtime.activateRig(rig)
 
     const group = editor.currentDocument.groups.find(
       (candidate) => candidate.kind === 'character' && candidate.characterKey === 'berlu'

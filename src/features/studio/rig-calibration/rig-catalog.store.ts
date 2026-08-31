@@ -26,10 +26,20 @@ import type {
   RigPartDefinition,
   RigPoint
 } from './rig-catalog.types'
+import {
+  DEFAULT_RIG_CATALOG_FILE,
+  findDefaultRigDefinition,
+  getDefaultRigCatalogFile
+} from './default-rig-catalog'
 import { RIG_CATALOG_STORAGE_KEY } from './rig-catalog.types'
 
 function readCatalog(): Pick<RigCatalogFile, 'rigs' | 'defaultRigByCharacter'> {
-  if (typeof localStorage === 'undefined') return { rigs: [], defaultRigByCharacter: {} }
+  if (typeof localStorage === 'undefined') {
+    return {
+      rigs: getDefaultRigCatalogFile().rigs,
+      defaultRigByCharacter: { ...DEFAULT_RIG_CATALOG_FILE.defaultRigByCharacter }
+    }
+  }
   const current = localStorage.getItem(RIG_CATALOG_STORAGE_KEY)
   if (current) {
     try {
@@ -40,7 +50,10 @@ function readCatalog(): Pick<RigCatalogFile, 'rigs' | 'defaultRigByCharacter'> {
     }
   }
 
-  return { rigs: [], defaultRigByCharacter: {} }
+  return {
+    rigs: getDefaultRigCatalogFile().rigs,
+    defaultRigByCharacter: { ...DEFAULT_RIG_CATALOG_FILE.defaultRigByCharacter }
+  }
 }
 
 export const useRigCatalogStore = defineStore('rigCatalog', () => {
@@ -77,7 +90,8 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
             candidate.characterKey === characterKey && assetsShareRigIdentity(candidate.body, body)
         )
         if (!rig) {
-          rig = createRigDefinition(body, collection)
+          rig =
+            findDefaultRigDefinition(characterKey, body) ?? createRigDefinition(body, collection)
           rigs.value.push(rig)
         } else {
           // Ensure body calibration is initialized if missing
@@ -117,7 +131,12 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
         availableRigs.length > 0 &&
         !availableRigs.some((rig) => rig.id === defaultRigByCharacter.value[characterKey])
       ) {
-        defaultRigByCharacter.value[characterKey] = availableRigs[0].id
+        const preferredDefault = DEFAULT_RIG_CATALOG_FILE.defaultRigByCharacter[characterKey]
+        if (preferredDefault && availableRigs.some((rig) => rig.id === preferredDefault)) {
+          defaultRigByCharacter.value[characterKey] = preferredDefault
+        } else {
+          defaultRigByCharacter.value[characterKey] = availableRigs[0].id
+        }
       }
     }
     persist()
@@ -529,6 +548,10 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
     calibrationTargetId.value = null
   }
 
+  function resetToDefaultCatalog(assets: Asset[]): void {
+    replaceCatalog(getDefaultRigCatalogFile(), assets)
+  }
+
   return {
     rigs,
     defaultRigByCharacter,
@@ -563,6 +586,7 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
     propagateFieldToCategory,
     setDefaultRig,
     replaceCatalog,
+    resetToDefaultCatalog,
     exportCatalog,
     importCatalog,
     resolvePartAsset,

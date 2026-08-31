@@ -286,4 +286,21 @@ describe('useHierarchyResolver', () => {
     expect(backIndex).toBeLessThan(charIndex)
     expect(charIndex).toBeLessThan(frontIndex)
   })
+
+  it('aligne l’origine de transformation d’un calque arrière-plan sur le coin supérieur gauche clampé', () => {
+    const editor = useEditorStore()
+    const assets = useAssetStore()
+    const bgAsset = asset('bg-1', 'background', undefined, 2400, 1350)
+    assets.assets = [bgAsset]
+    editor.assignAssetToGroup('bg-1', 'background')
+
+    const { activeLayers } = useHierarchyResolver()
+    expect(activeLayers.value).toHaveLength(1)
+    const resolved = activeLayers.value[0]!
+
+    expect(resolved.x).toBe(0)
+    expect(resolved.y).toBe(0)
+    expect(resolved.transformOriginX).toBe(resolved.x)
+    expect(resolved.transformOriginY).toBe(resolved.y)
+  })
 })

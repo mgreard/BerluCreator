@@ -10,6 +10,7 @@ export const APPLICATION_STORAGE_KEYS = [
   'berlu-creator:rig-catalog:v3',
   'berlu-creator:rig-catalog:v4',
   'berlu-creator:rig-catalog:v5',
+  'berlu-creator:rig-catalog:v6',
   'berlu.rig-calibration-sidebar-width.v1',
   'mycomplib-theme'
 ] as const
@@ -19,7 +20,10 @@ export const APPLICATION_STORAGE_KEYS = [
  * Le prochain chargement réinitialise ensuite le projet et les assets de démonstration.
  */
 export async function resetApplicationToFactoryDefaults(): Promise<void> {
-  await db.delete()
+  if (!db.isOpen()) {
+    await db.open()
+  }
+  await Promise.all(db.tables.map((table) => table.clear()))
 
   if (typeof window === 'undefined') return
   for (const key of APPLICATION_STORAGE_KEYS) {
