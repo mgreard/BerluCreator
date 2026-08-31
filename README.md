@@ -9,8 +9,6 @@ Le produit est aujourd’hui un **éditeur local mono-espace de travail** : les 
 - [Vision et cadre produit](docs/PRODUCT.md) — intention, utilisateurs, proposition de valeur, parcours, principes et limites.
 - [Catalogue fonctionnel](docs/FEATURES.md) — comportement détaillé de chaque fonctionnalité et statut actuel.
 - [Vue technique](docs/TECHNICAL_OVERVIEW.md) — architecture, modèle de données, persistance, rendu et commandes de développement.
-- [Roadmap actuelle](ROADMAP.md) — architecture livrée, validations et dette connue.
-- [Walkthrough d’implémentation](walkthrough.md) — détails de la simplification du studio et des migrations.
 
 ## État actuel
 

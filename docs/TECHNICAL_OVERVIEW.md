@@ -209,11 +209,11 @@ Le format JSON d’export de scène, le fichier de sauvegarde complète v1 et le
 
 ## Qualité
 
-La validation complète consignée dans `walkthrough.md` au terme de la dernière refonte comprend :
+La validation du projet comprend :
 
 - TypeScript strict ;
 - ESLint sans avertissement ;
-- 90 fichiers de tests et 374 tests unitaires ;
+- la suite de tests unitaires Vitest ;
 - build Vite ;
 - build Histoire avec 68 stories et 176 variantes.
 
@@ -222,8 +222,6 @@ Dette connue :
 - chunk applicatif principal supérieur à 500 kB minifié ;
 - avertissements historiques CJS d’Histoire 0.17 ;
 - absence d’un scénario navigateur dédié à la migration d’une base IndexedDB v4 volumineuse.
-
-Se reporter à [ROADMAP.md](../ROADMAP.md) pour le statut de validation le plus récent.
 
 ## Commandes de développement
 
