@@ -73,7 +73,7 @@ describe('DropdownMenu (Colocated Unit Tests)', () => {
     await vi.waitFor(() => {
       const menu = document.body.querySelector('[role="menu"]')
       expect(menu?.classList.contains('bg-bg-elevated')).toBe(true)
-      expect(menu?.classList.contains('glass-premium')).toBe(false)
+      expect(menu?.classList.contains('viewport-glass')).toBe(false)
     })
     solidWrapper.unmount()
 
@@ -85,7 +85,7 @@ describe('DropdownMenu (Colocated Unit Tests)', () => {
 
     await vi.waitFor(() => {
       expect(
-        document.body.querySelector('[role="menu"]')?.classList.contains('glass-premium')
+        document.body.querySelector('[role="menu"]')?.classList.contains('viewport-glass')
       ).toBe(true)
     })
     glassWrapper.unmount()

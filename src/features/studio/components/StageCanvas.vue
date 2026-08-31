@@ -154,7 +154,7 @@ const activeCamera = computed<CameraFrame>({
 
 const depthOfField = computed(() => editorStore.currentDocument.depthOfField)
 
-type StudioInspectorId = 'visual-effects' | 'depth-of-field' | 'optical-depth'
+type StudioInspectorId = 'visual-effects' | 'optical-depth'
 const activeStudioPanel = ref<StudioInspectorId | null>(null)
 
 function panelOpenModel(panelId: StudioInspectorId) {
@@ -168,11 +168,12 @@ function panelOpenModel(panelId: StudioInspectorId) {
 }
 
 const isVisualEffectsEditorOpen = panelOpenModel('visual-effects')
-const isDepthOfFieldEditorOpen = panelOpenModel('depth-of-field')
+const isDepthOfFieldEditorOpen = ref(false)
 const isOpticalDepthEditorOpen = panelOpenModel('optical-depth')
 const isSelectionToolsOpen = computed(
   () =>
     Boolean(activeSelectedLayer.value) &&
+    !isDepthOfFieldEditorOpen.value &&
     (activeStudioPanel.value === null || activeStudioPanel.value === 'optical-depth')
 )
 let visualEffectsFrame: number | null = null
@@ -225,6 +226,7 @@ function setDepthOfFieldEditorOpen(open: boolean): void {
   if (open && !depthOfField.value.enabled) {
     editorStore.updateDepthOfField({ ...depthOfField.value, enabled: true })
   }
+  if (open) activeStudioPanel.value = null
   isDepthOfFieldEditorOpen.value = open
 }
 
@@ -477,15 +479,6 @@ watch([selectedLayerId, () => editorStore.selectedGroupId], () => {
   finishOpticalDepthInteraction()
   if (activeStudioPanel.value === 'optical-depth') activeStudioPanel.value = null
 })
-
-watch(
-  () => depthOfField.value.enabled,
-  (enabled) => {
-    if (!enabled && activeStudioPanel.value === 'depth-of-field') {
-      activeStudioPanel.value = null
-    }
-  }
-)
 
 function toggleCameraFrame() {
   const current = activeCamera.value
@@ -1213,7 +1206,7 @@ function onCanvasDoubleClick(e: MouseEvent) {
       />
 
       <DepthOfFieldOverlay
-        v-if="depthOfField.enabled && isDepthOfFieldEditorOpen && !activeCamera.enabled"
+        v-if="isDepthOfFieldEditorOpen && !activeCamera.enabled"
         :model-value="depthOfField"
         :stage-height="stage.height"
         @interaction-start="beginDepthOfFieldInteraction"

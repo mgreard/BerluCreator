@@ -286,7 +286,7 @@ function close(): void {
   <aside
     v-if="open"
     data-tour="asset-library-drawer"
-    class="viewport-glass absolute top-3 left-3 bottom-3 z-30 flex w-[420px] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-2xl border border-white/15 text-white/90 shadow-glass-xl pointer-events-auto select-none transition-all duration-300 ease-out"
+    class="viewport-glass flex w-[420px] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-2xl border border-white/15 text-white/90 shadow-glass-xl pointer-events-auto select-none transition-all duration-300 ease-out"
     role="region"
     :aria-labelledby="drawerTitleId"
     @pointerdown.stop

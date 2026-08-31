@@ -44,6 +44,7 @@ const {
   ignoreOutsideInteractionSelector = undefined,
   updatePositionStrategy = 'optimized',
   showClose = true,
+  closeOnCloseButtonOnly = false,
   disabled = false,
   class: className = undefined,
   bodyClass = undefined
@@ -91,7 +92,7 @@ const contentClasses = computed(() => {
   return cn(
     'z-50 flex flex-col rounded-[var(--radius-md,12px)] border text-text-primary outline-none select-normal overflow-hidden',
     surface === 'glass'
-      ? 'glass-premium border-border-default shadow-glass-lg'
+      ? 'viewport-glass border-border-default shadow-glass-lg'
       : 'bg-bg-elevated border-border-default shadow-glass-lg',
     'animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 duration-300 ease-out',
     widthClasses.value,
@@ -100,12 +101,21 @@ const contentClasses = computed(() => {
 })
 
 function handleOpenChange(val: boolean) {
+  if (!val && closeOnCloseButtonOnly) return
+  setOpen(val)
+}
+
+function setOpen(val: boolean) {
   isOpen.value = val
   if (val) {
     emit('open')
   } else {
     emit('close')
   }
+}
+
+function closeFromButton() {
+  setOpen(false)
 }
 
 function toggle() {
@@ -164,7 +174,19 @@ function handlePointerDownOutside(event: Event): void {
             </div>
           </slot>
 
-          <PopoverClose v-if="showClose" as-child>
+          <IconButton
+            v-if="showClose && closeOnCloseButtonOnly"
+            variant="ghost"
+            size="xs"
+            aria-label="Fermer"
+            title="Fermer"
+            class="text-text-muted hover:text-text-primary shrink-0 ml-auto"
+            @click="closeFromButton"
+          >
+            <Icon name="close" size="xs" />
+          </IconButton>
+
+          <PopoverClose v-else-if="showClose" as-child>
             <IconButton
               variant="ghost"
               size="xs"
@@ -178,6 +200,18 @@ function handlePointerDownOutside(event: Event): void {
         </header>
 
         <!-- Bouton de fermeture flottant si aucun header n'est rendu -->
+        <IconButton
+          v-else-if="showClose && closeOnCloseButtonOnly"
+          variant="ghost"
+          size="xs"
+          aria-label="Fermer"
+          title="Fermer"
+          class="absolute top-2.5 right-2.5 z-10 text-text-muted hover:text-text-primary rounded-full bg-bg-surface/90 border border-border-default hover:bg-bg-surface-hover shadow-xs"
+          @click="closeFromButton"
+        >
+          <Icon name="close" size="xs" />
+        </IconButton>
+
         <PopoverClose v-else-if="showClose" as-child>
           <IconButton
             variant="ghost"

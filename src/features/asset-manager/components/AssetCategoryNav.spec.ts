@@ -143,5 +143,9 @@ describe('AssetCategoryNav', () => {
     expect(projectIndex).toBe(0)
     expect(calibrationIndex).toBe(importIndex + 1)
     expect(buttons[calibrationIndex]?.attributes('aria-pressed')).toBe('false')
+
+    const navigation = wrapper.get('[data-tour="asset-library-nav"]')
+    expect(navigation.classes()).toContain('w-80')
+    expect(navigation.classes()).toContain('max-w-[calc(100vw-1.5rem)]')
   })
 })

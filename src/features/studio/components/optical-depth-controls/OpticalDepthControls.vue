@@ -60,7 +60,7 @@ function beginKeyboardInteraction(event: KeyboardEvent) {
         :min="0"
         :max="100"
         :step="5"
-        size="sm"
+        class="w-80 mx-auto"
         variant="gradient"
         label="Ajustement fin"
         show-value

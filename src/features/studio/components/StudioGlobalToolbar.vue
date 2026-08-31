@@ -71,11 +71,12 @@ defineSlots<{
         :model-value="isDepthOfFieldEditorOpen"
         title="Profondeur de champ"
         description="Plans lointains et proches"
-        width="w-72 max-w-[calc(100vw-2rem)]"
+        width="lg"
         surface="glass"
-        align="center"
-        :side-offset="10"
+        align="start"
+        :side-offset="20"
         body-class="p-3"
+        close-on-close-button-only
         ignore-outside-interaction-selector="[data-depth-overlay]"
         @update:model-value="emit('updateDepthOfFieldEditorOpen', $event)"
       >
@@ -104,7 +105,7 @@ defineSlots<{
         width="lg"
         surface="glass"
         align="start"
-        :side-offset="10"
+        :side-offset="20"
         body-class="p-3"
         @update:model-value="emit('updateVisualEffectsOpen', $event)"
       >

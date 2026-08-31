@@ -67,12 +67,12 @@ const deskPlacementOptions: SegmentOption[] = [
         :model-value="opticalDepthOpen"
         title="Distance caméra"
         description="Affecte le flou, jamais l’ordre des calques."
-        width="w-80 max-w-[calc(100vw-2rem)]"
+        width="lg"
         surface="glass"
         side="top"
         align="center"
-        :side-offset="10"
-        body-class="p-3"
+        :side-offset="20"
+        body-class="p-3 overflow-hidden"
         data-optical-depth-popover
         @update:model-value="emit('update:opticalDepthOpen', $event)"
       >

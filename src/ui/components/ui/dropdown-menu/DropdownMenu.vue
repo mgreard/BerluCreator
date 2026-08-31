@@ -30,7 +30,7 @@ const dropdownMenuVariants = cva(
     variants: {
       surface: {
         solid: 'bg-bg-elevated border-border-default shadow-glass-lg',
-        glass: 'glass-premium border-border-default shadow-glass-lg'
+        glass: 'viewport-glass border-border-default shadow-glass-lg'
       },
       width: {
         auto: 'w-auto',

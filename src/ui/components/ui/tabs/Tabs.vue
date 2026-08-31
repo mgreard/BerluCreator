@@ -131,7 +131,7 @@ const navClasses = computed(() => {
       'w-full bg-bg-surface/60 border border-border-default p-1 rounded-2xl gap-1 backdrop-blur-md',
     variant === 'underline' && 'border-b border-border-default gap-6',
     variant === 'rail' &&
-      'h-full w-16 flex-col gap-2 border-r border-border-subtle bg-bg-surface/30 px-2 py-3 backdrop-blur-md',
+      'h-full w-16 flex-col gap-2 border-r border-border-subtle bg-bg-surface/30 px-2 py-3',
     className
   )
 })

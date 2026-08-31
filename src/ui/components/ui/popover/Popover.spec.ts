@@ -58,7 +58,7 @@ describe('Popover (Colocated Unit Tests)', () => {
     await vi.waitFor(() => {
       const content = document.body.querySelector('[data-reka-popper-content-wrapper] > div')
       expect(content?.classList.contains('bg-bg-elevated')).toBe(true)
-      expect(content?.classList.contains('glass-premium')).toBe(false)
+      expect(content?.classList.contains('viewport-glass')).toBe(false)
     })
     solidWrapper.unmount()
 
@@ -70,7 +70,7 @@ describe('Popover (Colocated Unit Tests)', () => {
 
     await vi.waitFor(() => {
       const content = document.body.querySelector('[data-reka-popper-content-wrapper] > div')
-      expect(content?.classList.contains('glass-premium')).toBe(true)
+      expect(content?.classList.contains('viewport-glass')).toBe(true)
     })
     glassWrapper.unmount()
   })
@@ -129,5 +129,41 @@ describe('Popover (Colocated Unit Tests)', () => {
     expect(guarded).toBe(true)
     expect(outsideEvent.defaultPrevented).toBe(true)
     protectedZone.remove()
+  })
+
+  it('6. Reste ouvert jusqu’au clic sur la croix en mode persistant', async () => {
+    const onUpdateModelValue = vi.fn()
+    const wrapper = mount(Popover, {
+      props: {
+        modelValue: true,
+        title: 'Réglages persistants',
+        closeOnCloseButtonOnly: true,
+        'onUpdate:modelValue': onUpdateModelValue
+      },
+      slots: {
+        trigger: '<button class="persistent-trigger">Réglages</button>',
+        default: 'Contenu persistant'
+      },
+      attachTo: document.body
+    })
+
+    const root = wrapper.findComponent({ name: 'PopoverRoot' })
+    root.vm.$emit('update:open', false)
+    await wrapper.vm.$nextTick()
+
+    expect(onUpdateModelValue).not.toHaveBeenCalled()
+    expect(wrapper.emitted('close')).toBeUndefined()
+
+    const closeButton = document.body.querySelector<HTMLButtonElement>(
+      '[data-reka-popper-content-wrapper] button[aria-label="Fermer"]'
+    )
+    expect(closeButton).not.toBeNull()
+    closeButton?.click()
+    await wrapper.vm.$nextTick()
+
+    expect(onUpdateModelValue).toHaveBeenCalledTimes(1)
+    expect(onUpdateModelValue).toHaveBeenLastCalledWith(false)
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    wrapper.unmount()
   })
 })

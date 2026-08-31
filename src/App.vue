@@ -116,58 +116,60 @@ function handleProjectMenuOpen(open: boolean): void {
   <div
     class="h-screen w-screen flex bg-bg-base text-text-primary overflow-hidden font-sans select-none"
   >
-    <!-- Rail de Catégories (Permanent à gauche, pleine hauteur) -->
-    <AssetCategoryNav
-      v-model:selection="activeAssetSelection"
-      v-model:drawer-open="showAssetDrawer"
-      data-tour="asset-library"
-      @open-settings="isSettingsOpen = true"
-      @project-menu-open="handleProjectMenuOpen"
-    />
 
     <!-- Viewport & Canvas de Composition (Occupe tout l'espace restant) -->
     <div
-      class="relative flex-1 h-full overflow-hidden"
+      class="h-full overflow-hidden"
       @pointerdown="showAssetDrawer = false"
     >
-      <StudioViewport
+      <div class="absolute top-20 left-3 bottom-20 z-30 flex flex-row gap-3">
+        <!-- Rail de Catégories (Permanent à gauche, pleine hauteur) -->
+        <AssetCategoryNav
+          v-model:selection="activeAssetSelection"
+          v-model:drawer-open="showAssetDrawer"
+          data-tour="asset-library"
+          @open-settings="isSettingsOpen = true"
+          @project-menu-open="handleProjectMenuOpen"
+        /><!-- Tiroir des assets d'une catégorie en Glassmorphism (Flottant sur le viewport à gauche) -->
+        <Transition
+          enter-active-class="transition-all duration-200 ease-out"
+          enter-from-class="opacity-0 -translate-x-4 scale-95"
+          enter-to-class="opacity-100 translate-x-0 scale-100"
+          leave-active-class="transition-all duration-150 ease-in"
+          leave-from-class="opacity-100 translate-x-0 scale-100"
+          leave-to-class="opacity-0 -translate-x-4 scale-95"
+        >
+          <AssetCategoryDrawer
+            v-if="showAssetDrawer"
+            v-model:open="showAssetDrawer"
+            :selection="activeAssetSelection"
+          />
+        </Transition>
+
+      </div>
+    </div>
+     <StudioViewport
         :is-saved-snapshots-open="isSavedSnapshotsOpen"
         @open-export="isExportOpen = true"
         @toggle-saved-snapshots="isSavedSnapshotsOpen = !isSavedSnapshotsOpen"
         @start-tour="(key) => startTour(key)"
       />
 
-      <!-- Tiroir des assets d'une catégorie en Glassmorphism (Flottant sur le viewport à gauche) -->
-      <Transition
-        enter-active-class="transition-all duration-200 ease-out"
-        enter-from-class="opacity-0 -translate-x-4 scale-95"
-        enter-to-class="opacity-100 translate-x-0 scale-100"
-        leave-active-class="transition-all duration-150 ease-in"
-        leave-from-class="opacity-100 translate-x-0 scale-100"
-        leave-to-class="opacity-0 -translate-x-4 scale-95"
-      >
-        <AssetCategoryDrawer
-          v-if="showAssetDrawer"
-          v-model:open="showAssetDrawer"
-          :selection="activeAssetSelection"
-        />
-      </Transition>
-
-      <!-- Panneau des compositions en Glassmorphism (Flottant sur le viewport à droite) -->
-      <Transition
-        enter-active-class="transition-all duration-200 ease-out"
-        enter-from-class="opacity-0 translate-x-4 scale-95"
-        enter-to-class="opacity-100 translate-x-0 scale-100"
-        leave-active-class="transition-all duration-150 ease-in"
-        leave-from-class="opacity-100 translate-x-0 scale-100"
-        leave-to-class="opacity-0 translate-x-4 scale-95"
-      >
-        <ViewportSnapshotsPanel
-          v-if="isSavedSnapshotsOpen"
-          v-model:open="isSavedSnapshotsOpen"
-        />
-      </Transition>
-    </div>
+        <!-- Panneau des compositions en Glassmorphism (Flottant sur le viewport à droite) -->
+        <Transition
+          enter-active-class="transition-all duration-200 ease-out"
+          enter-from-class="opacity-0 translate-x-4 scale-95"
+          enter-to-class="opacity-100 translate-x-0 scale-100"
+          leave-active-class="transition-all duration-150 ease-in"
+          leave-from-class="opacity-100 translate-x-0 scale-100"
+          leave-to-class="opacity-0 translate-x-4 scale-95"
+        >
+          <ViewportSnapshotsPanel
+            v-if="isSavedSnapshotsOpen"
+            v-model:open="isSavedSnapshotsOpen"
+          />
+        </Transition>
+      
 
     <ResizableSidebar
       v-if="rigCatalogStore.isCalibrationOpen"

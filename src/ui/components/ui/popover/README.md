@@ -12,6 +12,7 @@ Composant d'affichage de contenu flottant riche et interactif ancré à un décl
 - **Collisions maîtrisées :** Position fixe par défaut, marge de 8 px, comportement sticky et masquage lorsque le déclencheur disparaît.
 - **Contrôle Réactif :** Binding bidirectionnel `v-model` (`modelValue`), support du mode modal (`modal`) et flèche d'ancrage (`arrow`).
 - **Fermeture Intelligente :** Bouton de fermeture intégré dans l'en-tête ou bouton flottant si aucun titre n'est spécifié.
+- **Persistance optionnelle :** `closeOnCloseButtonOnly` maintient le contenu ouvert lors des clics extérieurs, d'Échap et d'un nouveau clic sur le déclencheur ; seule la croix intégrée le ferme.
 - **Surface explicite :** Fond opaque `solid` par défaut ; glassmorphism disponible via `surface="glass"`.
 
 ---
@@ -42,6 +43,7 @@ Composant d'affichage de contenu flottant riche et interactif ancré à un décl
 | `ignoreOutsideInteractionSelector` | `string`                                      | `undefined` | Conserve le popover ouvert pour les interactions extérieures correspondantes |
 | `updatePositionStrategy` | `'always' \| 'optimized'`                            | `'optimized'` | Fréquence de recalcul                     |
 | `showClose`   | `boolean`                                                       | `true`      | Affiche le bouton de fermeture             |
+| `closeOnCloseButtonOnly` | `boolean`                                               | `false`     | Ferme uniquement via la croix intégrée     |
 | `disabled`    | `boolean`                                                       | `false`     | Désactive l'ouverture                      |
 | `class`       | `string`                                                        | `undefined` | Classes CSS complémentaires sur le contenu |
 | `bodyClass`   | `string`                                                        | `undefined` | Classes du corps scrollable                |

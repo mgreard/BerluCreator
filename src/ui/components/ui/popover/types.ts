@@ -54,6 +54,8 @@ export interface PopoverProps {
   updatePositionStrategy?: 'always' | 'optimized'
   /** Affiche le bouton de fermeture dans l'en-tête */
   showClose?: boolean
+  /** Ignore toute fermeture sauf celle demandée par le bouton de fermeture intégré */
+  closeOnCloseButtonOnly?: boolean
   /** Désactive le déclencheur */
   disabled?: boolean
   /** Classes CSS supplémentaires pour le PopoverContent */

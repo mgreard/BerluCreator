@@ -296,7 +296,7 @@ function toggleRigCalibration(): void {
 
 <template>
   <nav
-    class="library-nav viewport-glass m-3 flex w-64 min-h-0 shrink-0 flex-col gap-3 overflow-hidden rounded-2xl border border-white/15 p-3 text-white/90 shadow-glass-xl select-none transition-all duration-300 ease-out"
+    class="library-nav viewport-glass flex w-80 max-w-[calc(100vw-1.5rem)] min-h-0 shrink-0 flex-col gap-3 overflow-hidden rounded-2xl border border-white/15 p-3 text-white/90 shadow-glass-xl select-none transition-all duration-300 ease-out"
     aria-label="Catégories de sprites"
     data-tour="asset-library-nav"
   >
