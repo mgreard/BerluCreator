@@ -63,6 +63,7 @@ export const useAssetStore = defineStore('asset', () => {
   const librarySelection = ref<ActiveSelection>({ type: 'all' })
   const searchQuery = ref('')
   const isLoading = ref(false)
+  const hasLoaded = ref(false)
 
   const selectedAsset = computed(
     () => assets.value.find((asset) => asset.id === selectedAssetId.value) ?? null
@@ -74,6 +75,7 @@ export const useAssetStore = defineStore('asset', () => {
       assets.value = await assetRepository.getAll()
     } finally {
       isLoading.value = false
+      hasLoaded.value = true
     }
   }
 
@@ -153,6 +155,7 @@ export const useAssetStore = defineStore('asset', () => {
     librarySelection,
     searchQuery,
     isLoading,
+    hasLoaded,
     selectedAsset,
     loadAssets,
     importAsset,

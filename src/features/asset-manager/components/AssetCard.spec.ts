@@ -46,6 +46,24 @@ describe('AssetCard', () => {
     expect(releaseSource).toHaveBeenCalledWith('blob-head')
   })
 
+  it('conserve un skeleton jusqu’au décodage de la miniature puis affiche les erreurs', async () => {
+    const wrapper = mount(AssetCard, { props: { asset: headAsset } })
+    await flushPromises()
+
+    const image = wrapper.get('img')
+    expect(wrapper.get(`[aria-label="Chargement de ${headAsset.name}"]`)).toBeDefined()
+    expect(image.classes()).toContain('opacity-0')
+
+    await image.trigger('load')
+    expect(wrapper.find(`[aria-label="Chargement de ${headAsset.name}"]`).exists()).toBe(false)
+    expect(image.classes()).toContain('opacity-100')
+
+    await image.trigger('error')
+    expect(
+      wrapper.get(`[aria-label="Aperçu indisponible pour ${headAsset.name}"]`).text()
+    ).toContain('Aperçu indisponible')
+  })
+
   it('conserve les actions de sélection et de suppression', async () => {
     const wrapper = mount(AssetCard, { props: { asset: headAsset } })
     await flushPromises()

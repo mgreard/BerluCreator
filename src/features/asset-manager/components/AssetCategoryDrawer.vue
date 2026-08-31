@@ -14,6 +14,7 @@ import { Icon } from '@/components/ui/icon'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Heading } from '@/components/ui/heading'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/ui/shared/services/toast.service'
 import { useRigRuntime } from '@/features/studio/rig-calibration/useRigRuntime'
 import { useRigCalibrationSelection } from '@/features/studio/rig-calibration/useRigCalibrationSelection'
@@ -190,6 +191,10 @@ const uploadInitialCharacterKey = computed<string | null>(() => {
   return selection.type === 'character' ? selection.characterKey : null
 })
 
+const isInitialLoading = computed(
+  () => displayedAssets.value.length === 0 && (assetStore.isLoading || !assetStore.hasLoaded)
+)
+
 const visibleAssetIds = computed(() => {
   const ids = new Set<string>()
   const groups = new Map(editorStore.currentDocument.groups.map((group) => [group.id, group]))
@@ -302,12 +307,14 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
           {{ currentTitle }}
         </Heading>
         <Badge
+          v-if="!isInitialLoading"
           variant="neutral"
           size="sm"
           class="shrink-0 px-1.5 py-0 text-[9px] normal-case tracking-normal"
         >
           {{ displayedAssets.length }}
         </Badge>
+        <Skeleton v-else aria-hidden="true" variant="rounded" rounded="full" class="h-4 w-7" />
       </div>
     </header>
 
@@ -316,7 +323,23 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
         class="asset-grid grid grid-cols-2 gap-2.5"
         role="listbox"
         :aria-label="`Sprites : ${currentTitle}`"
+        :aria-busy="isInitialLoading"
       >
+        <template v-if="isInitialLoading">
+          <div
+            v-for="index in 6"
+            :key="`asset-skeleton-${index}`"
+            class="asset-card-skeleton flex flex-col gap-2 rounded-xl border border-border-subtle p-2"
+            aria-hidden="true"
+          >
+            <Skeleton variant="rounded" rounded="lg" class="aspect-square w-full" />
+            <Skeleton variant="text" class="h-3 w-4/5" />
+            <div class="flex items-center justify-between gap-3">
+              <Skeleton variant="rounded" rounded="full" class="h-4 w-16" />
+              <Skeleton variant="text" class="h-2.5 w-10" />
+            </div>
+          </div>
+        </template>
         <AssetCard
           v-for="asset in displayedAssets"
           :key="asset.id"
@@ -332,8 +355,12 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
         />
       </div>
 
+      <span v-if="isInitialLoading" class="sr-only" role="status" aria-live="polite">
+        Chargement des sprites…
+      </span>
+
       <EmptyState
-        v-if="displayedAssets.length === 0"
+        v-if="!isInitialLoading && displayedAssets.length === 0"
         icon="search_off"
         title="Aucun sprite dans cette catégorie"
         class="h-48 border-0 bg-transparent shadow-none"
@@ -364,6 +391,11 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
 <style scoped>
 .asset-results {
   container-type: inline-size;
+}
+
+.asset-card-skeleton {
+  background: rgb(20 20 28 / 32%);
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 6%);
 }
 
 .current-category-icon {

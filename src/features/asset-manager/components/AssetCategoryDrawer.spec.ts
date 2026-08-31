@@ -75,4 +75,25 @@ describe('AssetCategoryDrawer', () => {
     expect(wrapper.get('[role="listbox"]').attributes('aria-label')).toContain('Arrière-plans')
     expect(wrapper.classes()).toContain('w-full')
   })
+
+  it('affiche une grille skeleton pendant le chargement initial sans état vide prématuré', async () => {
+    const assetStore = useAssetStore()
+    assetStore.isLoading = true
+
+    const wrapper = mount(AssetCategoryDrawer, {
+      props: { open: true, selection: { type: 'all' } }
+    })
+
+    expect(wrapper.findAll('.asset-card-skeleton')).toHaveLength(6)
+    expect(wrapper.get('[role="listbox"]').attributes('aria-busy')).toBe('true')
+    expect(wrapper.text()).toContain('Chargement des sprites')
+    expect(wrapper.text()).not.toContain('Aucun sprite dans cette catégorie')
+
+    assetStore.isLoading = false
+    assetStore.hasLoaded = true
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findAll('.asset-card-skeleton')).toHaveLength(0)
+    expect(wrapper.text()).toContain('Aucun sprite dans cette catégorie')
+  })
 })

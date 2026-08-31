@@ -242,7 +242,15 @@ function selectCategoryTab(key: string | number): void {
         </span>
         <div class="min-w-0">
           <Heading as="h2" variant="sm" class="truncate text-xs font-bold"> Bibliothèque </Heading>
-          <span class="block text-[10px] text-text-muted">
+          <span
+            v-if="assetStore.isLoading || (!assetStore.hasLoaded && assetStore.assets.length === 0)"
+            class="block text-[10px] text-text-muted"
+            role="status"
+            aria-live="polite"
+          >
+            Chargement des sprites…
+          </span>
+          <span v-else class="block text-[10px] text-text-muted">
             {{ assetStore.assets.length }} sprites disponibles
           </span>
         </div>

@@ -17,6 +17,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Icon } from '@/components/ui/icon'
 import { Heading } from '@/components/ui/heading'
 import { SelectableSurface } from '@/components/ui/selectable-surface'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const { asset, selected = false, allowDuplicate = false } = defineProps<{
   asset: Asset
@@ -34,6 +35,7 @@ const emit = defineEmits<{
 const previewContainerRef = useTemplateRef<HTMLElement>('previewContainer')
 const previewUrl = ref<string | null>(null)
 const shouldLoadPreview = ref(false)
+const previewState = ref<'idle' | 'loading' | 'loaded' | 'error'>('idle')
 const category = computed(() => ASSET_CATEGORIES[asset.category])
 const accentStyle = computed(() => ({ '--asset-accent': category.value.color }))
 let previewObserver: IntersectionObserver | null = null
@@ -63,6 +65,7 @@ watchEffect(async () => {
 
   const blobId = asset.blobId
   previewUrl.value = null
+  previewState.value = 'loading'
   let disposed = false
   let sourceAcquired = false
   let thumbnailAcquired = false
@@ -101,9 +104,18 @@ watchEffect(async () => {
       previewUrl.value = sourceUrl
     }
   } catch (error) {
+    previewState.value = 'error'
     console.error('Erreur chargement preview blob :', error)
   }
 })
+
+function onPreviewLoaded(): void {
+  previewState.value = 'loaded'
+}
+
+function onPreviewError(): void {
+  previewState.value = 'error'
+}
 </script>
 
 <template>
@@ -115,15 +127,39 @@ watchEffect(async () => {
     :style="accentStyle"
     @click="emit('select', asset)"
   >
-    <div ref="previewContainer" class="asset-preview relative w-full aspect-square rounded-lg flex items-center justify-center overflow-hidden border">
+    <div
+      ref="previewContainer"
+      class="asset-preview relative w-full aspect-square rounded-lg flex items-center justify-center overflow-hidden border"
+      :aria-busy="previewState === 'idle' || previewState === 'loading'"
+    >
       <img
         v-if="previewUrl"
         :src="previewUrl"
         :alt="asset.name"
-        class="size-full object-contain pointer-events-none transition-transform duration-300 ease-out motion-reduce:transition-none group-hover:scale-[1.02]"
+        class="size-full object-contain pointer-events-none transition-[opacity,transform] duration-300 ease-out motion-reduce:transition-none group-hover:scale-[1.02]"
+        :class="previewState === 'loaded' ? 'opacity-100' : 'opacity-0'"
+        @load="onPreviewLoaded"
+        @error="onPreviewError"
       />
-      <div v-else class="animate-pulse flex items-center justify-center text-text-muted">
-        <Icon name="image" size="md" />
+      <Skeleton
+        v-if="previewState === 'idle' || previewState === 'loading'"
+        variant="rounded"
+        rounded="lg"
+        class="absolute inset-0 size-full"
+        :aria-label="`Chargement de ${asset.name}`"
+      >
+        <span class="absolute inset-0 flex items-center justify-center text-text-muted/60">
+          <Icon name="image" size="md" />
+        </span>
+      </Skeleton>
+      <div
+        v-else-if="previewState === 'error'"
+        class="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-3 text-center text-text-muted"
+        role="img"
+        :aria-label="`Aperçu indisponible pour ${asset.name}`"
+      >
+        <Icon name="broken_image" size="md" />
+        <span class="text-[9px] font-medium">Aperçu indisponible</span>
       </div>
 
       <IconButton

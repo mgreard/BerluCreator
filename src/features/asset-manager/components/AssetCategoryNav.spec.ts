@@ -145,4 +145,19 @@ describe('AssetCategoryNav', () => {
     expect(navigation.classes()).toContain('w-full')
     expect(wrapper.get('input[aria-label="Rechercher dans la bibliothèque"]')).toBeDefined()
   })
+
+  it('annonce le chargement initial avant d’afficher le nombre de sprites', async () => {
+    const assetStore = useAssetStore()
+    const wrapper = mount(AssetCategoryNav, {
+      props: { selection: { type: 'all' }, drawerOpen: true }
+    })
+
+    expect(wrapper.get('[role="status"]').text()).toContain('Chargement des sprites')
+
+    assetStore.hasLoaded = true
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('0 sprites disponibles')
+  })
 })
