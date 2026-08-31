@@ -1,7 +1,7 @@
 import { cva } from 'class-variance-authority'
 
 export const comboboxTriggerVariants = cva(
-  'relative inline-flex items-center justify-between w-full bg-bg-surface/60 border border-border-default rounded-xl transition-all duration-150 text-text-primary outline-none select-none backdrop-blur-md focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-bg-base',
+  'relative inline-flex items-center justify-between w-full bg-bg-surface border border-border-default rounded-xl transition-all duration-150 text-text-primary outline-none select-none focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-bg-base',
   {
     variants: {
       size: {

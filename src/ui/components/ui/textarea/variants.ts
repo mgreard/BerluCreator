@@ -1,7 +1,7 @@
 import { cva } from 'class-variance-authority'
 
 export const textareaContainerVariants = cva(
-  'relative flex w-full min-w-0 bg-bg-surface/90 hover:bg-bg-surface border border-border-default hover:border-border-hover rounded-xl transition-all duration-150 overflow-hidden box-border text-text-primary shadow-glass-xs backdrop-blur-md focus-within:border-border-focus focus-within:bg-bg-surface focus-within:ring-2 focus-within:ring-primary/15',
+  'relative flex w-full min-w-0 bg-bg-surface hover:bg-bg-surface-hover border border-border-default hover:border-border-hover rounded-xl transition-all duration-150 overflow-hidden box-border text-text-primary shadow-xs focus-within:border-border-focus focus-within:bg-bg-surface focus-within:ring-2 focus-within:ring-primary/15',
   {
     variants: {
       hasError: {

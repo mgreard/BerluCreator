@@ -69,19 +69,64 @@ const newCharacterName = ref('')
 // Catégorie active résolue
 const selectedCategory = ref<AssetCategory>('character_full')
 
-const CHARACTER_SKELETON_SLOTS: { id: AssetCategory; label: string; icon: string; description: string }[] = [
-  { id: 'body', label: 'Corps & Buste', icon: 'body_system', description: 'Tronc et vêtements de base' },
-  { id: 'head', label: 'Tête & Visage', icon: 'face', description: 'Expressions faciales et regards' }
+const CHARACTER_SKELETON_SLOTS: {
+  id: AssetCategory
+  label: string
+  icon: string
+  description: string
+}[] = [
+  {
+    id: 'body',
+    label: 'Corps & Buste',
+    icon: 'body_system',
+    description: 'Tronc et vêtements de base'
+  },
+  {
+    id: 'head',
+    label: 'Tête & Visage',
+    icon: 'face',
+    description: 'Expressions faciales et regards'
+  }
 ]
 
 const STAGE_SLOTS: { id: AssetCategory; label: string; icon: string; description: string }[] = [
-  { id: 'background', label: 'Arrière-plan', icon: 'tv_gen', description: 'Décors et fonds de plateau' },
-  { id: 'eyes', label: 'Accessoires Visage', icon: 'visibility', description: 'Lunettes et effets de visage libres' },
-  { id: 'props_host', label: 'Accessoires Personnage', icon: 'apparel', description: 'Chapeaux, objets tenus' },
+  {
+    id: 'background',
+    label: 'Arrière-plan',
+    icon: 'tv_gen',
+    description: 'Décors et fonds de plateau'
+  },
+  {
+    id: 'eyes',
+    label: 'Accessoires Visage',
+    icon: 'visibility',
+    description: 'Lunettes et effets de visage libres'
+  },
+  {
+    id: 'props_host',
+    label: 'Accessoires Personnage',
+    icon: 'apparel',
+    description: 'Chapeaux, objets tenus'
+  },
   { id: 'desk', label: 'Bureau', icon: 'desk', description: 'Comptoir et mobilier' },
-  { id: 'props_desk', label: 'Objets du Bureau', icon: 'inventory_2', description: 'Objets posés sur la table' },
-  { id: 'props_set', label: 'Accessoires Plateau', icon: 'category', description: 'Éléments de décor plateau' },
-  { id: 'foreground', label: 'Premier Plan', icon: 'filter_frames', description: 'Titrage, synthés, ambiances' }
+  {
+    id: 'props_desk',
+    label: 'Objets du Bureau',
+    icon: 'inventory_2',
+    description: 'Objets posés sur la table'
+  },
+  {
+    id: 'props_set',
+    label: 'Accessoires Plateau',
+    icon: 'category',
+    description: 'Éléments de décor plateau'
+  },
+  {
+    id: 'foreground',
+    label: 'Premier Plan',
+    icon: 'filter_frames',
+    description: 'Titrage, synthés, ambiances'
+  }
 ]
 
 const scopeOptions = [
@@ -186,9 +231,8 @@ function selectedEditorCharacterKey(): string | null {
 }
 
 function resetFormFromContext(): void {
-  const fallbackCategory = assetStore.selectedCategory === 'all'
-    ? 'character_full'
-    : assetStore.selectedCategory
+  const fallbackCategory =
+    assetStore.selectedCategory === 'all' ? 'character_full' : assetStore.selectedCategory
   applyCategoryContext(props.initialCategory ?? fallbackCategory)
 
   const preferredKey = props.initialCharacterKey ?? selectedEditorCharacterKey()
@@ -201,14 +245,18 @@ function resetFormFromContext(): void {
   newCharacterName.value = ''
 }
 
-watch(open, (isOpen) => {
-  if (isOpen) {
-    isImporting.value = false
-    resetFormFromContext()
-    return
-  }
-  clearPreparedFiles()
-}, { immediate: true })
+watch(
+  open,
+  (isOpen) => {
+    if (isOpen) {
+      isImporting.value = false
+      resetFormFromContext()
+      return
+    }
+    clearPreparedFiles()
+  },
+  { immediate: true }
+)
 
 function clearPreparedFiles() {
   for (const entry of preparedFiles.value) {
@@ -268,7 +316,13 @@ async function performImport() {
       try {
         const isCharacter = ASSET_CATEGORIES[item.category].placementMode === 'character-anchored'
         const character = isCharacter ? resolveCharacterMetadata(item.category) : undefined
-        const asset = await assetStore.importAsset(item.file, item.category, item.name, [], character)
+        const asset = await assetStore.importAsset(
+          item.file,
+          item.category,
+          item.name,
+          [],
+          character
+        )
         importedAssetId = asset.id
         editorStore.assignAssetToGroup(asset.id, item.category, null, item.name)
         removePreparedFile(item.id)
@@ -279,7 +333,8 @@ async function performImport() {
           try {
             await assetStore.discardImportedAsset(importedAssetId)
           } catch {
-            message += ' Le rollback de l’asset importé a échoué ; rechargez la bibliothèque avant de réessayer.'
+            message +=
+              ' Le rollback de l’asset importé a échoué ; rechargez la bibliothèque avant de réessayer.'
           }
         }
         item.error = message
@@ -288,7 +343,11 @@ async function performImport() {
 
     if (successCount > 0) toast.success('Import terminé', `${successCount} sprite(s) importé(s).`)
     if (preparedFiles.value.length === 0) open.value = false
-    else toast.error('Certains imports ont échoué', 'Corrigez les fichiers signalés puis relancez l’import.')
+    else
+      toast.error(
+        'Certains imports ont échoué',
+        'Corrigez les fichiers signalés puis relancez l’import.'
+      )
   } finally {
     isImporting.value = false
   }
@@ -331,23 +390,28 @@ function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetada
   >
     <div class="space-y-4">
       <!-- 1. Sélecteur de Domaine & Type de pièce -->
-      <div class="space-y-3 p-3.5 rounded-2xl bg-bg-surface/60 border border-border-default shadow-xs">
+      <div
+        class="space-y-3 rounded-2xl border border-border-default bg-bg-surface p-3.5 shadow-xs"
+      >
         <div class="flex items-center justify-between">
-          <span class="text-xs font-bold text-text-primary uppercase tracking-wider">Classification du sprite</span>
-          <Badge variant="neutral" size="sm" class="font-mono text-[10px] flex items-center gap-1.5 px-2 py-0.5">
-            <span class="size-2 rounded-full" :style="{ backgroundColor: ASSET_CATEGORIES[selectedCategory]?.color }" />
+          <span class="text-xs font-bold text-text-primary uppercase tracking-wider"
+            >Classification du sprite</span
+          >
+          <Badge
+            variant="neutral"
+            size="sm"
+            class="font-mono text-[10px] flex items-center gap-1.5 px-2 py-0.5"
+          >
+            <span
+              class="size-2 rounded-full"
+              :style="{ backgroundColor: ASSET_CATEGORIES[selectedCategory]?.color }"
+            />
             <span>{{ ASSET_CATEGORIES[selectedCategory]?.label }}</span>
           </Badge>
         </div>
 
         <!-- Onglets principaux : Personnages vs Plateau -->
-        <SegmentedControl
-          v-model="assetScope"
-          :options="scopeOptions"
-          size="sm"
-          variant="glass"
-          class="w-full"
-        />
+        <SegmentedControl v-model="assetScope" :options="scopeOptions" size="sm" class="w-full" />
 
         <!-- Section A : Personnages -->
         <div v-if="assetScope === 'character'" class="space-y-3 pt-1">
@@ -356,7 +420,6 @@ function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetada
               v-model="characterTargetMode"
               :options="characterTargetOptions"
               size="sm"
-              variant="glass"
               class="w-full"
             />
           </FormGroup>
@@ -406,16 +469,25 @@ function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetada
               :class="[
                 characterMode === 'full'
                   ? 'bg-primary/15 border-primary text-text-primary ring-1 ring-primary/40 shadow-xs'
-                  : 'bg-bg-surface/50 border-border-subtle text-text-secondary hover:text-text-primary hover:border-primary/30'
+                  : 'bg-bg-surface border-border-subtle text-text-secondary hover:text-text-primary hover:border-primary/30'
               ]"
               @click="selectFullCharacterMode"
             >
-              <div class="p-2 rounded-lg shrink-0" :class="characterMode === 'full' ? 'bg-primary/20 text-primary' : 'bg-bg-surface text-text-muted'">
+              <div
+                class="p-2 rounded-lg shrink-0"
+                :class="
+                  characterMode === 'full'
+                    ? 'bg-primary/20 text-primary'
+                    : 'bg-bg-surface text-text-muted'
+                "
+              >
                 <Icon name="person" size="sm" />
               </div>
               <div class="min-w-0">
                 <div class="text-xs font-bold leading-tight">Personnage complet</div>
-                <div class="text-[10px] text-text-muted mt-0.5 leading-snug">Avatar entier ou Buste de référence (Torse)</div>
+                <div class="text-[10px] text-text-muted mt-0.5 leading-snug">
+                  Avatar entier ou Buste de référence (Torse)
+                </div>
               </div>
             </SelectableSurface>
 
@@ -427,16 +499,25 @@ function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetada
               :class="[
                 characterMode === 'skeleton'
                   ? 'bg-primary/15 border-primary text-text-primary ring-1 ring-primary/40 shadow-xs'
-                  : 'bg-bg-surface/50 border-border-subtle text-text-secondary hover:text-text-primary hover:border-primary/30'
+                  : 'bg-bg-surface border-border-subtle text-text-secondary hover:text-text-primary hover:border-primary/30'
               ]"
               @click="selectSkeletonMode"
             >
-              <div class="p-2 rounded-lg shrink-0" :class="characterMode === 'skeleton' ? 'bg-primary/20 text-primary' : 'bg-bg-surface text-text-muted'">
+              <div
+                class="p-2 rounded-lg shrink-0"
+                :class="
+                  characterMode === 'skeleton'
+                    ? 'bg-primary/20 text-primary'
+                    : 'bg-bg-surface text-text-muted'
+                "
+              >
                 <Icon name="view_in_ar" size="sm" />
               </div>
               <div class="min-w-0">
                 <div class="text-xs font-bold leading-tight">Élément du squelette</div>
-                <div class="text-[10px] text-text-muted mt-0.5 leading-snug">Membre articulé (Tête, Bras, Yeux, Bouche...)</div>
+                <div class="text-[10px] text-text-muted mt-0.5 leading-snug">
+                  Membre articulé (Tête, Bras, Yeux, Bouche...)
+                </div>
               </div>
             </SelectableSurface>
           </div>
@@ -459,11 +540,16 @@ function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetada
                 :class="[
                   selectedCategory === slot.id
                     ? 'bg-primary/20 border-primary text-text-primary font-bold shadow-xs'
-                    : 'bg-bg-surface/40 border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover/60'
+                    : 'bg-bg-surface border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover'
                 ]"
                 @click="selectedCategory = slot.id"
               >
-                <Icon :name="slot.icon" size="xs" :style="{ color: ASSET_CATEGORIES[slot.id]?.color }" class="shrink-0" />
+                <Icon
+                  :name="slot.icon"
+                  size="xs"
+                  :style="{ color: ASSET_CATEGORIES[slot.id]?.color }"
+                  class="shrink-0"
+                />
                 <span class="truncate text-[11px]">{{ slot.label }}</span>
               </SelectableSurface>
             </div>
@@ -488,11 +574,16 @@ function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetada
               :class="[
                 selectedCategory === slot.id
                   ? 'bg-primary/20 border-primary text-text-primary font-bold shadow-xs'
-                  : 'bg-bg-surface/40 border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover/60'
+                  : 'bg-bg-surface border-border-subtle text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover'
               ]"
               @click="selectedCategory = slot.id"
             >
-              <Icon :name="slot.icon" size="xs" :style="{ color: ASSET_CATEGORIES[slot.id]?.color }" class="shrink-0" />
+              <Icon
+                :name="slot.icon"
+                size="xs"
+                :style="{ color: ASSET_CATEGORIES[slot.id]?.color }"
+                class="shrink-0"
+              />
               <span class="truncate text-[11px]">{{ slot.label }}</span>
             </SelectableSurface>
           </div>
@@ -505,7 +596,7 @@ function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetada
         :class="[
           isDragging
             ? 'border-primary bg-primary/10 shadow-glow-sm'
-            : 'border-border-subtle hover:border-primary/50 bg-bg-surface/40 hover:bg-bg-surface-hover/60'
+            : 'border-border-subtle bg-bg-surface hover:border-primary/50 hover:bg-bg-surface-hover'
         ]"
         @dragover.prevent="isDragging = true"
         @dragleave.prevent="isDragging = false"
@@ -530,7 +621,8 @@ function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetada
           Cliquez pour choisir des images ou glissez-déposez vos fichiers ici
         </Text>
         <Text variant="caption" color="muted" class="text-[11px] mt-1 text-center">
-          PNG, WebP, JPG ou SVG. Les dimensions natives et proportions $840\times908$ sont conservées.
+          PNG, WebP, JPG ou SVG. Les dimensions natives et proportions $840\times908$ sont
+          conservées.
         </Text>
       </div>
 
@@ -538,7 +630,12 @@ function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetada
       <div v-if="preparedFiles.length > 0" class="space-y-2">
         <div class="flex items-center justify-between">
           <Heading as="h4" variant="sm">Fichiers à importer ({{ preparedFiles.length }})</Heading>
-          <Button variant="ghost" size="xs" class="text-text-muted hover:text-danger" @click="clearPreparedFiles">
+          <Button
+            variant="ghost"
+            size="xs"
+            class="text-text-muted hover:text-danger"
+            @click="clearPreparedFiles"
+          >
             Tout effacer
           </Button>
         </div>
@@ -547,10 +644,14 @@ function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetada
           <div
             v-for="item in preparedFiles"
             :key="item.id"
-            class="flex items-center gap-3 p-2 rounded-lg border bg-bg-surface/80 text-xs"
+            class="flex items-center gap-3 rounded-lg border bg-bg-surface p-2 text-xs"
             :class="item.error ? 'border-danger/60' : 'border-border-subtle'"
           >
-            <img :src="item.previewUrl" :alt="item.name" class="w-10 h-10 object-contain rounded bg-bg-base border border-border-subtle shrink-0" />
+            <img
+              :src="item.previewUrl"
+              :alt="item.name"
+              class="w-10 h-10 object-contain rounded bg-bg-base border border-border-subtle shrink-0"
+            />
             <div class="min-w-0 flex-1 space-y-1">
               <Input v-model="item.name" size="sm" class="h-7 text-xs font-semibold" />
               <div class="text-[10px] text-text-muted">
@@ -593,8 +694,12 @@ function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetada
 </template>
 
 <style scoped>
-.custom-scrollbar::-webkit-scrollbar { width: 4px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.12);
   border-radius: 9999px;

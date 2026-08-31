@@ -108,7 +108,8 @@ const availableCharacters = computed<CharacterSummary[]>(() => {
 })
 
 watch(
-  () => editorStore.currentDocument.groups.map((g) => (g.kind === 'character' ? g.activeRigId : null)),
+  () =>
+    editorStore.currentDocument.groups.map((g) => (g.kind === 'character' ? g.activeRigId : null)),
   () => {
     const sel = selection.value
     if (sel.type === 'character' && sel.categoryId) {
@@ -279,8 +280,7 @@ function toggleRigCalibration(): void {
       (layer) => layer.groupId === group.id && !layer.muted && layer.category === 'body'
     ) ??
     editorStore.currentDocument.layers.find(
-      (layer) =>
-        layer.groupId === group.id && !layer.muted && layer.category !== 'character_full'
+      (layer) => layer.groupId === group.id && !layer.muted && layer.category !== 'character_full'
     )
   if (!preferredLayer || group.activeMode !== 'rig') {
     preferredLayer = rigRuntime.activateRig(rig) ?? undefined
@@ -296,7 +296,7 @@ function toggleRigCalibration(): void {
 
 <template>
   <nav
-    class="library-nav viewport-glass flex w-80 max-w-[calc(100vw-1.5rem)] min-h-0 shrink-0 flex-col gap-3 overflow-hidden rounded-2xl border border-white/15 p-3 text-white/90 shadow-glass-xl select-none transition-all duration-300 ease-out"
+    class="library-nav flex w-80 max-w-[calc(100vw-1.5rem)] min-h-0 shrink-0 flex-col gap-3 overflow-hidden border-r border-border-default bg-bg-surface p-3 text-text-primary select-none"
     aria-label="Catégories de sprites"
     data-tour="asset-library-nav"
   >
@@ -309,7 +309,7 @@ function toggleRigCalibration(): void {
       <Button
         variant="secondary"
         size="sm"
-        class="justify-center gap-1.5 border-white/10 bg-white/5 px-2 text-[11px] font-semibold hover:bg-white/10"
+        class="justify-center gap-1.5 px-2 text-[11px] font-semibold"
         title="Importer des sprites"
         @click="isUploadModalOpen = true"
       >
@@ -320,8 +320,12 @@ function toggleRigCalibration(): void {
       <Button
         variant="secondary"
         size="sm"
-        class="justify-center gap-1.5 border-white/10 bg-white/5 px-2 text-[11px] font-semibold transition-all duration-300 ease-out hover:bg-white/10"
-        :class="rigCatalog.isCalibrationOpen ? 'border-primary/60 bg-primary/20 text-white' : undefined"
+        class="justify-center gap-1.5 px-2 text-[11px] font-semibold"
+        :class="
+          rigCatalog.isCalibrationOpen
+            ? 'border-primary/60 bg-primary/15 text-text-primary'
+            : undefined
+        "
         :aria-pressed="rigCatalog.isCalibrationOpen"
         title="Calibrer les rigs de personnages"
         @click="toggleRigCalibration"
@@ -331,17 +335,19 @@ function toggleRigCalibration(): void {
       </Button>
     </div>
 
-    <div class="h-px shrink-0 bg-white/10" aria-hidden="true" />
+    <div class="h-px shrink-0 bg-border-subtle" aria-hidden="true" />
 
     <!-- Seule la navigation des catégories occupe la zone scrollable. -->
     <div class="flex min-h-0 flex-1 flex-col gap-2">
       <div class="flex shrink-0 items-center justify-between px-1">
-        <span class="text-[11px] font-bold uppercase tracking-wider text-white/60">Catégories</span>
+        <span class="text-[11px] font-bold uppercase tracking-wider text-text-muted"
+          >Catégories</span
+        >
         <IconButton
           :icon="drawerOpen ? 'left_panel_close' : 'left_panel_open'"
           size="xs"
           variant="ghost"
-          class="size-6 text-white/60 hover:text-white"
+          class="size-6 text-text-muted hover:text-text-primary"
           :aria-label="drawerOpen ? 'Fermer le tiroir de sprites' : 'Ouvrir le tiroir de sprites'"
           :title="drawerOpen ? 'Fermer le tiroir de sprites' : 'Ouvrir le tiroir de sprites'"
           @click="toggleDrawer"
@@ -349,7 +355,7 @@ function toggleRigCalibration(): void {
       </div>
 
       <div
-        class="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-black/15"
+        class="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border-default bg-bg-base"
       >
         <Tabs
           :model-value="activeCategoryTab"
@@ -361,12 +367,14 @@ function toggleRigCalibration(): void {
           @update:model-value="selectCategoryTab"
         />
 
-        <div class="custom-scrollbar min-w-0 flex-1 overflow-y-auto border-l border-white/10 p-1.5">
+        <div
+          class="custom-scrollbar min-w-0 flex-1 overflow-y-auto border-l border-border-default p-1.5"
+        >
           <div v-if="selection.type === 'all'" class="grid gap-2 p-2">
-            <Text as="p" variant="caption" color="inherit" class="text-[11px] font-semibold text-white/85">
+            <Text as="p" variant="caption" color="primary" class="text-[11px] font-semibold">
               Toute la bibliothèque
             </Text>
-            <Text as="p" variant="caption" color="inherit" class="text-[10px] leading-relaxed text-white/45">
+            <Text as="p" variant="caption" color="muted" class="text-[10px] leading-relaxed">
               {{ assetStore.assets.length }} sprites disponibles, toutes catégories confondues.
             </Text>
           </div>
@@ -388,7 +396,9 @@ function toggleRigCalibration(): void {
                   :count="characterAssets(character.key).length"
                   accent="#f59e0b"
                   density="compact"
-                  :selected="selection.characterKey === character.key && selection.categoryId === null"
+                  :selected="
+                    selection.characterKey === character.key && selection.categoryId === null
+                  "
                   @click="selectCharacter(character.key, null)"
                 />
                 <div

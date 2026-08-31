@@ -22,7 +22,7 @@ const isMaterialIcon = computed(() => {
     :class="
       cn(
         'text-center flex flex-col items-center justify-center py-12 px-6 rounded-3xl',
-        'bg-bg-surface/50 border border-border-subtle backdrop-blur-md shadow-glass-sm text-text-muted',
+        'bg-bg-surface border border-border-subtle shadow-sm text-text-muted',
         className
       )
     "

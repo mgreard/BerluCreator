@@ -47,7 +47,7 @@ defineSlots<{
 
 <template>
   <ToolbarRoot
-    class="viewport-glass absolute top-3 left-1/2 -translate-x-1/2 z-40 flex flex-nowrap items-center gap-1 rounded-xl border border-white/15 px-1.5 py-1 text-white/90 shadow-glass-xl pointer-events-auto select-none max-w-[calc(100%-1.5rem)] whitespace-nowrap overflow-x-auto scrollbar-none transition-all duration-300 ease-out"
+    class="flex min-h-12 w-full min-w-0 flex-nowrap items-center justify-between gap-2 overflow-x-auto bg-bg-elevated px-3 py-1.5 text-text-primary pointer-events-auto select-none whitespace-nowrap scrollbar-none"
     data-tour="viewport-top-actions"
     aria-label="Actions globales du studio"
     orientation="horizontal"
@@ -55,24 +55,42 @@ defineSlots<{
     @dblclick.stop
   >
     <div class="flex shrink-0 items-center gap-1">
-
-      <div class="flex shrink-0 items-center gap-0.5 rounded-lg border border-white/15 bg-black/25 p-0.5">
+      <div
+        class="flex shrink-0 items-center gap-0.5 rounded-lg border border-border-default bg-bg-surface p-0.5"
+      >
         <ToolbarButton as-child>
-          <IconButton icon="undo" size="sm" variant="ghost" class="viewport-action size-8" aria-label="Annuler la dernière action (Ctrl+Z)" title="Annuler (Ctrl+Z)" :disabled="!canUndo" @click="emit('undo')" />
+          <IconButton
+            icon="undo"
+            size="sm"
+            variant="ghost"
+            class="viewport-action size-8"
+            aria-label="Annuler la dernière action (Ctrl+Z)"
+            title="Annuler (Ctrl+Z)"
+            :disabled="!canUndo"
+            @click="emit('undo')"
+          />
         </ToolbarButton>
         <ToolbarButton as-child>
-          <IconButton icon="redo" size="sm" variant="ghost" class="viewport-action size-8" aria-label="Rétablir la dernière action (Ctrl+Shift+Z)" title="Rétablir (Ctrl+Shift+Z)" :disabled="!canRedo" @click="emit('redo')" />
+          <IconButton
+            icon="redo"
+            size="sm"
+            variant="ghost"
+            class="viewport-action size-8"
+            aria-label="Rétablir la dernière action (Ctrl+Shift+Z)"
+            title="Rétablir (Ctrl+Shift+Z)"
+            :disabled="!canRedo"
+            @click="emit('redo')"
+          />
         </ToolbarButton>
       </div>
 
-      <ToolbarSeparator class="mx-1 h-5 w-px shrink-0 bg-white/15" />
+      <ToolbarSeparator class="mx-1 h-5 w-px shrink-0 bg-border-default" />
 
       <Popover
         :model-value="isDepthOfFieldEditorOpen"
         title="Profondeur de champ"
         description="Plans lointains et proches"
         width="lg"
-        surface="glass"
         align="start"
         :side-offset="20"
         body-class="p-3"
@@ -86,10 +104,18 @@ defineSlots<{
               variant="ghost"
               size="xs"
               class="h-7 gap-1 px-2 text-[11px] font-medium transition-all duration-300 ease-out"
-              :class="(depthOfField.enabled || isDepthOfFieldEditorOpen) ? 'bg-primary/30 text-white border border-primary/60' : 'text-white/80 hover:text-white hover:bg-white/10'"
+              :class="
+                depthOfField.enabled || isDepthOfFieldEditorOpen
+                  ? 'bg-primary/15 text-text-primary border border-primary/60'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover'
+              "
               title="Ouvrir les réglages du flou de profondeur"
             >
-              <Icon name="blur_on" size="xs" :class="depthOfField.enabled ? 'text-cyan-400' : 'text-primary'" />
+              <Icon
+                name="blur_on"
+                size="xs"
+                :class="depthOfField.enabled ? 'text-cyan-400' : 'text-primary'"
+              />
               <span>Flou</span>
               <span v-if="depthOfField.enabled" class="size-1.5 rounded-full bg-cyan-400" />
             </Button>
@@ -103,7 +129,6 @@ defineSlots<{
         title="Effets visuels"
         description="Colorimétrie et effets stylisés"
         width="lg"
-        surface="glass"
         align="start"
         :side-offset="20"
         body-class="p-3"
@@ -116,10 +141,18 @@ defineSlots<{
               variant="ghost"
               size="xs"
               class="h-7 gap-1 px-2 text-[11px] font-medium transition-all duration-300 ease-out"
-              :class="(hasVisualEffects || isVisualEffectsOpen) ? 'bg-primary/30 text-white border border-primary/60' : 'text-white/80 hover:text-white hover:bg-white/10'"
+              :class="
+                hasVisualEffects || isVisualEffectsOpen
+                  ? 'bg-primary/15 text-text-primary border border-primary/60'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover'
+              "
               title="Ouvrir le panneau des effets visuels"
             >
-              <Icon name="auto_fix_high" size="xs" :class="hasVisualEffects ? 'text-amber-400' : 'text-primary'" />
+              <Icon
+                name="auto_fix_high"
+                size="xs"
+                :class="hasVisualEffects ? 'text-amber-400' : 'text-primary'"
+              />
               <span>Effets</span>
               <span v-if="hasVisualEffects" class="size-1.5 rounded-full bg-amber-400" />
             </Button>
@@ -133,7 +166,11 @@ defineSlots<{
           variant="ghost"
           size="xs"
           class="h-7 gap-1 px-2 text-[11px] font-medium transition-colors"
-          :class="activeCamera.enabled ? 'bg-primary/30 text-white border border-primary/60' : 'text-white/80 hover:text-white hover:bg-white/10'"
+          :class="
+            activeCamera.enabled
+              ? 'bg-primary/15 text-text-primary border border-primary/60'
+              : 'text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover'
+          "
           title="Activer/Désactiver le cadrage caméra"
           @click="emit('toggleCameraFrame')"
         >
@@ -141,12 +178,9 @@ defineSlots<{
           <span>Cadrage</span>
         </Button>
       </ToolbarButton>
-
-
     </div>
 
-    <ToolbarSeparator class="mx-1 h-5 w-px shrink-0 bg-white/15" />
-
+    <ToolbarSeparator class="mx-1 h-5 w-px shrink-0 bg-border-default" />
 
     <div class="flex shrink-0 items-center gap-1.5">
       <ToolbarButton as-child>
@@ -155,7 +189,11 @@ defineSlots<{
           variant="ghost"
           size="xs"
           class="h-7 gap-1 px-2 text-[11px] font-medium transition-colors"
-          :class="isSavedSnapshotsOpen ? 'bg-primary/30 text-white border border-primary/60' : 'text-white/80 hover:text-white hover:bg-white/10'"
+          :class="
+            isSavedSnapshotsOpen
+              ? 'bg-primary/15 text-text-primary border border-primary/60'
+              : 'text-text-secondary hover:text-text-primary hover:bg-bg-surface-hover'
+          "
           title="Ouvrir le panneau des compositions sauvegardées"
           @click="emit('toggleSavedSnapshots')"
         >

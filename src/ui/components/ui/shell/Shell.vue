@@ -41,7 +41,7 @@ function toggleMobileDrawer() {
 const sidebarDesktopClasses = computed(() => {
   return cn(
     'hidden md:flex flex-col shrink-0 h-screen sticky top-0 z-30',
-    'bg-bg-surface/70 border-r border-border-default backdrop-blur-xl',
+    'bg-bg-surface border-r border-border-default',
     'transition-[width] duration-300 ease-in-out',
     sidebarOpen.value ? 'w-64' : 'w-20'
   )
@@ -61,7 +61,7 @@ const sidebarDesktopClasses = computed(() => {
           class="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden transition-opacity duration-300 animate-in fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0"
         />
         <DialogContent
-          class="fixed inset-y-0 left-0 z-50 w-72 flex flex-col md:hidden bg-bg-base/95 border-r border-border-default backdrop-blur-2xl shadow-glass-lg transition-transform duration-300 ease-in-out outline-none animate-in slide-in-from-left data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left"
+          class="fixed inset-y-0 left-0 z-50 w-72 flex flex-col md:hidden bg-bg-base border-r border-border-default shadow-lg transition-transform duration-300 ease-in-out outline-none animate-in slide-in-from-left data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left"
         >
           <VisuallyHidden>
             <DialogTitle>{{ brandTitle }} - Navigation mobile</DialogTitle>
@@ -152,7 +152,7 @@ const sidebarDesktopClasses = computed(() => {
     <div class="flex-1 min-w-0 flex flex-col min-h-screen">
       <!-- Header Persistant -->
       <header
-        class="h-16 sticky top-0 z-20 flex items-center justify-between px-4 sm:px-6 border-b border-border-default bg-bg-surface/70 backdrop-blur-xl shrink-0"
+        class="h-16 sticky top-0 z-20 flex items-center justify-between px-4 sm:px-6 border-b border-border-default bg-bg-surface shrink-0"
       >
         <div class="flex items-center gap-3 min-w-0">
           <!-- Bouton Menu Burger Mobile -->

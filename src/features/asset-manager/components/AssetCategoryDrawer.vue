@@ -286,7 +286,7 @@ function close(): void {
   <aside
     v-if="open"
     data-tour="asset-library-drawer"
-    class="viewport-glass flex w-[420px] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-2xl border border-white/15 text-white/90 shadow-glass-xl pointer-events-auto select-none transition-all duration-300 ease-out"
+    class="flex w-[420px] min-w-0 max-w-[calc(100vw-20rem)] flex-col overflow-hidden bg-bg-elevated text-text-primary pointer-events-auto select-none"
     role="region"
     :aria-labelledby="drawerTitleId"
     @pointerdown.stop
@@ -294,7 +294,9 @@ function close(): void {
     @keydown.esc.stop="close"
   >
     <!-- En-tête du tiroir -->
-    <header class="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-black/15 px-3">
+    <header
+      class="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border-default bg-bg-elevated px-3"
+    >
       <div class="flex min-w-0 items-center gap-2">
         <span
           v-if="currentCategory"
@@ -303,10 +305,12 @@ function close(): void {
         >
           <Icon :name="currentCategory.icon" size="xs" />
         </span>
-        <Heading :id="drawerTitleId" as="h3" variant="sm" class="truncate text-xs font-bold text-white">
+        <Heading :id="drawerTitleId" as="h3" variant="sm" class="truncate text-xs font-bold">
           {{ currentTitle }}
         </Heading>
-        <span class="shrink-0 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold text-white/50">
+        <span
+          class="shrink-0 rounded-full border border-border-default bg-bg-surface px-1.5 py-0.5 text-[9px] font-semibold text-text-muted"
+        >
           {{ displayedAssets.length }}
         </span>
       </div>
@@ -316,7 +320,7 @@ function close(): void {
           icon="close"
           size="sm"
           variant="ghost"
-          class="viewport-action size-7 text-white/60 hover:text-white"
+          class="size-7 text-text-muted hover:text-text-primary"
           aria-label="Fermer le tiroir de sprites"
           @click="close"
         />
@@ -324,12 +328,12 @@ function close(): void {
     </header>
 
     <!-- Barre de recherche -->
-    <div class="shrink-0 border-b border-white/10 p-2.5">
+    <div class="shrink-0 border-b border-border-default p-2.5">
       <Input
         v-model="assetStore.searchQuery"
         size="sm"
         placeholder="Filtrer par nom ou tag…"
-        class="bg-black/25 text-xs text-white placeholder:text-white/40 border-white/10"
+        class="text-xs"
       />
     </div>
 
@@ -341,7 +345,9 @@ function close(): void {
           :key="asset.id"
           :asset="asset"
           :selected="visibleAssetIds.has(asset.id)"
-          :allow-duplicate="FREE_ACCESSORY_CATEGORIES.includes(asset.category as 'eyes' | 'props_host')"
+          :allow-duplicate="
+            FREE_ACCESSORY_CATEGORIES.includes(asset.category as 'eyes' | 'props_host')
+          "
           @select="onSelectAsset"
           @duplicate="onDuplicateAsset"
           @delete="onDeleteAsset"
@@ -353,7 +359,7 @@ function close(): void {
         v-if="displayedAssets.length === 0"
         icon="search_off"
         title="Aucun sprite dans cette catégorie"
-        class="h-48 border-0 bg-transparent shadow-none text-white/70"
+        class="h-48 border-0 bg-transparent shadow-none"
       >
         <template #action>
           <Button variant="secondary" size="sm" @click="isUploadModalOpen = true">

@@ -30,7 +30,7 @@ const deskPlacementOptions: SegmentOption[] = [
 </script>
 
 <template>
-  <Teleport to="#studio-overlay-host">
+  <Teleport to="#studio-selection-overlay-host">
     <ToolbarRoot
       v-if="open"
       orientation="horizontal"

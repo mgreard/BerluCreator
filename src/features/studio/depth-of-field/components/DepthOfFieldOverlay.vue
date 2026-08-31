@@ -14,8 +14,11 @@ interface LineInteraction {
 }
 
 const model = defineModel<DepthOfFieldOverlayValue>({ required: true })
-const { stageHeight, disabled = false, class: className = undefined } =
-  defineProps<DepthOfFieldOverlayProps>()
+const {
+  stageHeight,
+  disabled = false,
+  class: className = undefined
+} = defineProps<DepthOfFieldOverlayProps>()
 const emit = defineEmits<DepthOfFieldOverlayEmits>()
 
 const overlayRef = useTemplateRef<HTMLDivElement>('overlay')
@@ -144,12 +147,11 @@ onBeforeUnmount(() => {
     >
       <div class="w-full border-t-2 border-dashed border-primary/80" aria-hidden="true" />
       <div
-        class="viewport-glass absolute left-3 flex min-h-[44px] items-center gap-1.5 rounded-xl border border-primary/50 px-3 text-[11px] font-semibold text-white/90"
+        class="absolute left-3 flex min-h-[44px] items-center gap-1.5 rounded-xl border border-primary/50 bg-bg-elevated px-3 text-[11px] font-semibold text-text-primary shadow-md"
       >
         <Icon name="height" size="xs" class="text-primary" />
         <span>Limite de netteté {{ focusPercent }} %</span>
       </div>
     </div>
-
   </div>
 </template>

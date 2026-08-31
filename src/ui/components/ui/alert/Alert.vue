@@ -40,7 +40,7 @@ function handleDismiss() {
 const classes = computed(() => {
   return cn(
     // Base
-    'relative flex items-start gap-3 w-full p-3.5 rounded-2xl border backdrop-blur-md transition-all box-border mb-3 shadow-glass-sm',
+    'relative flex items-start gap-3 w-full p-3.5 rounded-2xl border transition-all box-border mb-3 shadow-sm',
 
     // Variants
     variant === 'info' && 'bg-info-bg border-info/30 text-info',

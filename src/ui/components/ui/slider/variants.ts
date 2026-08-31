@@ -39,7 +39,7 @@ export const sliderRangeVariants = cva('absolute rounded-full', {
 })
 
 export const sliderThumbVariants = cva(
-  "relative block rounded-full border border-border-default bg-bg-surface backdrop-blur-md shadow-glass-md transition-[background-color,border-color,box-shadow] duration-150 ease-out hover:scale-110 active:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base cursor-grab active:cursor-grabbing touch-manipulation disabled:pointer-events-none disabled:opacity-50 after:content-[''] after:absolute after:-inset-3 after:min-w-[44px] after:min-h-[44px] after:pointer-events-auto",
+  "relative block rounded-full border border-border-default bg-bg-surface shadow-md transition-[background-color,border-color,box-shadow] duration-150 ease-out hover:scale-110 active:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base cursor-grab active:cursor-grabbing touch-manipulation disabled:pointer-events-none disabled:opacity-50 after:content-[''] after:absolute after:-inset-3 after:min-w-[44px] after:min-h-[44px] after:pointer-events-auto",
   {
     variants: {
       size: {

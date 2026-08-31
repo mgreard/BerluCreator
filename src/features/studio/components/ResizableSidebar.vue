@@ -109,7 +109,7 @@ watch(width, (value) => {
     :id="panelId"
     :data-side="side"
     :style="panelStyle"
-    class="relative h-full shrink-0 overflow-visible transition-[width,min-width] duration-200 ease-out"
+    class="relative h-full shrink-0 overflow-visible transition-[width,min-width] duration-200 ease-out max-[1100px]:!w-full max-[1100px]:!min-w-0"
     :class="{ 'transition-none': isResizing }"
   >
     <div v-if="open" class="h-full w-full overflow-hidden">
@@ -117,7 +117,7 @@ watch(width, (value) => {
     </div>
     <div
       v-else
-      class="flex h-full w-10 items-start justify-center border-border-subtle bg-bg-surface/50 pt-2 backdrop-blur-md"
+      class="flex h-full w-10 items-start justify-center border-border-subtle bg-bg-surface pt-2"
       :class="side === 'left' ? 'border-r' : 'border-l'"
     >
       <IconButton
@@ -140,7 +140,7 @@ watch(width, (value) => {
       :value-max="maxWidth"
       :value-now="width"
       :value-text="`${width} pixels`"
-      :class="side === 'left' ? '-right-1' : '-left-1'"
+      :class="`${side === 'left' ? '-right-1' : '-left-1'} max-[1100px]:hidden`"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="stopResizing"

@@ -2,7 +2,10 @@
 import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
-import { SelectionTransformBox, type SelectionTransformValue } from '@/components/ui/selection-transform-box'
+import {
+  SelectionTransformBox,
+  type SelectionTransformValue
+} from '@/components/ui/selection-transform-box'
 import { isGeometryPointOpaque } from '@/features/studio/engine/alpha-hit-test'
 import type {
   RigCalibrationViewportEmits,
@@ -196,9 +199,7 @@ function getBodyFrameCoordinates(e: PointerEvent): { x: number; y: number } | nu
 
 function hitTestPartAtPoint(point: { x: number; y: number }): RigViewportPartItem | null {
   // Parcourir les pièces du haut vers le bas (zIndex descendant)
-  const reversed = [...activePartsList.value].sort(
-    (a, b) => (b.zIndex ?? 10) - (a.zIndex ?? 10)
-  )
+  const reversed = [...activePartsList.value].sort((a, b) => (b.zIndex ?? 10) - (a.zIndex ?? 10))
 
   for (const part of reversed) {
     if (!part.url) continue
@@ -456,7 +457,7 @@ onUnmounted(() => {
 <template>
   <div
     ref="container"
-    class="relative flex h-full w-full select-none items-center justify-center overflow-hidden bg-bg-base/95 focus:outline-none"
+    class="relative flex h-full w-full select-none items-center justify-center overflow-hidden bg-bg-base focus:outline-none"
     tabindex="0"
     :class="[
       isSpacePressed || activeDrag?.type === 'pan'
@@ -472,7 +473,7 @@ onUnmounted(() => {
   >
     <!-- Contrôles Viewport Supérieur Droit (Zoom & Outils) -->
     <div
-      class="viewport-glass pointer-events-auto absolute top-3 right-3 z-30 flex items-center gap-1 rounded-xl border border-white/10 p-1 shadow-glass-md backdrop-blur-md"
+      class="pointer-events-auto absolute top-3 right-3 z-30 flex items-center gap-1 rounded-xl border border-border-default bg-bg-elevated p-1 shadow-md"
       @pointerdown.stop
     >
       <IconButton
@@ -487,7 +488,7 @@ onUnmounted(() => {
       <Button
         variant="ghost"
         size="xs"
-        class="viewport-action px-2 py-0.5 font-mono text-[11px] font-semibold hover:text-white"
+        class="viewport-action px-2 py-0.5 font-mono text-[11px] font-semibold hover:text-text-primary"
         title="Réinitialiser le zoom"
         @click="resetZoom"
       >
@@ -502,7 +503,7 @@ onUnmounted(() => {
         aria-label="Zoom avant"
         @click="zoomIn"
       />
-      <div class="mx-1 h-3 w-px bg-white/15" />
+      <div class="mx-1 h-3 w-px bg-border-default" />
       <IconButton
         icon="fit_screen"
         size="xs"
@@ -639,9 +640,3 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
-
-<style scoped>
-.viewport-glass {
-  background: oklch(0.18 0.02 260 / 0.75);
-}
-</style>

@@ -56,7 +56,7 @@ function getIconName(type: ToastMessage['type']): string {
           v-for="toastItem in activeToasts"
           :key="toastItem.id"
           :class="[
-            'pointer-events-auto flex items-start gap-3 p-4 rounded-2xl bg-bg-elevated/95 backdrop-blur-2xl shadow-glass-xl relative overflow-hidden transition-all text-text-primary border',
+            'pointer-events-auto flex items-start gap-3 p-4 rounded-2xl bg-bg-elevated shadow-lg relative overflow-hidden transition-all text-text-primary border',
             toastItem.type === 'error' && 'border-danger/60',
             toastItem.type === 'warning' && 'border-warning/60',
             toastItem.type === 'success' && 'border-success/60',

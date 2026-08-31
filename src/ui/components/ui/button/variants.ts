@@ -8,7 +8,7 @@ export const buttonVariants = cva(
         primary:
           'bg-primary text-text-inverse font-bold hover:bg-primary-hover active:bg-primary-active shadow-glass-sm',
         secondary:
-          'bg-bg-surface text-text-primary border-border-default hover:bg-bg-surface-hover hover:border-border-hover active:bg-bg-surface-active shadow-glass-sm backdrop-blur-md',
+          'bg-bg-surface text-text-primary border-border-default hover:bg-bg-surface-hover hover:border-border-hover active:bg-bg-surface-active shadow-sm',
         ghost:
           'bg-transparent text-text-secondary hover:bg-bg-surface-hover hover:text-text-primary active:bg-bg-surface-active',
         destructive:

@@ -48,20 +48,14 @@ const items = computed<DropdownMenuItemDef[]>(() => [
 </script>
 
 <template>
-  <DropdownMenu
-    v-model:open="isOpen"
-    :items="items"
-    surface="glass"
-    align="end"
-    class="viewport-glass border-white/15 text-white/90 shadow-glass-xl"
-  >
+  <DropdownMenu v-model:open="isOpen" :items="items" align="end">
     <template #trigger>
       <ToolbarButton as-child>
         <Button
           variant="ghost"
           size="xs"
-          class="h-7 gap-1 px-2 text-[11px] text-white/70 hover:text-white hover:bg-white/10"
-          :class="isOpen ? 'bg-white/15 border-white/30 text-white' : ''"
+          class="h-7 gap-1 px-2 text-[11px]"
+          :class="isOpen ? 'bg-bg-surface-hover text-text-primary' : ''"
           title="Visites guidées et aide"
         >
           <Icon name="help" size="xs" />

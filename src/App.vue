@@ -6,10 +6,12 @@ import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useWorkspaceBackupStore } from '@/features/project/stores/useWorkspaceBackupStore'
 import { syncBundledAssets } from '@/features/asset-manager/services/demo-asset-seeder'
 
-import AssetCategoryNav from '@/features/asset-manager/components/AssetCategoryNav.vue'
-import AssetCategoryDrawer from '@/features/asset-manager/components/AssetCategoryDrawer.vue'
-import type { ActiveSelection } from '@/features/asset-manager/types/asset-nav.types'
+import AssetLibraryPanel from '@/features/asset-manager/components/AssetLibraryPanel.vue'
 import StudioViewport from '@/features/studio/components/StudioViewport.vue'
+import {
+  StudioWorkspaceLayout,
+  type StudioWorkspacePane
+} from '@/features/studio/components/studio-workspace-layout'
 import ProjectSettingsModal from '@/features/project/components/ProjectSettingsModal.vue'
 import ExportModal from '@/features/project/components/ExportModal.vue'
 import { ViewportSnapshotsPanel } from '@/features/editor/components/viewport-snapshots-panel'
@@ -31,15 +33,10 @@ let stopRigCatalogWatch: WatchStopHandle | null = null
 const isSettingsOpen = ref(false)
 const isExportOpen = ref(false)
 const isSavedSnapshotsOpen = ref(false)
-const activeAssetSelection = ref<ActiveSelection>({ type: 'all' })
 const showAssetDrawer = ref(true)
+const compactPane = ref<StudioWorkspacePane>('studio')
 
-const {
-  currentSteps,
-  currentStorageKey,
-  tourRef,
-  startTour
-} = useProductTourManager(
+const { currentSteps, currentStorageKey, tourRef, startTour } = useProductTourManager(
   () => rigCatalogStore.isCalibrationOpen,
   () => isSavedSnapshotsOpen.value,
   () => isExportOpen.value,
@@ -57,16 +54,13 @@ const {
 )
 
 onMounted(async () => {
-  // 1. Initialiser l'espace de travail unique
-  const proj = await projectStore.loadInitialProject()
+  const project = await projectStore.loadInitialProject()
 
-  // 2. Synchroniser les nouveaux sprites livrés sans toucher aux imports personnels
   await syncBundledAssets()
   await assetStore.loadAssets()
   rigCatalogStore.initialize(assetStore.assets)
 
-  // 3. Charger le document courant de l'éditeur
-  await editorStore.loadDocument(proj.editorDocumentId, proj.id)
+  await editorStore.loadDocument(project.editorDocumentId, project.id)
   if (!editorStore.currentDocument.rigCatalogSnapshot) {
     editorStore.syncRigCatalogSnapshot(JSON.stringify(rigCatalogStore.exportCatalog()))
   }
@@ -107,6 +101,14 @@ watch(isSavedSnapshotsOpen, (open) => {
   if (open) rigCatalogStore.closeCalibration()
 })
 
+watch(
+  [isSavedSnapshotsOpen, () => rigCatalogStore.isCalibrationOpen],
+  ([snapshotsOpen, calibrationOpen]) => {
+    if (snapshotsOpen || calibrationOpen) compactPane.value = 'inspector'
+    else if (compactPane.value === 'inspector') compactPane.value = 'studio'
+  }
+)
+
 function handleProjectMenuOpen(open: boolean): void {
   if (open) showAssetDrawer.value = false
 }
@@ -114,80 +116,57 @@ function handleProjectMenuOpen(open: boolean): void {
 
 <template>
   <div
-    class="h-screen w-screen flex bg-bg-base text-text-primary overflow-hidden font-sans select-none"
+    class="flex min-h-0 min-w-0 flex-col overflow-hidden bg-bg-base font-sans text-text-primary select-none"
   >
-
-    <!-- Viewport & Canvas de Composition (Occupe tout l'espace restant) -->
-    <div
-      class="h-full overflow-hidden"
-      @pointerdown="showAssetDrawer = false"
-    >
-      <div class="absolute top-20 left-3 bottom-20 z-30 flex flex-row gap-3">
-        <!-- Rail de Catégories (Permanent à gauche, pleine hauteur) -->
-        <AssetCategoryNav
-          v-model:selection="activeAssetSelection"
-          v-model:drawer-open="showAssetDrawer"
+    <StudioWorkspaceLayout v-model:compact-pane="compactPane">
+      <template #left>
+        <AssetLibraryPanel
+          v-model:open="showAssetDrawer"
           data-tour="asset-library"
           @open-settings="isSettingsOpen = true"
           @project-menu-open="handleProjectMenuOpen"
-        /><!-- Tiroir des assets d'une catégorie en Glassmorphism (Flottant sur le viewport à gauche) -->
-        <Transition
-          enter-active-class="transition-all duration-200 ease-out"
-          enter-from-class="opacity-0 -translate-x-4 scale-95"
-          enter-to-class="opacity-100 translate-x-0 scale-100"
-          leave-active-class="transition-all duration-150 ease-in"
-          leave-from-class="opacity-100 translate-x-0 scale-100"
-          leave-to-class="opacity-0 -translate-x-4 scale-95"
-        >
-          <AssetCategoryDrawer
-            v-if="showAssetDrawer"
-            v-model:open="showAssetDrawer"
-            :selection="activeAssetSelection"
-          />
-        </Transition>
+        />
+      </template>
 
+      <div class="size-full h-screen min-h-0 min-w-0 overflow-hidden" @pointerdown="showAssetDrawer = false">
+        <StudioViewport
+          :is-saved-snapshots-open="isSavedSnapshotsOpen"
+          @open-export="isExportOpen = true"
+          @toggle-saved-snapshots="isSavedSnapshotsOpen = !isSavedSnapshotsOpen"
+          @start-tour="(key) => startTour(key)"
+        />
       </div>
-    </div>
-     <StudioViewport
-        :is-saved-snapshots-open="isSavedSnapshotsOpen"
-        @open-export="isExportOpen = true"
-        @toggle-saved-snapshots="isSavedSnapshotsOpen = !isSavedSnapshotsOpen"
-        @start-tour="(key) => startTour(key)"
-      />
 
-        <!-- Panneau des compositions en Glassmorphism (Flottant sur le viewport à droite) -->
-        <Transition
-          enter-active-class="transition-all duration-200 ease-out"
-          enter-from-class="opacity-0 translate-x-4 scale-95"
-          enter-to-class="opacity-100 translate-x-0 scale-100"
-          leave-active-class="transition-all duration-150 ease-in"
-          leave-from-class="opacity-100 translate-x-0 scale-100"
-          leave-to-class="opacity-0 translate-x-4 scale-95"
+      <template v-if="isSavedSnapshotsOpen || rigCatalogStore.isCalibrationOpen" #right>
+        <ResizableSidebar
+          v-if="isSavedSnapshotsOpen"
+          v-model:open="isSavedSnapshotsOpen"
+          side="right"
+          :default-width="380"
+          :min-width="320"
+          :max-width="520"
+          storage-key="berlu.saved-snapshots-sidebar-width.v1"
         >
-          <ViewportSnapshotsPanel
-            v-if="isSavedSnapshotsOpen"
-            v-model:open="isSavedSnapshotsOpen"
-          />
-        </Transition>
-      
+          <ViewportSnapshotsPanel v-model:open="isSavedSnapshotsOpen" />
+        </ResizableSidebar>
 
-    <ResizableSidebar
-      v-if="rigCatalogStore.isCalibrationOpen"
-      v-model:open="rigCatalogStore.isCalibrationOpen"
-      side="right"
-      :default-width="420"
-      :min-width="360"
-      :max-width="560"
-      storage-key="berlu.rig-calibration-sidebar-width.v1"
-    >
-      <RigCalibrationWorkspace />
-    </ResizableSidebar>
+        <ResizableSidebar
+          v-else
+          v-model:open="rigCatalogStore.isCalibrationOpen"
+          side="right"
+          :default-width="420"
+          :min-width="360"
+          :max-width="560"
+          storage-key="berlu.rig-calibration-sidebar-width.v1"
+        >
+          <RigCalibrationWorkspace />
+        </ResizableSidebar>
+      </template>
+    </StudioWorkspaceLayout>
 
-    <!-- Modales Globales -->
     <ProjectSettingsModal v-model:open="isSettingsOpen" />
     <ExportModal v-model:open="isExportOpen" />
 
-    <!-- Système de notifications Toasts & Tour -->
     <ToastContainer />
     <ProductTour
       ref="tourRef"

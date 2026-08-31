@@ -1,5 +1,5 @@
 export type SegmentedControlSize = 'sm' | 'md' | 'lg'
-export type SegmentedControlVariant = 'glass' | 'primary'
+export type SegmentedControlVariant = 'default' | 'primary' | 'glass'
 
 export interface SegmentOption {
   /** Valeur unique de l'option */

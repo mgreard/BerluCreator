@@ -13,7 +13,7 @@ const model = defineModel<string | number>({
 const {
   options = [],
   size = 'md',
-  variant = 'glass',
+  variant = 'default',
   disabled = false,
   class: className = undefined
 } = defineProps<SegmentedControlProps>()
@@ -23,7 +23,9 @@ const emit = defineEmits<SegmentedControlEmits>()
 const rootClasses = computed(() => {
   return cn(
     'inline-flex items-center select-none box-border outline-none transition-all',
-    'bg-bg-surface/60 border border-border-default p-1 backdrop-blur-md',
+    variant === 'glass'
+      ? 'glass border border-border-default p-1'
+      : 'bg-bg-surface border border-border-default p-1',
     size === 'sm' && 'rounded-xl gap-1',
     size === 'md' && 'rounded-2xl gap-1',
     size === 'lg' && 'rounded-2xl gap-1.5',
@@ -52,6 +54,11 @@ function getItemClasses(opt: SegmentOption) {
     isSelected &&
       variant === 'glass' && [
         'bg-bg-surface text-text-primary border border-border-default shadow-glass-sm font-bold backdrop-blur-md'
+      ],
+
+    isSelected &&
+      variant === 'default' && [
+        'bg-bg-elevated text-text-primary border border-border-default shadow-sm font-bold'
       ],
 
     // État sélectionné (Variante Primary)

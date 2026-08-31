@@ -21,8 +21,7 @@ const emit = defineEmits<RadioGroupEmits>()
 const groupClasses = computed(() => {
   return cn(
     'inline-flex flex-wrap gap-1.5 outline-none',
-    variant === 'segmented' &&
-      'bg-bg-surface/60 border border-border-default rounded-full p-1 gap-1 backdrop-blur-md',
+    variant === 'segmented' && 'bg-bg-surface border border-border-default rounded-full p-1 gap-1',
     variant === 'list' && 'flex-col w-full gap-2',
     disabled && 'opacity-50 cursor-not-allowed pointer-events-none',
     className
@@ -56,7 +55,7 @@ function getItemClasses(opt: RadioOption) {
 
     // Variant Pills
     variant === 'pills' && [
-      'bg-bg-surface/60 border border-border-default rounded-xl px-3.5 py-1.5 text-text-secondary font-medium hover:bg-bg-surface-hover hover:border-border-hover hover:text-text-primary backdrop-blur-md',
+      'bg-bg-surface border border-border-default rounded-xl px-3.5 py-1.5 text-text-secondary font-medium hover:bg-bg-surface-hover hover:border-border-hover hover:text-text-primary',
       size === 'sm' && 'text-xs px-2.5 py-1',
       size === 'md' && 'text-sm px-3.5 py-1.5',
       size === 'lg' && 'text-base px-5 py-2',
@@ -65,7 +64,7 @@ function getItemClasses(opt: RadioOption) {
 
     // Variant List
     variant === 'list' && [
-      'w-full text-left bg-bg-surface/60 border border-border-default rounded-xl p-3.5 hover:bg-bg-surface-hover hover:border-border-hover text-text-primary backdrop-blur-md',
+      'w-full text-left bg-bg-surface border border-border-default rounded-xl p-3.5 hover:bg-bg-surface-hover hover:border-border-hover text-text-primary',
       'data-[state=checked]:bg-primary/15 data-[state=checked]:border-primary data-[state=checked]:text-primary'
     ],
 

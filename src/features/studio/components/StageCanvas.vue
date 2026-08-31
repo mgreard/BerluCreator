@@ -24,8 +24,13 @@ import {
 } from '../depth-of-field'
 import { VisualEffectsControls } from '../visual-effects'
 import { DeskSplitModal } from '@/features/desk-split'
-import type { CameraFrame, CharacterGroup, ColorGradingSettings, ShaderSettings } from '@core/types/editor.types'
-import type { DeskSplitConfig } from '@core/types/asset.types'
+import type {
+  CameraFrame,
+  CharacterGroup,
+  ColorGradingSettings,
+  ShaderSettings
+} from '@core/types/editor.types'
+import type { Asset, DeskSplitConfig } from '@core/types/asset.types'
 import type { TourKey } from '@/features/project/services/tour-definitions'
 import { OPTICAL_DEPTH_PRESETS } from '@core/constants/editor'
 import { toast } from '@/ui/shared/services/toast.service'
@@ -284,6 +289,7 @@ const canEditSelectedDeskPlacement = computed(
 )
 
 const isDeskSplitModalOpen = ref(false)
+const deskSplitAsset = ref<Asset | null>(null)
 
 const selectedDeskAsset = computed(() => {
   if (activeSelectedLayer.value?.category === 'desk') {
@@ -296,9 +302,20 @@ const selectedDeskAsset = computed(() => {
   return null
 })
 
+watch(isDeskSplitModalOpen, (open) => {
+  if (!open) deskSplitAsset.value = null
+})
+
+function openDeskSplitEditor() {
+  const asset = selectedDeskAsset.value
+  if (!asset) return
+  deskSplitAsset.value = asset
+  isDeskSplitModalOpen.value = true
+}
+
 async function handleSaveDeskSplit(config: DeskSplitConfig) {
-  if (!selectedDeskAsset.value) return
-  await assetStore.updateAsset(selectedDeskAsset.value.id, { deskSplit: config })
+  if (!deskSplitAsset.value) return
+  await assetStore.updateAsset(deskSplitAsset.value.id, { deskSplit: config })
   toast.success('Découpe 2.5D enregistrée', 'La profondeur du meuble a été mise à jour.')
 }
 
@@ -369,9 +386,7 @@ function resolvedSelectedOpticalDepth(): number {
     : OPTICAL_DEPTH_PRESETS.focus
 }
 
-const selectedOpticalDepthPercent = computed(() =>
-  Math.round(resolvedSelectedOpticalDepth() * 100)
-)
+const selectedOpticalDepthPercent = computed(() => Math.round(resolvedSelectedOpticalDepth() * 100))
 
 const selectedOpticalDepthLabel = computed(() => {
   const percent = selectedOpticalDepthPercent.value
@@ -922,9 +937,7 @@ function onCanvasPointerDown(e: PointerEvent) {
         dragStartRotation.value = activeSelectedGroup.value.transform.rotation ?? 0
       } else if (activeSelectedLayer.value) {
         dragStartRotation.value =
-          activeSelectedLayer.value.localRotation ??
-          activeSelectedLayer.value.rotation ??
-          0
+          activeSelectedLayer.value.localRotation ?? activeSelectedLayer.value.rotation ?? 0
       }
 
       const target = e.currentTarget as HTMLElement
@@ -946,7 +959,9 @@ function onCanvasPointerDown(e: PointerEvent) {
     // 2. Clic à l'intérieur de la boîte de sélection active (Déplacement uniquement si le pixel est opaque sur la sélection)
     const isOpaqueOnActiveSelection = (() => {
       if (isGroupTarget.value && activeSelectedGroup.value) {
-        const groupLayers = activeLayers.value.filter((l) => l.groupId === activeSelectedGroup.value?.id)
+        const groupLayers = activeLayers.value.filter(
+          (l) => l.groupId === activeSelectedGroup.value?.id
+        )
         return groupLayers.some((layer) => {
           const img = getCachedAssetImage(layer.asset.blobId)
           return img ? isLayerPointOpaque(layer, pos, img) : false
@@ -988,8 +1003,7 @@ function onCanvasPointerDown(e: PointerEvent) {
     const hitGroup = editorStore.currentDocument.groups.find(
       (candidate) => candidate.id === hit.groupId
     )
-    const selectWholeGroup =
-      !isRigCalibrationOpen.value && shouldTargetWholeGroup(hitGroup?.kind)
+    const selectWholeGroup = !isRigCalibrationOpen.value && shouldTargetWholeGroup(hitGroup?.kind)
     if (hit.groupId && selectWholeGroup) {
       editorStore.selectGroupForEditing(hit.groupId)
     } else if (isRigCalibrationOpen.value && hit.groupId === activeCalibrationGroup.value?.id) {
@@ -1214,46 +1228,47 @@ function onCanvasDoubleClick(e: MouseEvent) {
         @commit="commitDepthOfFieldUpdate"
       />
 
-      <!-- Barre d'outils globale fixe, en haut au centre -->
-      <StudioGlobalToolbar
-        :active-camera="activeCamera"
-        :depth-of-field="depthOfField"
-        :has-visual-effects="hasVisualEffects"
-        :is-saved-snapshots-open="isSavedSnapshotsOpen"
-        :is-visual-effects-open="isVisualEffectsEditorOpen"
-        :is-depth-of-field-editor-open="isDepthOfFieldEditorOpen"
-        :can-undo="Boolean(editorStore.canUndo && !isDragging && !isResizing)"
-        :can-redo="Boolean(editorStore.canRedo && !isDragging && !isResizing)"
-        @open-export="emit('openExport')"
-        @toggle-saved-snapshots="emit('toggleSavedSnapshots')"
-        @update-visual-effects-open="setVisualEffectsEditorOpen"
-        @update-depth-of-field-editor-open="setDepthOfFieldEditorOpen"
-        @toggle-camera-frame="toggleCameraFrame"
-        @undo="undoCanvasTransform"
-        @redo="redoCanvasTransform"
-        @start-tour="(key) => emit('startTour', key)"
-      >
-        <template #visualEffects>
-          <VisualEffectsControls
-            v-model:color-grading="colorGradingModel"
-            v-model:shader-settings="shaderModel"
-            @interaction-start="beginVisualEffectsInteraction"
-            @interaction-end="endVisualEffectsInteraction"
-            @reset-all="resetVisualEffects"
-          />
-        </template>
+      <Teleport defer to="#studio-global-toolbar-host">
+        <StudioGlobalToolbar
+          :active-camera="activeCamera"
+          :depth-of-field="depthOfField"
+          :has-visual-effects="hasVisualEffects"
+          :is-saved-snapshots-open="isSavedSnapshotsOpen"
+          :is-visual-effects-open="isVisualEffectsEditorOpen"
+          :is-depth-of-field-editor-open="isDepthOfFieldEditorOpen"
+          :can-undo="Boolean(editorStore.canUndo && !isDragging && !isResizing)"
+          :can-redo="Boolean(editorStore.canRedo && !isDragging && !isResizing)"
+          @open-export="emit('openExport')"
+          @toggle-saved-snapshots="emit('toggleSavedSnapshots')"
+          @update-visual-effects-open="setVisualEffectsEditorOpen"
+          @update-depth-of-field-editor-open="setDepthOfFieldEditorOpen"
+          @toggle-camera-frame="toggleCameraFrame"
+          @undo="undoCanvasTransform"
+          @redo="redoCanvasTransform"
+          @start-tour="(key) => emit('startTour', key)"
+        >
+          <template #visualEffects>
+            <VisualEffectsControls
+              v-model:color-grading="colorGradingModel"
+              v-model:shader-settings="shaderModel"
+              @interaction-start="beginVisualEffectsInteraction"
+              @interaction-end="endVisualEffectsInteraction"
+              @reset-all="resetVisualEffects"
+            />
+          </template>
 
-        <template #depthOfField>
-          <DepthOfFieldControls
-            :model-value="depthOfField"
-            @interaction-start="beginDepthOfFieldInteraction"
-            @update:model-value="scheduleDepthOfFieldUpdate"
-            @commit="commitDepthOfFieldUpdate"
-          />
-        </template>
-      </StudioGlobalToolbar>
+          <template #depthOfField>
+            <DepthOfFieldControls
+              :model-value="depthOfField"
+              @interaction-start="beginDepthOfFieldInteraction"
+              @update:model-value="scheduleDepthOfFieldUpdate"
+              @commit="commitDepthOfFieldUpdate"
+            />
+          </template>
+        </StudioGlobalToolbar>
+      </Teleport>
 
-      <!-- Outils contextuels d'édition directe, flottants en bas au centre -->
+      <!-- Outils contextuels flottants liés à la sélection dans le viewport -->
       <Transition
         enter-active-class="transition-all duration-200 ease-out"
         enter-from-class="opacity-0 translate-y-4 scale-95"
@@ -1293,20 +1308,19 @@ function onCanvasDoubleClick(e: MouseEvent) {
           @optical-depth-interaction-start="beginOpticalDepthInteraction"
           @optical-depth-interaction-end="finishOpticalDepthInteraction"
           @reset-optical-depth="resetSelectedOpticalDepth"
-          @open-desk-split="isDeskSplitModalOpen = true"
+          @open-desk-split="openDeskSplitEditor"
           @flip="flipSelectedHorizontal"
           @delete="removeSelectedFromViewport"
           @clear-selection="editorStore.clearStudioSelection()"
         />
       </Transition>
-
     </div>
 
     <!-- Modale de calibrage de découpe 2.5D du bureau -->
     <DeskSplitModal
-      v-if="selectedDeskAsset"
+      v-if="deskSplitAsset"
       v-model="isDeskSplitModalOpen"
-      :asset="selectedDeskAsset"
+      :asset="deskSplitAsset"
       @save="handleSaveDeskSplit"
     />
   </div>

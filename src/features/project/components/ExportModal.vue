@@ -139,7 +139,7 @@ async function captureCurrentFrame() {
           <Badge variant="accent" size="sm">PNG</Badge>
         </div>
 
-        <div data-tour="export-resolution" class="grid gap-3 rounded-lg border border-border-subtle bg-bg-surface/50 p-3">
+        <div data-tour="export-resolution" class="grid gap-3 rounded-lg border border-border-subtle bg-bg-surface p-3">
           <Switch
             v-model="applyCameraFrames"
             size="sm"

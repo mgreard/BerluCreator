@@ -5,7 +5,7 @@ import { cn } from '@/shared/utils/cn'
 import type { ChipProps, ChipEmits } from './types'
 
 const chipVariants = cva(
-  'inline-flex items-center gap-1.5 rounded-full text-text-secondary bg-bg-surface/70 backdrop-blur-md border border-border-default whitespace-nowrap select-none transition-all duration-150 leading-none outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary shadow-glass-sm',
+  'inline-flex items-center gap-1.5 rounded-full text-text-secondary bg-bg-surface border border-border-default whitespace-nowrap select-none transition-all duration-150 leading-none outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary shadow-sm',
   {
     variants: {
       variant: {

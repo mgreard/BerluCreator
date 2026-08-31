@@ -73,19 +73,19 @@ watch(
 
 <template>
   <section
-    :class="cn('text-white/90', className)"
+    :class="cn('text-text-primary', className)"
     role="region"
     aria-label="Réglages des effets visuels"
     data-testid="visual-effects-controls"
   >
-    <div class="mb-2 text-[10px] text-white/55">{{ summary }}</div>
+    <div class="mb-2 text-[10px] text-text-muted">{{ summary }}</div>
 
     <Accordion
       v-model="sections"
       :items="accordionItems"
       type="multiple"
       variant="default"
-      class="gap-0 divide-white/10"
+      class="gap-0 divide-border-subtle"
     >
       <template #item-color-grading>
         <ColorGradingControls
@@ -105,9 +105,9 @@ watch(
       </template>
     </Accordion>
 
-    <div class="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
-      <span class="text-[10px] text-white/45">Réglages enregistrés dans le projet</span>
-      <Button size="xs" variant="ghost" class="text-white/65" @click="emit('reset-all')">
+    <div class="mt-3 flex items-center justify-between border-t border-border-subtle pt-3">
+      <span class="text-[10px] text-text-muted">Réglages enregistrés dans le projet</span>
+      <Button size="xs" variant="ghost" @click="emit('reset-all')">
         <Icon name="restart_alt" size="xs" />
         Tout réinitialiser
       </Button>

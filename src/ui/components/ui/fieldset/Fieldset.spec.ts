@@ -28,7 +28,8 @@ describe('Fieldset (Colocated Unit Tests)', () => {
         legend: 'Paramètres'
       }
     })
-    expect(wrapperCard.classes()).toContain('glass-premium')
+    expect(wrapperCard.classes()).toContain('bg-bg-elevated')
+    expect(wrapperCard.classes()).not.toContain('glass-premium')
 
     const wrapperGhost = mount(Fieldset, {
       props: {

@@ -125,13 +125,12 @@ const navClasses = computed(() => {
     'relative flex items-center select-none box-border outline-none scrollbar-none',
     orientation === 'horizontal' && 'overflow-x-auto',
     orientation === 'vertical' && 'overflow-y-auto overflow-x-hidden',
-    variant === 'capsule' &&
-      'bg-bg-surface/60 border border-border-default p-1 rounded-full gap-1 backdrop-blur-md',
+    variant === 'capsule' && 'bg-bg-surface border border-border-default p-1 rounded-full gap-1',
     variant === 'segmented' &&
-      'w-full bg-bg-surface/60 border border-border-default p-1 rounded-2xl gap-1 backdrop-blur-md',
+      'w-full bg-bg-surface border border-border-default p-1 rounded-2xl gap-1',
     variant === 'underline' && 'border-b border-border-default gap-6',
     variant === 'rail' &&
-      'h-full w-16 flex-col gap-2 border-r border-border-subtle bg-bg-surface/30 px-2 py-3',
+      'h-full w-16 flex-col gap-2 border-r border-border-subtle bg-bg-surface px-2 py-3',
     className
   )
 })
@@ -145,10 +144,7 @@ const rootClasses = computed(() =>
 )
 
 const contentClasses = computed(() =>
-  cn(
-    orientation === 'horizontal' && 'mt-3',
-    orientation === 'vertical' && 'ml-3 flex-1 min-w-0'
-  )
+  cn(orientation === 'horizontal' && 'mt-3', orientation === 'vertical' && 'ml-3 flex-1 min-w-0')
 )
 
 const railToneClasses: Record<TabTone, { idle: string; active: string; badge: string }> = {
@@ -342,7 +338,11 @@ function isMaterialIcon(icon?: string): boolean {
         :value="String(tab.key)"
         :disabled="tab.disabled"
         :class="getTabTriggerClasses(tab)"
-        :title="variant === 'rail' ? `${tab.label}${tab.badge !== undefined ? ` (${tab.badge})` : ''}` : undefined"
+        :title="
+          variant === 'rail'
+            ? `${tab.label}${tab.badge !== undefined ? ` (${tab.badge})` : ''}`
+            : undefined
+        "
       >
         <Icon
           v-if="tab.icon && isMaterialIcon(tab.icon)"
@@ -355,10 +355,7 @@ function isMaterialIcon(icon?: string): boolean {
           tab.icon
         }}</span>
         <span :class="variant === 'rail' ? 'sr-only' : 'truncate'">{{ tab.label }}</span>
-        <span
-          v-if="tab.badge !== undefined"
-          :class="getTabBadgeClasses(tab)"
-        >
+        <span v-if="tab.badge !== undefined" :class="getTabBadgeClasses(tab)">
           {{ tab.badge }}
         </span>
       </TabsTrigger>

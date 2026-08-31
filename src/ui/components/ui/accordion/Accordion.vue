@@ -31,7 +31,7 @@ const rootClasses = computed(() => {
     variant === 'default' && 'divide-y divide-border-default',
     variant === 'card' && 'gap-3',
     variant === 'bordered' &&
-      'border border-border-default rounded-2xl divide-y divide-border-default overflow-hidden glass-premium',
+      'border border-border-default rounded-2xl divide-y divide-border-default overflow-hidden bg-bg-surface',
     className
   )
 })
@@ -40,7 +40,7 @@ function getItemClasses(item: AccordionItemData) {
   return cn(
     'group transition-all duration-200 outline-none',
     variant === 'card' &&
-      'bg-bg-surface/50 border border-border-default rounded-2xl glass hover:border-border-hover data-[state=open]:border-primary/40 overflow-hidden shadow-glass-sm',
+      'bg-bg-surface border border-border-default rounded-2xl hover:border-border-hover data-[state=open]:border-primary/40 overflow-hidden shadow-sm',
     variant === 'default' && 'py-1',
     variant === 'bordered' && 'bg-transparent',
     item.disabled && 'opacity-50 pointer-events-none'

@@ -79,11 +79,11 @@ onBeforeUnmount(finishInteraction)
 </script>
 
 <template>
-  <div :class="cn('space-y-3 text-white/90', className)" data-depth-controls>
-    <div class="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+  <div :class="cn('space-y-3 text-text-primary', className)" data-depth-controls>
+    <div class="flex items-center justify-between gap-3 border-b border-border-subtle pb-3">
       <div>
-        <Text as="p" variant="caption" color="inherit" weight="semibold" class="text-xs text-white">Flou de profondeur</Text>
-        <Text as="p" variant="caption" color="inherit" class="text-[10px] text-white/55">Plans lointains et proches</Text>
+        <Text as="p" variant="caption" weight="semibold" class="text-xs">Flou de profondeur</Text>
+        <Text as="p" variant="caption" color="muted" class="text-[10px]">Plans lointains et proches</Text>
       </div>
       <Switch
         :model-value="draft.enabled"

@@ -15,7 +15,7 @@ const {
     :class="
       cn(
         'flex flex-col items-center justify-center gap-3 py-10 px-6 rounded-3xl',
-        'bg-bg-surface/50 border border-border-subtle backdrop-blur-md shadow-glass-sm',
+        'bg-bg-surface border border-border-subtle shadow-sm',
         'text-text-muted text-sm sm:text-base text-center',
         className
       )

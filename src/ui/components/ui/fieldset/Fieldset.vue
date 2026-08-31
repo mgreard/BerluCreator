@@ -19,9 +19,8 @@ const hasDescription = computed(() => !!description || !!slots.description)
 const fieldsetClasses = computed(() => {
   return cn(
     'w-full min-w-0 box-border rounded-2xl transition-all duration-150',
-    variant === 'default' &&
-      'bg-bg-surface/50 border border-border-default p-5 mb-5 backdrop-blur-md',
-    variant === 'card' && 'glass-premium border border-border-default p-5 mb-5 shadow-glass-md',
+    variant === 'default' && 'bg-bg-surface border border-border-default p-5 mb-5',
+    variant === 'card' && 'bg-bg-elevated border border-border-default p-5 mb-5 shadow-md',
     variant === 'ghost' && 'bg-transparent border-0 p-0 mb-4',
     disabled && 'opacity-50 pointer-events-none',
     className

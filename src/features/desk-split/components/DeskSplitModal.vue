@@ -240,21 +240,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Modal
-    v-model="isOpen"
-    size="xl"
-    surface="glass"
-    :title="title"
-    :z-index="zIndex"
-    class="max-w-4xl"
-  >
+  <Modal v-model="isOpen" size="xl" :title="title" :z-index="zIndex" class="max-w-4xl">
     <template #header>
       <div class="flex items-center justify-between gap-3 w-full pr-8">
         <div class="flex items-center gap-2">
           <Icon name="content_cut" class="text-primary" size="sm" />
           <div>
-            <Heading as="h2" variant="sm" color="inherit" class="text-sm font-bold text-white/95">{{ title }}</Heading>
-            <Text as="p" variant="caption" color="inherit" class="text-[11px] text-white/60">
+            <Heading as="h2" variant="sm" class="text-sm font-bold">{{
+              title
+            }}</Heading>
+            <Text as="p" variant="caption" color="muted" class="text-[11px]">
               Délimitez la ligne de séparation entre la façade avant et l'arrière-plan du meuble.
             </Text>
           </div>
@@ -263,8 +258,8 @@ onUnmounted(() => {
           <Badge variant="neutral" size="sm" class="text-[10px]">
             {{ asset?.name || 'Bureau' }}
           </Badge>
-          <div class="flex items-center gap-1.5 pl-2 border-l border-white/10">
-            <span class="text-xs text-white/70">Actif</span>
+          <div class="flex items-center gap-1.5 border-l border-border-subtle pl-2">
+            <span class="text-xs text-text-secondary">Actif</span>
             <Switch v-model="isEnabled" size="sm" aria-label="Activer la découpe 2.5D" />
           </div>
         </div>
@@ -273,9 +268,11 @@ onUnmounted(() => {
 
     <div class="flex flex-col gap-4 p-4 overflow-y-auto max-h-[75vh]">
       <!-- Barre d'outils rapides -->
-      <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white/5 p-2.5 border border-white/10 text-xs">
+      <div
+        class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border-default bg-bg-surface p-2.5 text-xs"
+      >
         <div class="flex items-center gap-2">
-          <span class="text-white/60 font-medium">Modèles :</span>
+          <span class="font-medium text-text-muted">Modèles :</span>
           <Button variant="ghost" size="xs" @click="resetCurve('flat')">
             <Icon name="horizontal_rule" size="xs" class="mr-1" />
             Ligne droite
@@ -288,20 +285,13 @@ onUnmounted(() => {
 
         <div class="flex items-center gap-4">
           <div class="flex items-center gap-2 min-w-32">
-            <span class="text-white/60 text-[11px]">Lissage :</span>
-            <Slider
-              v-model="smoothness"
-              :min="0"
-              :max="1"
-              :step="0.1"
-              size="sm"
-              class="w-24"
-            />
+            <span class="text-[11px] text-text-muted">Lissage :</span>
+            <Slider v-model="smoothness" :min="0" :max="1" :step="0.1" size="sm" class="w-24" />
           </div>
 
-          <div class="flex items-center gap-1.5 border-l border-white/10 pl-3">
+          <div class="flex items-center gap-1.5 border-l border-border-subtle pl-3">
             <Switch v-model="previewWithCharacter" size="sm" aria-label="Aperçu avec personnage" />
-            <span class="text-white/80 text-[11px]">Aperçu immersion</span>
+            <span class="text-[11px] text-text-secondary">Aperçu immersion</span>
           </div>
         </div>
       </div>
@@ -328,9 +318,11 @@ onUnmounted(() => {
         <div
           v-if="previewWithCharacter"
           class="absolute inset-0 flex items-center justify-center pointer-events-none transition-all duration-200"
-          style="z-index: 10;"
+          style="z-index: 10"
         >
-          <div class="w-32 h-44 rounded-full bg-gradient-to-b from-primary/60 to-primary/20 border-2 border-primary/80 backdrop-blur-xs flex flex-col items-center justify-center text-center shadow-lg transform -translate-y-4 animate-pulse">
+          <div
+            class="w-32 h-44 rounded-full bg-gradient-to-b from-primary/60 to-primary/20 border-2 border-primary/80 flex flex-col items-center justify-center text-center shadow-lg transform -translate-y-4 animate-pulse"
+          >
             <Icon name="person" size="md" class="text-white drop-shadow" />
             <span class="text-[10px] font-bold text-white drop-shadow mt-1">Personnage</span>
             <span class="text-[8px] text-white/80">Sandwich 2.5D</span>
@@ -343,7 +335,7 @@ onUnmounted(() => {
           :viewBox="`0 0 ${assetDimensions.width} ${assetDimensions.height}`"
           preserveAspectRatio="none"
           class="absolute inset-0 w-full h-full pointer-events-auto"
-          style="z-index: 20;"
+          style="z-index: 20"
         >
           <defs>
             <clipPath id="desk-front-preview-clip">
@@ -362,7 +354,7 @@ onUnmounted(() => {
             preserveAspectRatio="none"
             clip-path="url(#desk-front-preview-clip)"
             class="pointer-events-none"
-            style="opacity: 0.95;"
+            style="opacity: 0.95"
           />
 
           <!-- Zone Arrière (Teinte bleue translucide) -->
@@ -416,17 +408,23 @@ onUnmounted(() => {
         </svg>
 
         <!-- Légendes flottantes -->
-        <div class="absolute top-2 left-2 z-30 pointer-events-none flex items-center gap-1.5 bg-blue-950/70 backdrop-blur-md px-2 py-1 rounded-md border border-blue-400/30 text-[10px] text-blue-200">
+        <div
+          class="absolute top-2 left-2 z-30 pointer-events-none flex items-center gap-1.5 bg-blue-950 px-2 py-1 rounded-md border border-blue-400/30 text-[10px] text-blue-200"
+        >
           <span class="size-2 rounded-full bg-blue-400"></span>
           <span>Haut : Arrière-plan (Derrière sujet)</span>
         </div>
 
-        <div class="absolute bottom-2 left-2 z-30 pointer-events-none flex items-center gap-1.5 bg-emerald-950/70 backdrop-blur-md px-2 py-1 rounded-md border border-emerald-400/30 text-[10px] text-emerald-200">
+        <div
+          class="absolute bottom-2 left-2 z-30 pointer-events-none flex items-center gap-1.5 bg-emerald-950 px-2 py-1 rounded-md border border-emerald-400/30 text-[10px] text-emerald-200"
+        >
           <span class="size-2 rounded-full bg-emerald-400"></span>
           <span>Bas : Façade avant (Devant sujet)</span>
         </div>
 
-        <div class="absolute bottom-2 right-2 z-30 pointer-events-none bg-black/70 backdrop-blur-md px-2 py-1 rounded-md text-[10px] text-white/60">
+        <div
+          class="absolute bottom-2 right-2 z-30 pointer-events-none bg-black px-2 py-1 rounded-md text-[10px] text-white/70"
+        >
           💡 Clic pour ajouter un point • Double-clic pour supprimer
         </div>
       </div>
@@ -434,9 +432,7 @@ onUnmounted(() => {
 
     <template #footer>
       <div class="flex items-center justify-between w-full p-2">
-        <Button variant="ghost" size="sm" @click="handleClose">
-          Annuler
-        </Button>
+        <Button variant="ghost" size="sm" @click="handleClose"> Annuler </Button>
         <div class="flex items-center gap-2">
           <Button variant="primary" size="sm" @click="handleSave">
             <Icon name="check" size="xs" class="mr-1" />

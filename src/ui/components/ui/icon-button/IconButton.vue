@@ -14,14 +14,14 @@ const iconButtonVariants = cva(
         ghost:
           'text-text-secondary hover:bg-bg-surface-hover hover:text-text-primary active:bg-bg-surface-active active:scale-95',
         secondary:
-          'bg-bg-surface text-text-primary border-border-default backdrop-blur-md hover:bg-bg-surface-hover hover:border-border-hover active:bg-bg-surface-active shadow-glass-sm active:scale-95',
+          'bg-bg-surface text-text-primary border-border-default hover:bg-bg-surface-hover hover:border-border-hover active:bg-bg-surface-active shadow-sm active:scale-95',
         accent:
           'bg-accent text-violet-950 hover:brightness-110 active:brightness-95 shadow-glass-sm active:scale-95',
         primary:
           'bg-primary text-text-inverse font-bold hover:bg-primary-hover active:bg-primary-active shadow-glass-sm active:scale-95',
         destructive:
           'text-danger hover:bg-danger-bg hover:border-danger/30 active:bg-danger/25 active:scale-95',
-        fav: 'bg-bg-surface backdrop-blur-md border-border-default text-text-muted hover:bg-bg-surface-hover hover:text-warning hover:scale-105 active:scale-95'
+        fav: 'bg-bg-surface border-border-default text-text-muted hover:bg-bg-surface-hover hover:text-warning hover:scale-105 active:scale-95'
       },
       size: {
         xs: "w-6 h-6 text-xs after:content-[''] after:absolute after:-inset-2.5 after:min-w-[44px] after:min-h-[44px] after:pointer-events-none",
@@ -77,7 +77,9 @@ const classes = computed(() => {
       size
     }),
     active && variant === 'fav' && 'text-warning bg-bg-surface border-warning/50 shadow-glass-sm',
-    active && variant !== 'fav' && 'bg-primary text-text-inverse font-bold border-primary/50 shadow-glass-sm z-10',
+    active &&
+      variant !== 'fav' &&
+      'bg-primary text-text-inverse font-bold border-primary/50 shadow-glass-sm z-10',
     disabled &&
       'opacity-40 cursor-not-allowed pointer-events-none hover:scale-100 active:scale-100',
     className

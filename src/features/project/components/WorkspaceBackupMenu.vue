@@ -40,16 +40,54 @@ const badgeLabel = computed(
 )
 
 const items = computed<DropdownMenuItemDef[]>(() => [
-  { id: 'settings', label: 'Paramètres du plateau', icon: 'settings', onClick: () => emit('openSettings') },
+  {
+    id: 'settings',
+    label: 'Paramètres du plateau',
+    icon: 'settings',
+    onClick: () => emit('openSettings')
+  },
   { id: 'separator-settings', type: 'separator' },
   { id: 'application-data', type: 'label', label: 'Données de l’application' },
-  { id: 'save', label: 'Créer une sauvegarde locale', icon: 'save', disabled: isBusy.value || isResetting.value, onClick: () => void saveSnapshot() },
-  { id: 'restore', label: 'Restaurer la sauvegarde locale', icon: 'restore', disabled: isBusy.value || isResetting.value || !snapshotSummary.value, onClick: () => void restoreSnapshot() },
+  {
+    id: 'save',
+    label: 'Créer une sauvegarde locale',
+    icon: 'save',
+    disabled: isBusy.value || isResetting.value,
+    onClick: () => void saveSnapshot()
+  },
+  {
+    id: 'restore',
+    label: 'Restaurer la sauvegarde locale',
+    icon: 'restore',
+    disabled: isBusy.value || isResetting.value || !snapshotSummary.value,
+    onClick: () => void restoreSnapshot()
+  },
   { id: 'separator-file', type: 'separator' },
-  { id: 'export', label: 'Exporter la sauvegarde complète', icon: 'download', disabled: isBusy.value || isResetting.value, onClick: () => void exportSnapshotFile() },
-  { id: 'import', label: 'Importer une sauvegarde complète', icon: 'upload', disabled: isBusy.value || isResetting.value, onClick: () => fileInputRef.value?.click() },
+  {
+    id: 'export',
+    label: 'Exporter la sauvegarde complète',
+    icon: 'download',
+    disabled: isBusy.value || isResetting.value,
+    onClick: () => void exportSnapshotFile()
+  },
+  {
+    id: 'import',
+    label: 'Importer une sauvegarde complète',
+    icon: 'upload',
+    disabled: isBusy.value || isResetting.value,
+    onClick: () => fileInputRef.value?.click()
+  },
   { id: 'separator-reset', type: 'separator' },
-  { id: 'reset', label: 'Réinitialiser l’application', icon: 'delete_forever', destructive: true, disabled: isBusy.value || isResetting.value, onClick: () => { isResetConfirmOpen.value = true } }
+  {
+    id: 'reset',
+    label: 'Réinitialiser l’application',
+    icon: 'delete_forever',
+    destructive: true,
+    disabled: isBusy.value || isResetting.value,
+    onClick: () => {
+      isResetConfirmOpen.value = true
+    }
+  }
 ])
 
 function handleFile(event: Event) {
@@ -64,32 +102,39 @@ function handleFile(event: Event) {
   <DropdownMenu
     v-model:open="isOpen"
     :items="items"
-    surface="glass"
     side="right"
     align="start"
     :side-offset="10"
     width="w-72 max-w-[calc(100vw-2rem)]"
-    class="viewport-glass border-white/15 text-white/90 shadow-glass-xl"
   >
     <template #trigger>
       <Button
         data-tour="backup-menu-btn"
         variant="ghost"
         size="sm"
-        class="w-full justify-start gap-2 border border-white/10 bg-white/5 text-xs font-semibold text-white/90 transition-all duration-300 ease-out hover:border-white/20 hover:bg-white/10"
-        :class="isOpen ? 'bg-white/15 border-white/30 text-white' : ''"
+        class="w-full justify-start gap-2 text-xs font-semibold"
+        :class="isOpen ? 'bg-bg-surface-hover text-text-primary' : ''"
         :title="badgeLabel"
       >
         <Icon name="apps" size="xs" class="text-primary" />
         <span>Projet</span>
-        <span class="ml-auto size-1.5 rounded-full" :class="status === 'dirty' ? 'bg-warning' : 'bg-success'" />
-        <Icon name="chevron_right" size="xs" class="text-white/50" />
+        <span
+          class="ml-auto size-1.5 rounded-full"
+          :class="status === 'dirty' ? 'bg-warning' : 'bg-success'"
+        />
+        <Icon name="chevron_right" size="xs" class="text-text-muted" />
       </Button>
     </template>
   </DropdownMenu>
 
   <!-- eslint-disable-next-line vue/no-restricted-html-elements -- sélecteur de fichier natif caché -->
-  <input ref="backupFileInput" type="file" accept="application/json" class="hidden" @change="handleFile" />
+  <input
+    ref="backupFileInput"
+    type="file"
+    accept="application/json"
+    class="hidden"
+    @change="handleFile"
+  />
 
   <AlertDialog
     v-model:open="isResetConfirmOpen"

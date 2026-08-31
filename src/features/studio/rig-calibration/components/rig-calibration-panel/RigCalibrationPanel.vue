@@ -57,25 +57,45 @@ function forwardValue(category: RigConfigurableCategory, value: RigCalibrationPa
 
 <template>
   <aside
-    :class="cn('viewport-glass flex h-full w-full flex-col overflow-hidden border-l border-white/15 bg-transparent text-white/90 shadow-glass-xl transition-all duration-300 ease-out', className)"
+    :class="
+      cn('flex h-full w-full flex-col overflow-hidden bg-bg-surface text-text-primary', className)
+    "
     :aria-labelledby="`${panelId}-title`"
   >
-    <header class="shrink-0 border-b border-white/10 bg-black/10 p-3">
+    <header class="shrink-0 border-b border-border-default bg-bg-elevated p-3">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
-          <Heading :id="`${panelId}-title`" as="h1" variant="sm" color="inherit" class="flex items-center gap-2 text-sm font-semibold">
+          <Heading
+            :id="`${panelId}-title`"
+            as="h1"
+            variant="sm"
+            color="inherit"
+            class="flex items-center gap-2 text-sm font-semibold"
+          >
             <Icon name="person" size="sm" class="text-primary" aria-hidden="true" />
             <span>Rig {{ characterName }}</span>
           </Heading>
-          <Text :id="`${panelId}-description`" as="p" variant="caption" color="muted" class="mt-0.5 text-[10px] leading-relaxed">
+          <Text
+            :id="`${panelId}-description`"
+            as="p"
+            variant="caption"
+            color="muted"
+            class="mt-0.5 text-[10px] leading-relaxed"
+          >
             Assemblage & Calibration Multi-Catégories · {{ canvasLabel }}
           </Text>
         </div>
-        <IconButton icon="close" size="sm" variant="ghost" aria-label="Fermer et sauvegarder" @click="emit('close')" />
+        <IconButton
+          icon="close"
+          size="sm"
+          variant="ghost"
+          aria-label="Fermer et sauvegarder"
+          @click="emit('close')"
+        />
       </div>
     </header>
 
-    <div class="custom-scrollbar flex-1 space-y-3.5 overflow-y-auto bg-black/5 p-3">
+    <div class="custom-scrollbar flex-1 space-y-3.5 overflow-y-auto bg-bg-surface p-3">
       <RigBodyDisclosure
         v-model:open="isBodySectionOpen"
         :rigs="rigs"
@@ -105,18 +125,51 @@ function forwardValue(category: RigConfigurableCategory, value: RigCalibrationPa
       />
     </div>
 
-    <footer class="shrink-0 space-y-2 border-t border-white/10 bg-black/10 p-3" aria-label="Actions du calibreur">
-      <Button v-if="canDuplicate" size="xs" variant="secondary" class="w-full" @click="emit('open-duplicate')">
+    <footer
+      class="shrink-0 space-y-2 border-t border-border-default bg-bg-elevated p-3"
+      aria-label="Actions du calibreur"
+    >
+      <Button
+        v-if="canDuplicate"
+        size="xs"
+        variant="secondary"
+        class="w-full"
+        @click="emit('open-duplicate')"
+      >
         <Icon name="content_copy" size="xs" />
         <span>Copier la configuration depuis un rig...</span>
       </Button>
 
       <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-1" role="group" aria-label="Import et export du catalogue">
-          <IconButton icon="download" size="xs" variant="ghost" title="Exporter le catalogue JSON des rigs" aria-label="Exporter le catalogue JSON des rigs" @click="emit('export')" />
-          <IconButton icon="upload" size="xs" variant="ghost" title="Importer un catalogue JSON de rigs" aria-label="Importer un catalogue JSON de rigs" @click="fileInput?.click()" />
+        <div
+          class="flex items-center gap-1"
+          role="group"
+          aria-label="Import et export du catalogue"
+        >
+          <IconButton
+            icon="download"
+            size="xs"
+            variant="ghost"
+            title="Exporter le catalogue JSON des rigs"
+            aria-label="Exporter le catalogue JSON des rigs"
+            @click="emit('export')"
+          />
+          <IconButton
+            icon="upload"
+            size="xs"
+            variant="ghost"
+            title="Importer un catalogue JSON de rigs"
+            aria-label="Importer un catalogue JSON de rigs"
+            @click="fileInput?.click()"
+          />
           <!-- eslint-disable-next-line vue/no-restricted-html-elements -- sélecteur de fichier natif caché -->
-          <input ref="fileInput" type="file" accept=".json,application/json" class="hidden" @change="handleFile" />
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".json,application/json"
+            class="hidden"
+            @change="handleFile"
+          />
         </div>
 
         <Button size="sm" variant="primary" @click="emit('close')">

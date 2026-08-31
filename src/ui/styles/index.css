@@ -4,7 +4,6 @@
 @source not "../../**/*.story.vue";
 @source not "../../**/*.spec.ts";
 
-
 :root {
   color-scheme: light;
 
@@ -325,15 +324,15 @@
 }
 
 @utility viewport-action {
-  color: oklch(1 0 0 / 0.84);
+  color: var(--color-text-secondary);
 
   &:hover {
-    color: oklch(1 0 0 / 1);
+    color: var(--color-text-primary);
   }
 
   &:disabled,
   &[aria-disabled='true'] {
-    color: oklch(1 0 0 / 0.38);
+    color: var(--color-text-muted);
     opacity: 1;
   }
 }

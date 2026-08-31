@@ -84,11 +84,11 @@ function forwardUpdateValue(category: RigConfigurableCategory, value: RigCalibra
         v-for="category in categories"
         :key="category.category"
         :value="category.category"
-        class="overflow-hidden rounded-xl border border-white/10 bg-black/10 transition-colors duration-300 ease-out data-[state=open]:border-primary/50 data-[state=open]:shadow-glass-xs"
+        class="overflow-hidden rounded-xl border border-border-default bg-bg-surface transition-colors duration-300 ease-out data-[state=open]:border-primary/50 data-[state=open]:shadow-sm"
       >
         <AccordionHeader class="flex items-center">
           <AccordionTrigger
-            class="group flex min-w-0 flex-1 items-center gap-2 p-2.5 text-left outline-none transition-colors hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-primary"
+            class="group flex min-w-0 flex-1 items-center gap-2 p-2.5 text-left outline-none transition-colors hover:bg-bg-muted focus-visible:ring-2 focus-visible:ring-primary"
           >
             <span
               class="flex size-6 shrink-0 items-center justify-center rounded-lg border text-xs"

@@ -64,4 +64,18 @@ describe('SegmentedControl (Colocated Unit Tests)', () => {
     await items[2].trigger('click')
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
   })
+
+  it('5. Utilise une surface opaque par défaut et conserve glass en opt-in', () => {
+    const defaultWrapper = mount(SegmentedControl, {
+      props: { options: mockSegments, modelValue: 'day' }
+    })
+    expect(defaultWrapper.classes()).toContain('bg-bg-surface')
+    expect(defaultWrapper.classes()).not.toContain('glass')
+    expect(defaultWrapper.classes()).not.toContain('backdrop-blur-md')
+
+    const glassWrapper = mount(SegmentedControl, {
+      props: { options: mockSegments, modelValue: 'day', variant: 'glass' }
+    })
+    expect(glassWrapper.classes()).toContain('glass')
+  })
 })

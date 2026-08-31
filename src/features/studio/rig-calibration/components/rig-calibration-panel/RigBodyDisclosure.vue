@@ -41,11 +41,11 @@ function selectRig(value: unknown): void {
   <CollapsibleRoot
     v-model:open="open"
     as="section"
-    class="rounded-xl border border-white/10 bg-black/10 transition-colors duration-300 ease-out data-[state=open]:border-white/20"
+    class="rounded-xl border border-border-default bg-bg-surface transition-colors duration-300 ease-out data-[state=open]:border-primary/40"
     :aria-labelledby="`${baseId}-title`"
   >
     <CollapsibleTrigger
-      class="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left outline-none transition-colors duration-300 ease-out hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-primary"
+      class="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left outline-none transition-colors duration-300 ease-out hover:bg-bg-muted focus-visible:ring-2 focus-visible:ring-primary"
     >
       <span :id="`${baseId}-title`" class="text-[10px] font-bold uppercase tracking-wider text-text-muted">
         1. Corps & Origine
@@ -57,7 +57,7 @@ function selectRig(value: unknown): void {
     </CollapsibleTrigger>
 
     <CollapsibleContent class="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
-      <div class="space-y-2.5 border-t border-white/10 px-3 py-3">
+      <div class="space-y-2.5 border-t border-border-subtle px-3 py-3">
         <FormGroup label="Sprite Corps" :label-for="`${baseId}-rig`" class="mb-0">
           <Select
             :id="`${baseId}-rig`"
@@ -70,7 +70,7 @@ function selectRig(value: unknown): void {
           />
         </FormGroup>
 
-        <div class="space-y-2 rounded-lg border border-white/10 bg-black/10 p-2.5 text-xs">
+        <div class="space-y-2 rounded-lg border border-border-subtle bg-bg-muted p-2.5 text-xs">
           <div class="flex items-center justify-between gap-2 text-text-muted">
             <span class="font-medium text-text-secondary">Point d’ancrage (Origine)</span>
             <span class="font-mono text-[11px] font-semibold text-text-primary">

@@ -37,13 +37,13 @@ function beginKeyboardInteraction(event: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="space-y-3 text-white/90" data-optical-depth-controls>
+  <div class="space-y-3 text-text-primary" data-optical-depth-controls>
     <SegmentedControl
       :model-value="preset"
       :options="presetOptions"
       size="sm"
       variant="primary"
-      class="w-full justify-center bg-black/30 border border-white/10"
+      class="w-full justify-center border border-border-default bg-bg-surface"
       aria-label="Préréglage de distance caméra"
       @update:model-value="updatePreset"
     />
@@ -75,9 +75,9 @@ function beginKeyboardInteraction(event: KeyboardEvent) {
       />
     </div>
 
-    <div class="flex items-center justify-between gap-3 border-t border-white/10 pt-2 text-[11px]">
-      <span class="text-white/60">{{ label }} · {{ modelValue }} %</span>
-      <Button size="xs" variant="ghost" class="h-6 text-white/80 hover:text-white" @click="emit('reset')">
+    <div class="flex items-center justify-between gap-3 border-t border-border-subtle pt-2 text-[11px]">
+      <span class="text-text-muted">{{ label }} · {{ modelValue }} %</span>
+      <Button size="xs" variant="ghost" class="h-6" @click="emit('reset')">
         Auto
       </Button>
     </div>

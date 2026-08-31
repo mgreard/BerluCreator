@@ -66,8 +66,8 @@ function reset(): void {
   <div class="flex flex-col gap-3" data-testid="shader-effects-controls">
     <div class="flex items-center justify-between gap-3">
       <div>
-        <Text as="p" variant="caption" color="inherit" weight="medium" class="text-xs text-white/90">Effets stylisés</Text>
-        <Text as="p" variant="caption" color="inherit" class="text-[10px] text-white/55">Traitement WebGL facultatif</Text>
+        <Text as="p" variant="caption" weight="medium" class="text-xs">Effets stylisés</Text>
+        <Text as="p" variant="caption" color="muted" class="text-[10px]">Traitement WebGL facultatif</Text>
       </div>
       <Switch
         :model-value="modelValue.enabled"
@@ -85,18 +85,18 @@ function reset(): void {
         size="xs"
         class="min-h-9 rounded-lg border px-1.5 py-1.5 text-[10px] leading-tight transition-colors"
         :class="modelValue.enabled && modelValue.preset === preset.id
-          ? 'border-amber-400/70 bg-amber-400/20 text-white'
-          : 'border-white/10 bg-white/5 text-white/65 hover:bg-white/10'"
+          ? 'border-warning/70 bg-warning/15 text-warning'
+          : 'border-border-default bg-bg-surface text-text-secondary hover:bg-bg-muted'"
         @click="selectPreset(preset.id)"
       >
         {{ preset.label }}
       </Button>
     </div>
 
-    <div class="flex flex-col gap-1 rounded-lg border border-white/10 bg-black/15 p-3">
-      <div class="flex justify-between text-[10px] text-white/65">
+    <div class="flex flex-col gap-1 rounded-lg border border-border-default bg-bg-muted p-3">
+      <div class="flex justify-between text-[10px] text-text-muted">
         <span>Intensité globale</span>
-        <span class="font-mono text-white/90">{{ modelValue.intensity }}</span>
+        <span class="font-mono text-text-primary">{{ modelValue.intensity }}</span>
       </div>
       <Slider
         :model-value="modelValue.intensity"
@@ -115,7 +115,7 @@ function reset(): void {
     <Button
       variant="ghost"
       size="sm"
-      class="flex min-h-10 items-center justify-between rounded-lg border border-white/10 px-3 text-xs text-white/75 hover:bg-white/5"
+      class="flex min-h-10 items-center justify-between rounded-lg border border-border-default bg-bg-surface px-3 text-xs text-text-secondary hover:bg-bg-muted"
       :aria-expanded="showAdvanced"
       @click="showAdvanced = !showAdvanced"
     >
@@ -123,11 +123,11 @@ function reset(): void {
       <Icon :name="showAdvanced ? 'expand_less' : 'expand_more'" size="xs" />
     </Button>
 
-    <div v-if="showAdvanced" class="flex flex-col gap-3 rounded-lg bg-black/15 p-3">
+    <div v-if="showAdvanced" class="flex flex-col gap-3 rounded-lg bg-bg-muted p-3">
       <div v-for="adjustment in adjustments" :key="adjustment.key" class="flex flex-col gap-1">
-        <div class="flex justify-between gap-3 text-[10px] text-white/65">
+        <div class="flex justify-between gap-3 text-[10px] text-text-muted">
           <span>{{ adjustment.label }}</span>
-          <span class="font-mono text-white/90">{{ modelValue[adjustment.key] }}</span>
+          <span class="font-mono text-text-primary">{{ modelValue[adjustment.key] }}</span>
         </div>
         <Slider
           :model-value="modelValue[adjustment.key]"
@@ -144,7 +144,7 @@ function reset(): void {
       </div>
     </div>
 
-    <Button size="xs" variant="ghost" class="self-start text-white/60" @click="reset">
+    <Button size="xs" variant="ghost" class="self-start text-text-muted" @click="reset">
       <Icon name="restart_alt" size="xs" />
       Réinitialiser la section
     </Button>

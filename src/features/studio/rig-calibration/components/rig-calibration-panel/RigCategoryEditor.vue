@@ -62,7 +62,7 @@ function updateField(field: keyof RigCalibrationPanelValue, next: string | numbe
 </script>
 
 <template>
-  <div class="space-y-3 border-t border-white/10 bg-black/5 p-3">
+  <div class="space-y-3 border-t border-border-subtle bg-bg-base p-3">
     <FormGroup label="Sprite sélectionné" :label-for="`${baseId}-asset`" class="mb-0">
       <Select
         :id="`${baseId}-asset`"
@@ -76,7 +76,7 @@ function updateField(field: keyof RigCalibrationPanelValue, next: string | numbe
       />
     </FormGroup>
 
-    <div v-if="selectedItem()" class="flex items-center justify-between rounded-lg border border-white/10 bg-black/10 p-2.5">
+    <div v-if="selectedItem()" class="flex items-center justify-between rounded-lg border border-border-default bg-bg-surface p-2.5">
       <div class="flex items-center gap-2">
         <Switch
           :id="`${baseId}-compatible`"
@@ -101,7 +101,7 @@ function updateField(field: keyof RigCalibrationPanelValue, next: string | numbe
       </Button>
     </div>
 
-    <section data-tour="rig-transform-controls" class="space-y-2 rounded-lg border border-white/10 bg-black/10 p-2.5" aria-label="Position relative">
+    <section data-tour="rig-transform-controls" class="space-y-2 rounded-lg border border-border-default bg-bg-surface p-2.5" aria-label="Position relative">
       <div class="flex items-center justify-between gap-2">
         <span class="text-[10px] font-bold uppercase tracking-wider text-text-muted">Position relative</span>
         <Badge :variant="heritageBadge(category.heritageState).variant" size="sm">
@@ -109,7 +109,7 @@ function updateField(field: keyof RigCalibrationPanelValue, next: string | numbe
         </Badge>
       </div>
 
-      <div class="flex items-center justify-between rounded border border-white/10 bg-black/10 px-2.5 py-1 text-[11px] font-medium text-text-secondary">
+      <div class="flex items-center justify-between rounded border border-border-subtle bg-bg-muted px-2.5 py-1 text-[11px] font-medium text-text-secondary">
         <span class="truncate">Configuration : <strong>{{ selectedItem()?.label || 'Élément' }}</strong></span>
         <span v-if="selectedItem()?.hasOverride" class="text-[10px] font-semibold text-accent">Personnalisé</span>
         <span v-else class="text-[10px] text-text-muted">Standard</span>

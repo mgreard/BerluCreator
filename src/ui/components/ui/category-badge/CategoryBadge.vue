@@ -79,7 +79,7 @@ const badgeStyles = computed(() => {
 
 const badgeClasses = computed(() => {
   return cn(
-    'inline-flex items-center gap-1 font-semibold rounded-full border transition-all duration-150 select-none backdrop-blur-xs min-w-0 max-w-full',
+    'inline-flex items-center gap-1 font-semibold rounded-full border transition-all duration-150 select-none min-w-0 max-w-full',
     size === 'mini' && 'text-[10px] px-1.5 py-0.5 leading-tight',
     size === 'sm' && 'text-xs px-2.5 py-0.5 leading-normal',
     size === 'md' && 'text-xs sm:text-sm px-3 py-1 leading-normal',

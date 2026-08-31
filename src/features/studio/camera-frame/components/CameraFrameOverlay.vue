@@ -41,14 +41,46 @@ const ratioValues: Record<Exclude<CameraFrameAspectRatio, 'custom'>, number> = {
 }
 
 const handles: Array<{ value: ResizeHandle; label: string; class: string }> = [
-  { value: 'tl', label: 'Redimensionner depuis le coin supérieur gauche', class: 'left-0 top-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize' },
-  { value: 'top', label: 'Redimensionner depuis le haut', class: 'left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize' },
-  { value: 'tr', label: 'Redimensionner depuis le coin supérieur droit', class: 'right-0 top-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize' },
-  { value: 'right', label: 'Redimensionner depuis la droite', class: 'right-0 top-1/2 translate-x-1/2 -translate-y-1/2 cursor-ew-resize' },
-  { value: 'br', label: 'Redimensionner depuis le coin inférieur droit', class: 'right-0 bottom-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize' },
-  { value: 'bottom', label: 'Redimensionner depuis le bas', class: 'left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2 cursor-ns-resize' },
-  { value: 'bl', label: 'Redimensionner depuis le coin inférieur gauche', class: 'left-0 bottom-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize' },
-  { value: 'left', label: 'Redimensionner depuis la gauche', class: 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize' }
+  {
+    value: 'tl',
+    label: 'Redimensionner depuis le coin supérieur gauche',
+    class: 'left-0 top-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize'
+  },
+  {
+    value: 'top',
+    label: 'Redimensionner depuis le haut',
+    class: 'left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 cursor-ns-resize'
+  },
+  {
+    value: 'tr',
+    label: 'Redimensionner depuis le coin supérieur droit',
+    class: 'right-0 top-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize'
+  },
+  {
+    value: 'right',
+    label: 'Redimensionner depuis la droite',
+    class: 'right-0 top-1/2 translate-x-1/2 -translate-y-1/2 cursor-ew-resize'
+  },
+  {
+    value: 'br',
+    label: 'Redimensionner depuis le coin inférieur droit',
+    class: 'right-0 bottom-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize'
+  },
+  {
+    value: 'bottom',
+    label: 'Redimensionner depuis le bas',
+    class: 'left-1/2 bottom-0 -translate-x-1/2 translate-y-1/2 cursor-ns-resize'
+  },
+  {
+    value: 'bl',
+    label: 'Redimensionner depuis le coin inférieur gauche',
+    class: 'left-0 bottom-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize'
+  },
+  {
+    value: 'left',
+    label: 'Redimensionner depuis la gauche',
+    class: 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize'
+  }
 ]
 
 const frameStyle = computed(() => ({
@@ -65,8 +97,18 @@ const maskStyles = computed(() => {
   const height = (model.value.height / stageHeight) * 100
   return {
     top: { left: '0%', top: '0%', width: '100%', height: `${top}%` },
-    right: { left: `${left + width}%`, top: `${top}%`, width: `${100 - left - width}%`, height: `${height}%` },
-    bottom: { left: '0%', top: `${top + height}%`, width: '100%', height: `${100 - top - height}%` },
+    right: {
+      left: `${left + width}%`,
+      top: `${top}%`,
+      width: `${100 - left - width}%`,
+      height: `${height}%`
+    },
+    bottom: {
+      left: '0%',
+      top: `${top + height}%`,
+      width: '100%',
+      height: `${100 - top - height}%`
+    },
     left: { left: '0%', top: `${top}%`, width: `${left}%`, height: `${height}%` }
   }
 })
@@ -221,32 +263,44 @@ function applyRatio(aspectRatio: CameraFrameAspectRatio) {
     height = stageHeight
     width = height * ratio
   }
-  setFrame({
-    ...model.value,
-    x: (stageWidth - width) / 2,
-    y: (stageHeight - height) / 2,
-    width,
-    height,
-    aspectRatio
-  }, true)
+  setFrame(
+    {
+      ...model.value,
+      x: (stageWidth - width) / 2,
+      y: (stageHeight - height) / 2,
+      width,
+      height,
+      aspectRatio
+    },
+    true
+  )
 }
 
 function resetFrame() {
-  setFrame({
-    enabled: true,
-    x: 0,
-    y: 0,
-    width: stageWidth,
-    height: stageHeight,
-    aspectRatio: 'custom'
-  }, true)
+  setFrame(
+    {
+      enabled: true,
+      x: 0,
+      y: 0,
+      width: stageWidth,
+      height: stageHeight,
+      aspectRatio: 'custom'
+    },
+    true
+  )
 }
 </script>
 
 <template>
   <div
     ref="overlay"
-    :class="cn('absolute inset-0 z-30 touch-none', disabled && 'pointer-events-none opacity-60', className)"
+    :class="
+      cn(
+        'absolute inset-0 z-30 touch-none',
+        disabled && 'pointer-events-none opacity-60',
+        className
+      )
+    "
     :aria-describedby="instructionsId"
     @pointermove="onPointerMove"
     @pointerup="finishInteraction"
@@ -283,7 +337,12 @@ function resetFrame() {
         :key="handle.value"
         variant="ghost"
         size="xs"
-        :class="cn('absolute z-10 flex min-h-[44px] min-w-[44px] items-center justify-center touch-manipulation outline-none focus-visible:ring-2 focus-visible:ring-primary', handle.class)"
+        :class="
+          cn(
+            'absolute z-10 flex min-h-[44px] min-w-[44px] items-center justify-center touch-manipulation outline-none focus-visible:ring-2 focus-visible:ring-primary',
+            handle.class
+          )
+        "
         :aria-label="handle.label"
         :data-handle="handle.value"
         @pointerdown="beginInteraction($event, 'resize', handle.value)"
@@ -292,16 +351,20 @@ function resetFrame() {
       </Button>
 
       <div
-        class="viewport-glass absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-1 rounded-xl border p-1.5"
+        class="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-border-default bg-bg-elevated p-1.5 shadow-md"
         @pointerdown.stop
       >
         <Button
-          v-for="ratio in (['16:9', '9:16', '1:1', 'custom'] as CameraFrameAspectRatio[])"
+          v-for="ratio in ['16:9', '9:16', '1:1', 'custom'] as CameraFrameAspectRatio[]"
           :key="ratio"
           variant="ghost"
           size="xs"
-          class="viewport-action min-h-[36px] rounded-lg px-2.5 text-[11px] font-semibold transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-primary"
-          :class="model.aspectRatio === ratio ? 'bg-primary text-text-inverse hover:bg-primary hover:text-text-inverse' : ''"
+          class="min-h-[36px] rounded-lg px-2.5 text-[11px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-primary"
+          :class="
+            model.aspectRatio === ratio
+              ? 'bg-primary text-text-inverse hover:bg-primary hover:text-text-inverse'
+              : ''
+          "
           :data-ratio="ratio"
           @click="applyRatio(ratio)"
         >
@@ -311,14 +374,16 @@ function resetFrame() {
           icon="restart_alt"
           size="xs"
           variant="ghost"
-          class="viewport-action flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border-l border-white/15 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-primary"
+          class="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border-l border-border-default focus-visible:outline-2 focus-visible:outline-primary"
           aria-label="Réinitialiser le cadrage à toute la scène"
           data-reset-camera
           @click="resetFrame"
         />
       </div>
 
-      <div class="absolute bottom-2 left-2 rounded-md bg-black/65 px-2 py-1 font-mono text-[10px] text-white pointer-events-none">
+      <div
+        class="absolute bottom-2 left-2 rounded-md bg-black/65 px-2 py-1 font-mono text-[10px] text-white pointer-events-none"
+      >
         {{ Math.round(model.width) }} × {{ Math.round(model.height) }} px
       </div>
     </div>

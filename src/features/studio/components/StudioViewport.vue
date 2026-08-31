@@ -20,7 +20,7 @@ const rigCatalog = useRigCatalogStore()
 <template>
   <div class="relative flex-1 h-full bg-bg-base overflow-hidden">
     <div
-      id="studio-overlay-host"
+      id="studio-selection-overlay-host"
       class="pointer-events-none absolute inset-0 z-[60] overflow-hidden"
     />
     <div class="absolute inset-0 overflow-hidden bg-dot-pattern">
@@ -38,7 +38,11 @@ const rigCatalog = useRigCatalogStore()
 
 <style scoped>
 .bg-dot-pattern {
-  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.04) 1px, transparent 0);
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(255, 255, 255, 0.04) 1px,
+    transparent 0
+  );
   background-size: 24px 24px;
 }
 </style>

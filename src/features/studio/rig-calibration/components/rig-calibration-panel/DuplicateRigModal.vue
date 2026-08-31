@@ -85,12 +85,11 @@ function handleConfirm(): void {
     title="Copier la configuration d’un autre rig"
     subtitle="Transfère sélectivement l’origine, les positions et les compatibilités vers ce rig."
     size="md"
-    surface="glass"
     :z-index="1700"
   >
     <div class="space-y-4 p-1">
       <!-- Choix du rig source -->
-      <div class="rounded-lg border border-border-subtle bg-bg-elevated/60 p-3 space-y-2">
+      <div class="space-y-2 rounded-lg border border-border-subtle bg-bg-elevated p-3">
         <FormGroup label="Rig source à dupliquer" class="mb-0">
           <Select
             v-model="selectedSourceId"
@@ -103,12 +102,13 @@ function handleConfirm(): void {
         </FormGroup>
         <Text as="p" variant="caption" color="muted" class="text-[11px]">
           Les réglages sélectionnés seront appliqués à :
-          <strong class="text-text-primary">{{ currentRigName }}</strong>.
+          <strong class="text-text-primary">{{ currentRigName }}</strong
+          >.
         </Text>
       </div>
 
       <!-- Éléments à copier -->
-      <div class="rounded-lg border border-border-subtle bg-bg-elevated/40 p-3 space-y-2.5">
+      <div class="space-y-2.5 rounded-lg border border-border-subtle bg-bg-elevated p-3">
         <span class="block text-xs font-semibold text-text-primary">Éléments à transférer</span>
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs">
           <Checkbox v-model="copyOrigin" label="Origine du corps" size="sm" />
@@ -120,17 +120,27 @@ function handleConfirm(): void {
       </div>
 
       <!-- Avertissement confirmation -->
-      <div class="rounded-lg border border-warning/30 bg-warning/10 p-3 text-warning-foreground space-y-2">
+      <div
+        class="rounded-lg border border-warning/30 bg-warning/10 p-3 text-warning-foreground space-y-2"
+      >
         <div class="flex items-start gap-2">
           <Icon name="warning" size="sm" class="text-warning shrink-0 mt-0.5" />
           <div class="text-xs leading-relaxed">
-            <Text as="p" variant="caption" color="primary" weight="semibold">Action destructive</Text>
+            <Text as="p" variant="caption" color="primary" weight="semibold"
+              >Action destructive</Text
+            >
             <Text as="p" variant="caption" color="muted" class="mt-0.5">
-              Cette action écrasera les réglages correspondants du rig actuel. Le sprite corps de destination sera préservé.
+              Cette action écrasera les réglages correspondants du rig actuel. Le sprite corps de
+              destination sera préservé.
             </Text>
           </div>
         </div>
-        <Checkbox v-model="confirmed" label="Je confirme vouloir appliquer ces modifications" size="sm" class="pt-1" />
+        <Checkbox
+          v-model="confirmed"
+          label="Je confirme vouloir appliquer ces modifications"
+          size="sm"
+          class="pt-1"
+        />
       </div>
 
       <div class="flex items-center justify-end gap-2 pt-2">
