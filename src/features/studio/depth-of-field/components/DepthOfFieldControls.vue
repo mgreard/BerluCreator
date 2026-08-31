@@ -75,11 +75,33 @@ function updateEnabled(value: boolean) {
   emit('commit', { ...draft.value })
 }
 
+interface BlurPreset {
+  id: string
+  name: string
+  blurRadius: number
+  feather: number
+}
+
+const CINEMATIC_PRESETS: BlurPreset[] = [
+  { id: 'portrait', name: '🎬 Portrait', blurRadius: 14, feather: 140 },
+  { id: 'macro', name: '🔍 Macro', blurRadius: 22, feather: 80 },
+  { id: 'natural', name: '🌿 Naturel', blurRadius: 8, feather: 260 }
+]
+
+function applyPreset(preset: BlurPreset) {
+  setValue({
+    enabled: true,
+    blurRadius: preset.blurRadius,
+    feather: preset.feather
+  })
+  emit('commit', { ...draft.value })
+}
+
 onBeforeUnmount(finishInteraction)
 </script>
 
 <template>
-  <div :class="cn('space-y-3 text-text-primary', className)" data-depth-controls>
+  <div :class="cn('space-y-3.5 text-text-primary', className)" data-depth-controls>
     <div class="flex items-center justify-between gap-3 border-b border-border-subtle pb-3">
       <div>
         <Text as="p" variant="caption" weight="semibold" class="text-xs">Flou de profondeur</Text>
@@ -91,6 +113,23 @@ onBeforeUnmount(finishInteraction)
         aria-label="Activer le flou de profondeur"
         @update:model-value="updateEnabled(Boolean($event))"
       />
+    </div>
+
+    <!-- Presets Cinématiques Rapides -->
+    <div class="space-y-1.5">
+      <span class="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Préréglages cinématiques</span>
+      <div class="grid grid-cols-3 gap-1.5">
+        <button
+          v-for="preset in CINEMATIC_PRESETS"
+          :key="preset.id"
+          type="button"
+          :disabled="disabled"
+          class="flex items-center justify-center rounded-lg border border-border-subtle bg-bg-surface px-2 py-1.5 text-[11px] font-medium text-text-secondary transition-all hover:border-primary/40 hover:bg-bg-surface-hover hover:text-text-primary active:scale-95 disabled:opacity-50"
+          @click="applyPreset(preset)"
+        >
+          {{ preset.name }}
+        </button>
+      </div>
     </div>
 
     <div

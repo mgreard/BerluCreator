@@ -78,40 +78,77 @@ defineExpose({ start, reset })
 <style>
 .driver-popover.berlu-product-tour {
   max-width: 360px;
-  border: 1px solid var(--color-border-default);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--color-bg-elevated) 94%, transparent);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  background: rgba(18, 14, 28, 0.92);
   color: var(--color-text-primary);
-  box-shadow: var(--shadow-glass-xl);
-  backdrop-filter: blur(20px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.75), 0 0 24px rgba(168, 85, 247, 0.15);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  padding: 16px;
 }
 
 .driver-popover.berlu-product-tour .driver-popover-title {
   font-family: var(--font-display);
   font-size: 15px;
-  color: var(--color-text-primary);
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.01em;
 }
 
-.driver-popover.berlu-product-tour .driver-popover-description,
+.driver-popover.berlu-product-tour .driver-popover-description {
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.75);
+  margin-top: 6px;
+}
+
 .driver-popover.berlu-product-tour .driver-popover-progress-text {
-  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: #facc15;
+  letter-spacing: 0.05em;
+}
+
+.driver-popover.berlu-product-tour .driver-popover-footer {
+  margin-top: 14px;
 }
 
 .driver-popover.berlu-product-tour button {
-  border: 1px solid var(--color-border-default);
-  border-radius: 10px;
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  transition: all 150ms ease;
   text-shadow: none;
 }
 
+.driver-popover.berlu-product-tour button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
 .driver-popover.berlu-product-tour .driver-popover-next-btn {
-  border-color: var(--color-primary);
-  background: var(--color-primary);
-  color: var(--color-text-inverse);
+  border-color: #ffffff;
+  background: #ffffff;
+  color: #09090e;
+  font-weight: 700;
+}
+
+.driver-popover.berlu-product-tour .driver-popover-next-btn:hover {
+  background: #f4f4f5;
+  transform: translateY(-1px);
 }
 
 .driver-popover.berlu-product-tour .driver-popover-close-btn {
-  color: var(--color-text-muted);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.driver-popover.berlu-product-tour .driver-popover-close-btn:hover {
+  color: #ffffff;
 }
 </style>

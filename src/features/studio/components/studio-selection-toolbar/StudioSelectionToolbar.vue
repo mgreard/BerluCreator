@@ -27,15 +27,15 @@ const deskPlacementOptions: SegmentOption[] = [
       v-if="open"
       orientation="horizontal"
       aria-label="Outils du calque sélectionné"
-      class="viewport-glass pointer-events-auto absolute bottom-3 left-1/2 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-2 overflow-hidden rounded-2xl border border-white/15 px-2 py-1.5 text-xs text-white/90 shadow-glass-xl transition-all duration-300 ease-out"
+      class="viewport-glass pointer-events-auto absolute bottom-3 left-1/2 flex max-w-[calc(100%-2rem)] -translate-x-1/2 items-center gap-2 overflow-hidden rounded-full border border-white/12 bg-[#0e0e18]/90 px-3.5 py-1.5 text-xs text-white/90 backdrop-blur-2xl shadow-[0_12px_40px_rgba(0,0,0,0.7),0_0_24px_rgba(168,85,247,0.18)] transition-all duration-300 ease-out"
       data-tour="selection-tools"
       @pointerdown.stop
       @dblclick.stop
       @keydown.esc.stop="emit('clearSelection')"
     >
-      <span class="flex min-w-0 items-center gap-1.5 font-semibold text-white/90">
-        <Icon :name="layerIcon" size="xs" class="shrink-0 text-primary" />
-        <span class="max-w-[150px] truncate">{{ layerName }}</span>
+      <span class="flex min-w-0 items-center gap-1.5 font-semibold text-white/95 pl-1">
+        <Icon :name="layerIcon" size="xs" class="shrink-0 text-amber-400 drop-shadow-[0_0_6px_rgba(250,204,21,0.5)]" />
+        <span class="max-w-[160px] truncate text-[11px] tracking-wide">{{ layerName }}</span>
       </span>
 
       <ToolbarSeparator class="h-5 w-px shrink-0 bg-white/15" />

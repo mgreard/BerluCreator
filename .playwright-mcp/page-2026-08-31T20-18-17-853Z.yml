@@ -1,0 +1,75 @@
+- generic [ref=f4e3]:
+  - region [ref=f4e4]:
+    - heading "Studio de composition" [level=1] [ref=f4e5]
+    - generic [ref=f4e7]:
+      - group "Projet et bibliothèque" [ref=f4e8]:
+        - button "Projet" [ref=f4e9] [cursor=pointer]:
+          - generic [ref=f4e10]:
+            - generic [ref=f4e11]: apps
+            - generic [ref=f4e12]: Projet
+            - generic [ref=f4e14]: expand_more
+        - button "Importer" [ref=f4e15] [cursor=pointer]:
+          - generic [ref=f4e16]:
+            - generic [ref=f4e17]: cloud_upload
+            - generic [ref=f4e18]: Importer
+        - button "Rigs" [ref=f4e19] [cursor=pointer]:
+          - generic [ref=f4e20]:
+            - generic [ref=f4e21]: construction
+            - generic [ref=f4e22]: Rigs
+      - toolbar "Actions globales du studio" [ref=f4e25]:
+        - generic [ref=f4e26]:
+          - generic [ref=f4e27]:
+            - button "Annuler la dernière action (Ctrl+Z)" [disabled]:
+              - generic: undo
+            - button "Rétablir la dernière action (Ctrl+Shift+Z)" [disabled]:
+              - generic: redo
+          - separator [ref=f4e28]
+          - button "Flou" [ref=f4e29] [cursor=pointer]:
+            - generic [ref=f4e30]:
+              - generic [ref=f4e31]: blur_on
+              - generic [ref=f4e32]: Flou
+          - button "Effets" [ref=f4e33] [cursor=pointer]:
+            - generic [ref=f4e34]:
+              - generic [ref=f4e35]: auto_fix_high
+              - generic [ref=f4e36]: Effets
+          - button "Cadrage" [ref=f4e37] [cursor=pointer]:
+            - generic [ref=f4e38]:
+              - generic [ref=f4e39]: crop_free
+              - generic [ref=f4e40]: Cadrage
+        - separator [ref=f4e41]
+        - generic [ref=f4e42]:
+          - button "Vues" [ref=f4e43] [cursor=pointer]:
+            - generic [ref=f4e44]:
+              - generic [ref=f4e45]: collections_bookmark
+              - generic [ref=f4e46]: Vues
+          - button "Exporter" [ref=f4e47] [cursor=pointer]:
+            - generic [ref=f4e48]:
+              - generic [ref=f4e49]: file_download
+              - generic [ref=f4e50]: Exporter
+          - button "Visites guidées et aide" [ref=f4e51] [cursor=pointer]:
+            - generic [ref=f4e52]: help
+    - navigation "Espaces de travail du Studio" [ref=f4e54]:
+      - group [ref=f4e55]:
+        - button "Bibliothèque" [ref=f4e56] [cursor=pointer]:
+          - generic [ref=f4e57]: category
+        - button "Studio" [pressed] [ref=f4e59] [cursor=pointer]:
+          - generic [ref=f4e60]: dashboard
+        - button "Inspecteur" [disabled]:
+          - generic: tune
+    - main [ref=f4e63]
+  - status [ref=f4e69]:
+    - generic [ref=f4e70]:
+      - img "Incroyaux News Studio" [ref=f4e72]:
+        - generic [ref=f4e73]:
+          - generic [ref=f4e74]: Incroyaux
+          - generic [ref=f4e75]: News
+        - generic [ref=f4e76]:
+          - generic [ref=f4e77]: Incroyaux
+          - generic [ref=f4e78]: News
+          - generic [ref=f4e79]: Incroyaux
+          - generic [ref=f4e80]: News
+        - generic [ref=f4e81]: STUDIO
+      - generic [ref=f4e85]:
+        - generic [ref=f4e86]: Studio prêt !
+        - progressbar [ref=f4e89]
+        - generic [ref=f4e91]: 100%

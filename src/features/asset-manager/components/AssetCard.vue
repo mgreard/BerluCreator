@@ -204,11 +204,11 @@ function onPreviewError(): void {
         {{ asset.name }}
       </Heading>
       <div class="mt-1 flex min-w-0 items-center justify-between gap-1.5">
-        <div class="flex items-center gap-1 min-w-0 max-w-[70%]">
+        <div class="flex items-center gap-1 min-w-0 flex-1">
           <Badge
             variant="neutral"
             size="sm"
-            class="asset-category min-w-0 px-1.5 py-0 text-[8px]"
+            class="asset-category min-w-0 px-1.5 py-0 text-[9px] font-medium tracking-tight"
             :title="category.label"
           >
             <Icon :name="category.icon" size="xs" class="shrink-0" />
@@ -218,12 +218,12 @@ function onPreviewError(): void {
             v-if="asset.category === 'desk' && asset.deskSplit?.enabled"
             variant="accent"
             size="sm"
-            class="shrink-0 text-[8px] px-1 py-0 border-primary/40 text-primary"
+            class="shrink-0 text-[8px] font-bold px-1 py-0 border-primary/40 text-primary"
           >
             2.5D
           </Badge>
         </div>
-        <span class="shrink-0 text-[9px] text-text-muted font-mono">
+        <span class="shrink-0 text-[9px] text-text-muted/80 font-mono tracking-tighter">
           {{ asset.width }}&times;{{ asset.height }}
         </span>
       </div>

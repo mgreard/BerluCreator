@@ -543,15 +543,15 @@ onUnmounted(() => {
 
         <!-- Lignes d'axes passant par l'Origine (Crosshair Guides) -->
         <div
-          class="pointer-events-none absolute inset-y-0 border-r border-dashed border-primary/40"
+          class="pointer-events-none absolute inset-y-0 border-r border-dashed border-purple-500/40 shadow-[0_0_8px_rgba(168,85,247,0.3)]"
           :style="{ left: `${bodyOrigin.x}px` }"
         />
         <div
-          class="pointer-events-none absolute inset-x-0 border-b border-dashed border-primary/40"
+          class="pointer-events-none absolute inset-x-0 border-b border-dashed border-purple-500/40 shadow-[0_0_8px_rgba(168,85,247,0.3)]"
           :style="{ top: `${bodyOrigin.y}px` }"
         />
 
-        <!-- Point & Poignée d'Origine -->
+        <!-- Point & Poignée d'Origine avec Mire Réticulaire Lumineuse -->
         <div
           class="absolute z-20 flex -translate-x-1/2 -translate-y-1/2 cursor-move items-center justify-center touch-manipulation pointer-events-auto"
           :style="originStyle"
@@ -559,26 +559,36 @@ onUnmounted(() => {
           @mouseenter="isHoveringOrigin = true"
           @mouseleave="isHoveringOrigin = false"
         >
+          <!-- Mire Réticulaire de centrage (Crosshair Target) -->
+          <div
+            class="pointer-events-none absolute size-10 rounded-full border border-amber-400/30 bg-amber-400/5 transition-transform duration-300"
+            :class="[
+              activeSelectedId === 'origin' || activeDrag?.type === 'origin' || isHoveringOrigin
+                ? 'scale-125 border-amber-400/70 bg-amber-400/10 shadow-[0_0_16px_rgba(250,204,21,0.35)]'
+                : 'scale-100 opacity-60'
+            ]"
+          />
+
           <!-- Anneau extérieur & point central -->
           <div
             class="relative flex size-6 items-center justify-center rounded-full border-2 transition-all duration-150"
             :class="[
               activeSelectedId === 'origin' || activeDrag?.type === 'origin'
-                ? 'scale-125 border-accent bg-accent/30 shadow-[0_0_12px_rgba(234,179,8,0.6)]'
+                ? 'scale-125 border-amber-400 bg-amber-500/40 shadow-[0_0_14px_rgba(250,204,21,0.8)]'
                 : isHoveringOrigin
-                  ? 'scale-110 border-primary bg-primary/20 shadow-[0_0_8px_rgba(59,130,246,0.5)]'
-                  : 'border-primary/80 bg-primary/10'
+                  ? 'scale-110 border-amber-300 bg-amber-400/30 shadow-[0_0_10px_rgba(250,204,21,0.6)]'
+                  : 'border-white/90 bg-purple-600/60 shadow-[0_0_8px_rgba(168,85,247,0.5)]'
             ]"
           >
-            <div class="size-1.5 rounded-full bg-white" />
+            <div class="size-1.5 rounded-full bg-white shadow-sm" />
           </div>
 
           <!-- Label coordonnées origine au survol / drag -->
           <div
             v-if="isHoveringOrigin || activeDrag?.type === 'origin'"
-            class="pointer-events-none absolute top-full mt-1.5 rounded bg-black/80 px-1.5 py-0.5 font-mono text-[9px] text-white whitespace-nowrap shadow"
+            class="pointer-events-none absolute top-full mt-2 rounded-md bg-[#0a0614]/90 border border-white/10 px-2 py-0.5 font-mono text-[9px] font-medium text-amber-300 whitespace-nowrap shadow-xl backdrop-blur-md"
           >
-            Origine ({{ bodyOrigin.x }}, {{ bodyOrigin.y }})
+            Mire d'ancrage ({{ bodyOrigin.x }}, {{ bodyOrigin.y }})
           </div>
         </div>
 
