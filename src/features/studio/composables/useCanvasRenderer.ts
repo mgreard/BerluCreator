@@ -334,15 +334,14 @@ export function shouldApplyDepthOfField(
 ): boolean {
   return Boolean(
     settings?.enabled &&
-      settings.blurRadius > 0 &&
-      layers.some((layer) => depthEffectProfile(layer, settings) !== null)
+    settings.blurRadius > 0 &&
+    layers.some((layer) => depthEffectProfile(layer, settings) !== null)
   )
 }
 
 function resolvedOpticalDepth(layer: RenderableLayer): number {
-  if (Number.isFinite(layer.opticalDepth)) {
-    return Math.max(0, Math.min(1, layer.opticalDepth))
-  }
+  // Les distances personnalisées restent lisibles dans les anciens documents,
+  // mais seul le rôle optique participe désormais à la profondeur de champ globale.
   if (layer.category === 'foreground' || layer.depthRole === 'subject') {
     return OPTICAL_FOCUS_DEPTH
   }
@@ -358,8 +357,7 @@ function depthEffectProfile(
   const opticalDepth = resolvedOpticalDepth(layer)
   const signedDistance = opticalDepth - OPTICAL_FOCUS_DEPTH
   const normalizedDistance = Math.min(1, Math.abs(signedDistance) / OPTICAL_FOCUS_DEPTH)
-  const quantizedDistance =
-    Math.round(normalizedDistance * OPTICAL_BLUR_STEPS) / OPTICAL_BLUR_STEPS
+  const quantizedDistance = Math.round(normalizedDistance * OPTICAL_BLUR_STEPS) / OPTICAL_BLUR_STEPS
   const blurRadius = settings.blurRadius * quantizedDistance
   if (blurRadius <= 0) return null
   return {
@@ -536,18 +534,12 @@ function drawDepthLayersOnContext(
       const startY = Math.max(0, splitY - feather / 2)
       const endY = Math.min(maskedCanvas.height, splitY + feather / 2)
       const gradient = maskedContext.createLinearGradient(0, startY, 0, endY)
-      gradient.addColorStop(
-        0,
-        profile.side === 'far' ? 'rgba(0, 0, 0, 1)' : 'rgba(0, 0, 0, 0)'
-      )
-      gradient.addColorStop(
-        1,
-        profile.side === 'far' ? 'rgba(0, 0, 0, 0)' : 'rgba(0, 0, 0, 1)'
-      )
+      gradient.addColorStop(0, profile.side === 'far' ? 'rgba(0, 0, 0, 1)' : 'rgba(0, 0, 0, 0)')
+      gradient.addColorStop(1, profile.side === 'far' ? 'rgba(0, 0, 0, 0)' : 'rgba(0, 0, 0, 1)')
       maskedContext.fillStyle = gradient
       maskedContext.fillRect(0, 0, maskedCanvas.width, maskedCanvas.height)
     }
-  maskedContext.restore()
+    maskedContext.restore()
     buffers.maskKey = maskKey
   }
 

@@ -6,7 +6,6 @@ import { useAssetStore } from '../stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import AssetCategoryNav from './AssetCategoryNav.vue'
-import { NavigationItem } from '@/components/ui/navigation-item'
 import { Tabs } from '@/components/ui/tabs'
 
 vi.mock('@infrastructure/db/repositories/editor-document.repository', () => ({
@@ -76,25 +75,30 @@ describe('AssetCategoryNav', () => {
       }
     })
 
-    expect(wrapper.text()).toContain('Catégories')
-    expect(wrapper.text()).toContain('Tous les sprites')
+    expect(wrapper.text()).toContain('Bibliothèque')
+    expect(wrapper.text()).toContain('Tous')
     const tabs = wrapper.getComponent(Tabs)
-    expect(tabs.props('variant')).toBe('rail')
-    expect(tabs.props('orientation')).toBe('vertical')
+    expect(tabs.props('variant')).toBe('segmented')
+    expect(tabs.props('orientation')).toBe('horizontal')
 
     const characterTab = wrapper
       .findAll('[role="tab"]')
-      .find((tab) => tab.attributes('title')?.startsWith('Personnages'))
+      .find((tab) => tab.text().includes('Personnages'))
     expect(characterTab).toBeDefined()
     await characterTab?.trigger('mousedown', { button: 0, ctrlKey: false })
 
     expect(wrapper.text()).toContain('Corps')
     expect(wrapper.text()).toContain('Têtes')
 
-    const navItems = wrapper.findAllComponents(NavigationItem)
-    const bodyNav = navItems.find((item) => item.props('label') === 'Corps')
-    expect(bodyNav).toBeDefined()
-    expect(bodyNav?.props('count')).toBe(2)
+    const bodyFilter = wrapper
+      .findAll('button[aria-pressed]')
+      .find((button) => button.text().includes('Corps'))
+    expect(bodyFilter).toBeDefined()
+    expect(bodyFilter?.text()).toContain('2')
+
+    const categoryGrid = wrapper.get('[aria-label="Parties du personnage"]')
+    expect(categoryGrid.classes()).toContain('grid-cols-2')
+    expect(categoryGrid.classes()).not.toContain('overflow-x-auto')
   })
 
   it('emits selection updates and opens drawer on category click', async () => {
@@ -108,24 +112,24 @@ describe('AssetCategoryNav', () => {
       }
     })
 
-    const stageTab = wrapper
-      .findAll('[role="tab"]')
-      .find((tab) => tab.attributes('title')?.startsWith('Plateau'))
+    const stageTab = wrapper.findAll('[role="tab"]').find((tab) => tab.text().includes('Plateau'))
     expect(stageTab).toBeDefined()
     await stageTab?.trigger('mousedown', { button: 0, ctrlKey: false })
 
-    const bgNav = wrapper
-      .findAllComponents(NavigationItem)
-      .find((item) => item.props('label') === 'Arrière-plans')
-    expect(bgNav).toBeDefined()
+    const backgroundFilter = wrapper
+      .findAll('button[aria-pressed]')
+      .find((button) => button.text().includes('Arrière-plans'))
+    expect(backgroundFilter).toBeDefined()
 
-    await bgNav?.trigger('click')
+    await backgroundFilter?.trigger('click')
 
-    expect(wrapper.emitted('update:selection')?.at(-1)).toEqual([{ type: 'stage', category: 'background' }])
+    expect(wrapper.emitted('update:selection')?.at(-1)).toEqual([
+      { type: 'stage', category: 'background' }
+    ])
     expect(wrapper.emitted('update:drawerOpen')?.at(-1)).toEqual([true])
   })
 
-  it('renders compact import and rig actions below the project menu', () => {
+  it('réserve la sidebar à la navigation et à la recherche', () => {
     const wrapper = mount(AssetCategoryNav, {
       props: {
         selection: { type: 'all' },
@@ -133,19 +137,12 @@ describe('AssetCategoryNav', () => {
       }
     })
 
-    const buttons = wrapper.findAll('button')
-    const projectIndex = buttons.findIndex((button) => button.text().includes('Projet'))
-    const importIndex = buttons.findIndex((button) => button.text().includes('Importer'))
-    const calibrationIndex = buttons.findIndex((button) =>
-      button.text().includes('Rigs')
-    )
-
-    expect(projectIndex).toBe(0)
-    expect(calibrationIndex).toBe(importIndex + 1)
-    expect(buttons[calibrationIndex]?.attributes('aria-pressed')).toBe('false')
+    expect(wrapper.text()).not.toContain('Projet')
+    expect(wrapper.text()).not.toContain('Importer')
+    expect(wrapper.text()).not.toContain('Rigs')
 
     const navigation = wrapper.get('[data-tour="asset-library-nav"]')
-    expect(navigation.classes()).toContain('w-80')
-    expect(navigation.classes()).toContain('max-w-[calc(100vw-1.5rem)]')
+    expect(navigation.classes()).toContain('w-full')
+    expect(wrapper.get('input[aria-label="Rechercher dans la bibliothèque"]')).toBeDefined()
   })
 })

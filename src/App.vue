@@ -6,7 +6,8 @@ import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useWorkspaceBackupStore } from '@/features/project/stores/useWorkspaceBackupStore'
 import { syncBundledAssets } from '@/features/asset-manager/services/demo-asset-seeder'
 
-import AssetLibraryPanel from '@/features/asset-manager/components/AssetLibraryPanel.vue'
+import { AssetLibraryPanel } from '@/features/asset-manager/components/asset-library-panel'
+import { AssetLibraryGlobalActions } from '@/features/asset-manager/components/asset-library-global-actions'
 import StudioViewport from '@/features/studio/components/StudioViewport.vue'
 import {
   StudioWorkspaceLayout,
@@ -33,7 +34,7 @@ let stopRigCatalogWatch: WatchStopHandle | null = null
 const isSettingsOpen = ref(false)
 const isExportOpen = ref(false)
 const isSavedSnapshotsOpen = ref(false)
-const showAssetDrawer = ref(true)
+const isAssetLibraryOpen = ref(true)
 const compactPane = ref<StudioWorkspacePane>('studio')
 
 const { currentSteps, currentStorageKey, tourRef, startTour } = useProductTourManager(
@@ -93,7 +94,10 @@ onBeforeUnmount(() => {
 watch(
   () => rigCatalogStore.isCalibrationOpen,
   (open) => {
-    if (open) isSavedSnapshotsOpen.value = false
+    if (open) {
+      isSavedSnapshotsOpen.value = false
+      isAssetLibraryOpen.value = true
+    }
   }
 )
 
@@ -108,10 +112,6 @@ watch(
     else if (compactPane.value === 'inspector') compactPane.value = 'studio'
   }
 )
-
-function handleProjectMenuOpen(open: boolean): void {
-  if (open) showAssetDrawer.value = false
-}
 </script>
 
 <template>
@@ -119,16 +119,31 @@ function handleProjectMenuOpen(open: boolean): void {
     class="flex min-h-0 min-w-0 flex-col overflow-hidden bg-bg-base font-sans text-text-primary select-none"
   >
     <StudioWorkspaceLayout v-model:compact-pane="compactPane">
-      <template #left>
-        <AssetLibraryPanel
-          v-model:open="showAssetDrawer"
-          data-tour="asset-library"
-          @open-settings="isSettingsOpen = true"
-          @project-menu-open="handleProjectMenuOpen"
-        />
+      <template #header>
+        <div
+          class="flex min-h-12 w-full min-w-0 items-center bg-bg-elevated pl-3"
+          data-studio-header
+        >
+          <AssetLibraryGlobalActions @open-settings="isSettingsOpen = true" />
+          <div class="mx-2 h-5 w-px shrink-0 bg-border-default" aria-hidden="true" />
+          <div id="studio-global-toolbar-host" class="min-w-0 flex-1 self-stretch" />
+        </div>
       </template>
 
-      <div class="size-full h-screen min-h-0 min-w-0 overflow-hidden" @pointerdown="showAssetDrawer = false">
+      <template #left>
+        <ResizableSidebar
+          v-model:open="isAssetLibraryOpen"
+          side="left"
+          :default-width="400"
+          :min-width="320"
+          :max-width="520"
+          storage-key="berlu.asset-library-sidebar-width.v1"
+        >
+          <AssetLibraryPanel v-model:open="isAssetLibraryOpen" data-tour="asset-library" />
+        </ResizableSidebar>
+      </template>
+
+      <div class="size-full h-screen min-h-0 min-w-0 overflow-hidden">
         <StudioViewport
           :is-saved-snapshots-open="isSavedSnapshotsOpen"
           @open-export="isExportOpen = true"

@@ -11,10 +11,9 @@ import { DeskSplitModal } from '@/features/desk-split'
 import type { DeskSplitConfig } from '@core/types/asset.types'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
-import { IconButton } from '@/components/ui/icon-button'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Input } from '@/components/ui/input'
 import { Heading } from '@/components/ui/heading'
+import { Badge } from '@/components/ui/badge'
 import { toast } from '@/ui/shared/services/toast.service'
 import { useRigRuntime } from '@/features/studio/rig-calibration/useRigRuntime'
 import { useRigCalibrationSelection } from '@/features/studio/rig-calibration/useRigCalibrationSelection'
@@ -276,26 +275,20 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
     )
   }
 }
-
-function close(): void {
-  open.value = false
-}
 </script>
 
 <template>
   <aside
     v-if="open"
     data-tour="asset-library-drawer"
-    class="flex w-[420px] min-w-0 max-w-[calc(100vw-20rem)] flex-col overflow-hidden bg-bg-elevated text-text-primary pointer-events-auto select-none"
+    class="asset-results flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-bg-surface text-text-primary pointer-events-auto select-none"
     role="region"
     :aria-labelledby="drawerTitleId"
     @pointerdown.stop
     @dblclick.stop
-    @keydown.esc.stop="close"
   >
-    <!-- En-tête du tiroir -->
     <header
-      class="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border-default bg-bg-elevated px-3"
+      class="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border-subtle bg-bg-surface px-3"
     >
       <div class="flex min-w-0 items-center gap-2">
         <span
@@ -308,38 +301,22 @@ function close(): void {
         <Heading :id="drawerTitleId" as="h3" variant="sm" class="truncate text-xs font-bold">
           {{ currentTitle }}
         </Heading>
-        <span
-          class="shrink-0 rounded-full border border-border-default bg-bg-surface px-1.5 py-0.5 text-[9px] font-semibold text-text-muted"
+        <Badge
+          variant="neutral"
+          size="sm"
+          class="shrink-0 px-1.5 py-0 text-[9px] normal-case tracking-normal"
         >
           {{ displayedAssets.length }}
-        </span>
-      </div>
-
-      <div class="flex items-center gap-1.5 shrink-0">
-        <IconButton
-          icon="close"
-          size="sm"
-          variant="ghost"
-          class="size-7 text-text-muted hover:text-text-primary"
-          aria-label="Fermer le tiroir de sprites"
-          @click="close"
-        />
+        </Badge>
       </div>
     </header>
 
-    <!-- Barre de recherche -->
-    <div class="shrink-0 border-b border-border-default p-2.5">
-      <Input
-        v-model="assetStore.searchQuery"
-        size="sm"
-        placeholder="Filtrer par nom ou tag…"
-        class="text-xs"
-      />
-    </div>
-
-    <!-- Grille de sprites -->
     <div class="custom-scrollbar flex-1 min-h-0 overflow-y-auto p-3">
-      <div class="grid grid-cols-2 gap-3">
+      <div
+        class="asset-grid grid grid-cols-2 gap-2.5"
+        role="listbox"
+        :aria-label="`Sprites : ${currentTitle}`"
+      >
         <AssetCard
           v-for="asset in displayedAssets"
           :key="asset.id"
@@ -385,6 +362,10 @@ function close(): void {
 </template>
 
 <style scoped>
+.asset-results {
+  container-type: inline-size;
+}
+
 .current-category-icon {
   display: inline-flex;
   width: 1.5rem;
@@ -406,5 +387,11 @@ function close(): void {
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: rgb(255 255 255 / 15%);
   border-radius: 9999px;
+}
+
+@container (min-width: 470px) {
+  .asset-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 </style>

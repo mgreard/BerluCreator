@@ -55,7 +55,7 @@ describe('AssetCategoryDrawer', () => {
     setActivePinia(createPinia())
   })
 
-  it('renders assets for selected category and supports close action', async () => {
+  it('renders the selected category as a unified results region', () => {
     const assetStore = useAssetStore()
     assetStore.assets = [
       mockAsset('head-1', 'Tête Heureuse', 'head'),
@@ -72,11 +72,7 @@ describe('AssetCategoryDrawer', () => {
     expect(wrapper.text()).toContain('Arrière-plans')
     expect(wrapper.findAllComponents(AssetCard)).toHaveLength(1)
     expect(wrapper.text()).toContain('Plateau TV')
-
-    const closeBtn = wrapper.find('button[aria-label="Fermer le tiroir de sprites"]')
-    expect(closeBtn.exists()).toBe(true)
-    await closeBtn.trigger('click')
-
-    expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
+    expect(wrapper.get('[role="listbox"]').attributes('aria-label')).toContain('Arrière-plans')
+    expect(wrapper.classes()).toContain('w-full')
   })
 })

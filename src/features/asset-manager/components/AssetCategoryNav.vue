@@ -1,18 +1,17 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, watch } from 'vue'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { useAssetStore } from '../stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
-import { NavigationItem } from '@/components/ui/navigation-item'
+import { Input } from '@/components/ui/input'
+import { Heading } from '@/components/ui/heading'
+import { Select, type SelectOption } from '@/components/ui/select'
 import { Tabs, type TabItem } from '@/components/ui/tabs'
-import { Text } from '@/components/ui/text'
-import { toast } from '@/ui/shared/services/toast.service'
-import WorkspaceBackupMenu from '@/features/project/components/WorkspaceBackupMenu.vue'
-import AssetUploadModal from './AssetUploadModal.vue'
 import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import { useRigRuntime } from '@/features/studio/rig-calibration/useRigRuntime'
 import { isRigSlotCategory } from '@/features/studio/rig-calibration/rig-catalog.service'
@@ -30,32 +29,10 @@ const selection = defineModel<ActiveSelection>('selection', {
   default: () => ({ type: 'all' })
 })
 const drawerOpen = defineModel<boolean>('drawerOpen', { default: true })
-const emit = defineEmits<{
-  (event: 'openSettings'): void
-  (event: 'projectMenuOpen', open: boolean): void
-}>()
-
 const assetStore = useAssetStore()
 const editorStore = useEditorStore()
 const rigCatalog = useRigCatalogStore()
 const rigRuntime = useRigRuntime()
-const isUploadModalOpen = ref(false)
-
-const uploadInitialCategory = computed<AssetCategory | null>(() => {
-  const sel = selection.value
-  if (sel.type === 'stage') return sel.category
-  if (sel.type === 'character' && sel.categoryId) {
-    const found = CHARACTER_CATEGORIES.find((c) => c.id === sel.categoryId)
-    return found?.category ?? null
-  }
-  return null
-})
-
-const uploadInitialCharacterKey = computed<string | null>(() => {
-  const sel = selection.value
-  if (sel.type === 'character') return sel.characterKey
-  return null
-})
 
 function characterKey(asset: Asset): string {
   return asset.character?.key || 'berlu'
@@ -182,39 +159,40 @@ function selectStage(category: AssetCategory): void {
   drawerOpen.value = true
 }
 
-function toggleDrawer(): void {
-  drawerOpen.value = !drawerOpen.value
-}
-
 const categoryTabs = computed<TabItem[]>(() => [
   {
     key: 'all',
-    label: 'Tous les sprites',
-    icon: 'apps',
-    badge: assetStore.assets.length,
-    tone: 'indigo'
+    label: 'Tous',
+    icon: 'apps'
   },
   {
     key: 'characters',
     label: 'Personnages',
-    icon: 'person',
-    badge: availableCharacters.value.reduce(
-      (total, character) => total + characterAssets(character.key).length,
-      0
-    ),
-    tone: 'amber'
+    icon: 'person'
   },
   {
     key: 'stage',
     label: 'Plateau',
-    icon: 'landscape',
-    badge: STAGE_CATEGORIES.reduce(
-      (total, category) => total + stageCategoryCount(category.category),
-      0
-    ),
-    tone: 'sky'
+    icon: 'landscape'
   }
 ])
+
+const characterOptions = computed<SelectOption[]>(() =>
+  availableCharacters.value.map((character) => ({
+    value: character.key,
+    label: character.name
+  }))
+)
+
+const selectedCharacterKey = computed(() =>
+  selection.value.type === 'character'
+    ? selection.value.characterKey
+    : (availableCharacters.value[0]?.key ?? null)
+)
+
+function selectCharacterOption(value: string | number | boolean | null): void {
+  if (typeof value === 'string') selectCharacter(value, null)
+}
 
 const activeCategoryTab = computed(() => {
   if (selection.value.type === 'character') return 'characters'
@@ -246,225 +224,211 @@ function selectCategoryTab(key: string | number): void {
     if (category) selectStage(category.category)
   }
 }
-
-function toggleRigCalibration(): void {
-  if (rigCatalog.isCalibrationOpen) {
-    rigCatalog.closeCalibration()
-    const selectedGroup = editorStore.currentDocument.groups.find(
-      (group): group is CharacterGroup =>
-        group.kind === 'character' && group.id === editorStore.selectedGroupId
-    )
-    if (selectedGroup) editorStore.selectGroupForEditing(selectedGroup.id)
-    return
-  }
-
-  const group =
-    editorStore.currentDocument.groups.find(
-      (candidate): candidate is CharacterGroup =>
-        candidate.kind === 'character' && candidate.id === editorStore.selectedGroupId
-    ) ??
-    editorStore.currentDocument.groups.find(
-      (candidate): candidate is CharacterGroup =>
-        candidate.kind === 'character' && candidate.activeMode === 'rig'
-    )
-  if (!group) return
-
-  const rig = rigRuntime.activeRigForGroup(group) ?? rigCatalog.defaultRig(group.characterKey)
-  if (!rig) {
-    toast.warning('Rig indisponible', 'Aucune configuration de corps n’est disponible.')
-    return
-  }
-
-  let preferredLayer =
-    editorStore.currentDocument.layers.find(
-      (layer) => layer.groupId === group.id && !layer.muted && layer.category === 'body'
-    ) ??
-    editorStore.currentDocument.layers.find(
-      (layer) => layer.groupId === group.id && !layer.muted && layer.category !== 'character_full'
-    )
-  if (!preferredLayer || group.activeMode !== 'rig') {
-    preferredLayer = rigRuntime.activateRig(rig) ?? undefined
-  }
-  if (!preferredLayer) return
-
-  rigCatalog.selectedRigId = rig.id
-  rigCatalog.openCalibration(rig.id)
-  editorStore.selectRigLayerForCalibration(preferredLayer.id)
-  assetStore.selectAsset(preferredLayer.assetId)
-}
 </script>
 
 <template>
   <nav
-    class="library-nav flex w-80 max-w-[calc(100vw-1.5rem)] min-h-0 shrink-0 flex-col gap-3 overflow-hidden border-r border-border-default bg-bg-surface p-3 text-text-primary select-none"
+    class="library-nav flex w-full shrink-0 flex-col gap-3 border-b border-border-default bg-bg-surface p-3 text-text-primary select-none"
     aria-label="Catégories de sprites"
     data-tour="asset-library-nav"
   >
-    <WorkspaceBackupMenu
-      @open-settings="emit('openSettings')"
-      @open-change="emit('projectMenuOpen', $event)"
-    />
-
-    <div class="grid grid-cols-2 gap-2">
-      <Button
-        variant="secondary"
-        size="sm"
-        class="justify-center gap-1.5 px-2 text-[11px] font-semibold"
-        title="Importer des sprites"
-        @click="isUploadModalOpen = true"
-      >
-        <Icon name="cloud_upload" size="xs" class="text-primary" />
-        <span>Importer</span>
-      </Button>
-
-      <Button
-        variant="secondary"
-        size="sm"
-        class="justify-center gap-1.5 px-2 text-[11px] font-semibold"
-        :class="
-          rigCatalog.isCalibrationOpen
-            ? 'border-primary/60 bg-primary/15 text-text-primary'
-            : undefined
-        "
-        :aria-pressed="rigCatalog.isCalibrationOpen"
-        title="Calibrer les rigs de personnages"
-        @click="toggleRigCalibration"
-      >
-        <Icon name="construction" size="xs" class="text-primary" />
-        <span>Rigs</span>
-      </Button>
-    </div>
-
-    <div class="h-px shrink-0 bg-border-subtle" aria-hidden="true" />
-
-    <!-- Seule la navigation des catégories occupe la zone scrollable. -->
-    <div class="flex min-h-0 flex-1 flex-col gap-2">
-      <div class="flex shrink-0 items-center justify-between px-1">
-        <span class="text-[11px] font-bold uppercase tracking-wider text-text-muted"
-          >Catégories</span
+    <div class="flex items-center justify-between gap-3 px-0.5">
+      <div class="flex min-w-0 items-center gap-2">
+        <span
+          class="flex size-7 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary"
+          aria-hidden="true"
         >
-        <IconButton
-          :icon="drawerOpen ? 'left_panel_close' : 'left_panel_open'"
-          size="xs"
-          variant="ghost"
-          class="size-6 text-text-muted hover:text-text-primary"
-          :aria-label="drawerOpen ? 'Fermer le tiroir de sprites' : 'Ouvrir le tiroir de sprites'"
-          :title="drawerOpen ? 'Fermer le tiroir de sprites' : 'Ouvrir le tiroir de sprites'"
-          @click="toggleDrawer"
-        />
-      </div>
-
-      <div
-        class="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border-default bg-bg-base"
-      >
-        <Tabs
-          :model-value="activeCategoryTab"
-          :tabs="categoryTabs"
-          variant="rail"
-          orientation="vertical"
-          aria-label="Catégories de sprites"
-          class="custom-scrollbar h-full border-r-0 bg-transparent px-1.5 py-2"
-          @update:model-value="selectCategoryTab"
-        />
-
-        <div
-          class="custom-scrollbar min-w-0 flex-1 overflow-y-auto border-l border-border-default p-1.5"
-        >
-          <div v-if="selection.type === 'all'" class="grid gap-2 p-2">
-            <Text as="p" variant="caption" color="primary" class="text-[11px] font-semibold">
-              Toute la bibliothèque
-            </Text>
-            <Text as="p" variant="caption" color="muted" class="text-[10px] leading-relaxed">
-              {{ assetStore.assets.length }} sprites disponibles, toutes catégories confondues.
-            </Text>
-          </div>
-
-          <div v-else-if="selection.type === 'character'" class="grid gap-2">
-            <Text
-              as="p"
-              variant="caption"
-              color="inherit"
-              class="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-300/80"
-            >
-              Personnages
-            </Text>
-            <div class="grid gap-1">
-              <template v-for="character in availableCharacters" :key="character.key">
-                <NavigationItem
-                  :label="character.name"
-                  icon="person"
-                  :count="characterAssets(character.key).length"
-                  accent="#f59e0b"
-                  density="compact"
-                  :selected="
-                    selection.characterKey === character.key && selection.categoryId === null
-                  "
-                  @click="selectCharacter(character.key, null)"
-                />
-                <div
-                  v-if="selection.characterKey === character.key"
-                  class="ml-2 grid gap-1 border-l border-amber-400/20 pl-1.5"
-                >
-                  <NavigationItem
-                    v-for="category in availableCategoriesForCharacter(character.key)"
-                    :key="category.id"
-                    :label="category.label"
-                    :icon="category.icon"
-                    :count="characterCategoryCount(character.key, category) || undefined"
-                    :accent="ASSET_CATEGORIES[category.category].color"
-                    density="compact"
-                    :selected="selection.categoryId === category.id"
-                    @click="selectCharacter(character.key, category.id)"
-                  />
-                </div>
-              </template>
-            </div>
-          </div>
-
-          <div v-else class="grid gap-2">
-            <Text
-              as="p"
-              variant="caption"
-              color="inherit"
-              class="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-sky-300/80"
-            >
-              Plateau
-            </Text>
-            <div class="grid gap-1">
-              <NavigationItem
-                v-for="category in STAGE_CATEGORIES"
-                :key="category.category"
-                :label="category.label"
-                :icon="category.icon"
-                :count="stageCategoryCount(category.category) || undefined"
-                :accent="ASSET_CATEGORIES[category.category].color"
-                density="compact"
-                :selected="selection.category === category.category"
-                @click="selectStage(category.category)"
-              />
-            </div>
-          </div>
+          <Icon name="category" size="xs" />
+        </span>
+        <div class="min-w-0">
+          <Heading as="h2" variant="sm" class="truncate text-xs font-bold"> Bibliothèque </Heading>
+          <span class="block text-[10px] text-text-muted">
+            {{ assetStore.assets.length }} sprites disponibles
+          </span>
         </div>
       </div>
+
+      <IconButton
+        icon="left_panel_close"
+        size="xs"
+        variant="ghost"
+        class="size-7 shrink-0 text-text-muted hover:text-text-primary"
+        aria-label="Replier la bibliothèque"
+        title="Replier la bibliothèque"
+        @click="drawerOpen = false"
+      />
     </div>
 
-    <AssetUploadModal
-      v-model:open="isUploadModalOpen"
-      :initial-category="uploadInitialCategory"
-      :initial-character-key="uploadInitialCharacterKey"
+    <Input
+      v-model="assetStore.searchQuery"
+      size="sm"
+      placeholder="Rechercher un sprite…"
+      aria-label="Rechercher dans la bibliothèque"
+      class="text-xs"
     />
+
+    <Tabs
+      :model-value="activeCategoryTab"
+      :tabs="categoryTabs"
+      variant="segmented"
+      size="sm"
+      aria-label="Familles de sprites"
+      class="library-family-tabs"
+      @update:model-value="selectCategoryTab"
+    />
+
+    <div
+      v-if="selection.type === 'character'"
+      class="grid gap-2 border-t border-border-subtle pt-3"
+    >
+      <Select
+        :model-value="selectedCharacterKey"
+        :options="characterOptions"
+        size="sm"
+        aria-label="Personnage actif"
+        placeholder="Choisir un personnage"
+        class="bg-bg-base shadow-none"
+        @update:model-value="selectCharacterOption"
+      />
+
+      <div class="category-grid grid grid-cols-2 gap-1.5" aria-label="Parties du personnage">
+        <Button
+          variant="secondary"
+          size="xs"
+          shape="pill"
+          class="category-filter min-h-8 w-full justify-start gap-1.5 px-2.5 py-1 shadow-none"
+          :data-selected="selection.categoryId === null"
+          :aria-pressed="selection.categoryId === null"
+          :style="{ '--category-accent': '#f59e0b' }"
+          @click="selectCharacter(selection.characterKey, null)"
+        >
+          <Icon name="apps" size="xs" />
+          <span class="category-label">Tout</span>
+          <span class="category-count">{{ characterAssets(selection.characterKey).length }}</span>
+        </Button>
+
+        <Button
+          v-for="category in availableCategoriesForCharacter(selection.characterKey)"
+          :key="category.id"
+          variant="secondary"
+          size="xs"
+          shape="pill"
+          class="category-filter min-h-8 w-full justify-start gap-1.5 px-2.5 py-1 shadow-none"
+          :data-selected="selection.categoryId === category.id"
+          :aria-pressed="selection.categoryId === category.id"
+          :style="{ '--category-accent': ASSET_CATEGORIES[category.category].color }"
+          @click="selectCharacter(selection.characterKey, category.id)"
+        >
+          <Icon :name="category.icon" size="xs" />
+          <span class="category-label">{{ category.label }}</span>
+          <span class="category-count">
+            {{ characterCategoryCount(selection.characterKey, category) }}
+          </span>
+        </Button>
+      </div>
+    </div>
+
+    <div
+      v-else-if="selection.type === 'stage'"
+      class="grid gap-2 border-t border-border-subtle pt-3"
+    >
+      <div class="flex items-center justify-between gap-2 px-0.5">
+        <span class="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+          Catégories du plateau
+        </span>
+        <Badge
+          variant="neutral"
+          size="sm"
+          class="px-1.5 py-0 text-[9px] normal-case tracking-normal"
+        >
+          {{ STAGE_CATEGORIES.length }} filtres
+        </Badge>
+      </div>
+
+      <div class="category-grid grid grid-cols-2 gap-1.5" aria-label="Catégories du plateau">
+        <Button
+          v-for="category in STAGE_CATEGORIES"
+          :key="category.category"
+          variant="secondary"
+          size="xs"
+          shape="pill"
+          class="category-filter min-h-8 w-full justify-start gap-1.5 px-2.5 py-1 shadow-none"
+          :data-selected="selection.category === category.category"
+          :aria-pressed="selection.category === category.category"
+          :style="{ '--category-accent': ASSET_CATEGORIES[category.category].color }"
+          @click="selectStage(category.category)"
+        >
+          <Icon :name="category.icon" size="xs" />
+          <span class="category-label">{{ category.label }}</span>
+          <span class="category-count">{{ stageCategoryCount(category.category) }}</span>
+        </Button>
+      </div>
+    </div>
   </nav>
 </template>
 
 <style scoped>
-.custom-scrollbar::-webkit-scrollbar {
-  width: 5px;
+.library-family-tabs :deep([role='tab']) {
+  min-width: 0;
+  padding-inline: 0.55rem;
+  font-size: 0.68rem;
 }
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+
+.category-filter {
+  border-color: color-mix(in srgb, var(--category-accent) 24%, var(--color-border-default));
+  color: var(--color-text-secondary);
+  transition:
+    color 200ms ease-out,
+    border-color 200ms ease-out,
+    background-color 200ms ease-out,
+    transform 200ms ease-out;
 }
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgb(255 255 255 / 12%);
+
+.category-filter:hover {
+  border-color: color-mix(in srgb, var(--category-accent) 52%, transparent);
+  background: color-mix(in srgb, var(--category-accent) 8%, var(--color-bg-surface));
+  color: color-mix(in srgb, var(--category-accent) 78%, var(--color-text-primary));
+}
+
+.category-filter[data-selected='true'] {
+  border-color: color-mix(in srgb, var(--category-accent) 68%, transparent);
+  background: color-mix(in srgb, var(--category-accent) 14%, var(--color-bg-surface));
+  color: color-mix(in srgb, var(--category-accent) 76%, var(--color-text-primary));
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 10%);
+}
+
+.category-filter :deep(> span) {
+  width: 100%;
+  min-width: 0;
+}
+
+.category-label {
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+  line-height: 1.1;
+  white-space: normal;
+}
+
+.category-count {
+  min-width: 1rem;
+  margin-left: auto;
+  flex: none;
   border-radius: 9999px;
+  padding-inline: 0.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.55rem;
+  line-height: 1rem;
+}
+
+.category-filter[data-selected='true'] .category-count {
+  background: color-mix(in srgb, var(--category-accent) 16%, transparent);
+  color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .category-filter {
+    transition: none;
+  }
 }
 </style>

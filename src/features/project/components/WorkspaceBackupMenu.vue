@@ -2,7 +2,11 @@
 import { computed, ref, useTemplateRef, watch } from 'vue'
 import { AlertDialog } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, type DropdownMenuItemDef } from '@/components/ui/dropdown-menu'
+import {
+  DropdownMenu,
+  type DropdownMenuItemDef,
+  type DropdownMenuSide
+} from '@/components/ui/dropdown-menu'
 import { Icon } from '@/components/ui/icon'
 import { useWorkspaceBackupActions } from '../composables/useWorkspaceBackupActions'
 
@@ -11,8 +15,22 @@ const emit = defineEmits<{
   (event: 'openChange', open: boolean): void
 }>()
 
+const { placement = 'sidebar' } = defineProps<{
+  placement?: 'sidebar' | 'header'
+}>()
+
 const isOpen = ref(false)
 watch(isOpen, (open) => emit('openChange', open))
+const triggerClass = computed(() =>
+  [
+    placement === 'header'
+      ? 'h-7 gap-1.5 px-2 text-[11px] font-semibold'
+      : 'w-full justify-start gap-2 text-xs font-semibold',
+    isOpen.value ? 'bg-bg-surface-hover text-text-primary' : ''
+  ]
+    .filter(Boolean)
+    .join(' ')
+)
 const fileInputRef = useTemplateRef<HTMLInputElement>('backupFileInput')
 const {
   status,
@@ -38,6 +56,8 @@ const badgeLabel = computed(
       error: 'Erreur de sauvegarde'
     })[status.value]
 )
+
+const menuSide = computed<DropdownMenuSide>(() => (placement === 'header' ? 'bottom' : 'right'))
 
 const items = computed<DropdownMenuItemDef[]>(() => [
   {
@@ -102,18 +122,17 @@ function handleFile(event: Event) {
   <DropdownMenu
     v-model:open="isOpen"
     :items="items"
-    side="right"
+    :side="menuSide"
     align="start"
-    :side-offset="10"
+    :side-offset="placement === 'header' ? 8 : 10"
     width="w-72 max-w-[calc(100vw-2rem)]"
   >
     <template #trigger>
       <Button
         data-tour="backup-menu-btn"
         variant="ghost"
-        size="sm"
-        class="w-full justify-start gap-2 text-xs font-semibold"
-        :class="isOpen ? 'bg-bg-surface-hover text-text-primary' : ''"
+        :size="placement === 'header' ? 'xs' : 'sm'"
+        :class="triggerClass"
         :title="badgeLabel"
       >
         <Icon name="apps" size="xs" class="text-primary" />
@@ -122,7 +141,11 @@ function handleFile(event: Event) {
           class="ml-auto size-1.5 rounded-full"
           :class="status === 'dirty' ? 'bg-warning' : 'bg-success'"
         />
-        <Icon name="chevron_right" size="xs" class="text-text-muted" />
+        <Icon
+          :name="placement === 'header' ? 'expand_more' : 'chevron_right'"
+          size="xs"
+          class="text-text-muted"
+        />
       </Button>
     </template>
   </DropdownMenu>

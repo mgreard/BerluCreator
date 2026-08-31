@@ -1,21 +1,13 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import type {
-  Asset,
-  AssetCategory,
-  CharacterAssetMetadata
-} from '@core/types/asset.types'
+import type { Asset, AssetCategory, CharacterAssetMetadata } from '@core/types/asset.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { assetRepository } from '@infrastructure/db/repositories/asset.repository'
 import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 import { generateId } from '@/lib/utils'
+import type { ActiveSelection } from '../types/asset-nav.types'
 
-const ALLOWED_IMAGE_TYPES = new Set([
-  'image/png',
-  'image/jpeg',
-  'image/webp',
-  'image/svg+xml'
-])
+const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'])
 
 async function getImageDimensions(blob: Blob): Promise<{ width: number; height: number }> {
   return await new Promise((resolve, reject) => {
@@ -38,7 +30,9 @@ async function getImageDimensions(blob: Blob): Promise<{ width: number; height: 
   })
 }
 
-export async function validateAssetImage(file: File | Blob): Promise<{ width: number; height: number }> {
+export async function validateAssetImage(
+  file: File | Blob
+): Promise<{ width: number; height: number }> {
   if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
     throw new Error('Format non pris en charge. Utilisez PNG, JPEG, WebP ou SVG.')
   }
@@ -66,11 +60,12 @@ export const useAssetStore = defineStore('asset', () => {
   const assets = ref<Asset[]>([])
   const selectedAssetId = ref<string | null>(null)
   const selectedCategory = ref<AssetCategory | 'all'>('all')
+  const librarySelection = ref<ActiveSelection>({ type: 'all' })
   const searchQuery = ref('')
   const isLoading = ref(false)
 
-  const selectedAsset = computed(() =>
-    assets.value.find((asset) => asset.id === selectedAssetId.value) ?? null
+  const selectedAsset = computed(
+    () => assets.value.find((asset) => asset.id === selectedAssetId.value) ?? null
   )
 
   async function loadAssets(): Promise<void> {
@@ -92,9 +87,10 @@ export const useAssetStore = defineStore('asset', () => {
     validateCharacterMetadata(category, character)
     const dimensions = await validateAssetImage(file)
     const now = Date.now()
-    const defaultName = file instanceof File
-      ? file.name.replace(/\.[^/.]+$/, '')
-      : `sprite_${category}_${now.toString().slice(-4)}`
+    const defaultName =
+      file instanceof File
+        ? file.name.replace(/\.[^/.]+$/, '')
+        : `sprite_${category}_${now.toString().slice(-4)}`
     const assetName = name?.trim() || defaultName
     if (!assetName) throw new Error('Le nom du sprite est obligatoire.')
 
@@ -121,10 +117,13 @@ export const useAssetStore = defineStore('asset', () => {
   async function updateAsset(id: string, changes: Partial<Asset>): Promise<void> {
     await assetRepository.update(id, changes)
     const index = assets.value.findIndex((asset) => asset.id === id)
-    if (index !== -1) assets.value[index] = { ...assets.value[index], ...changes, updatedAt: Date.now() }
+    if (index !== -1)
+      assets.value[index] = { ...assets.value[index], ...changes, updatedAt: Date.now() }
   }
 
-  async function inspectAssetDeletion(id: string): Promise<{ layerCount: number; snapshotNames: string[] }> {
+  async function inspectAssetDeletion(
+    id: string
+  ): Promise<{ layerCount: number; snapshotNames: string[] }> {
     return await assetRepository.inspectDeletion(id)
   }
 
@@ -151,6 +150,7 @@ export const useAssetStore = defineStore('asset', () => {
     assets,
     selectedAssetId,
     selectedCategory,
+    librarySelection,
     searchQuery,
     isLoading,
     selectedAsset,

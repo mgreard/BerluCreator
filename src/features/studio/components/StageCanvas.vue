@@ -32,12 +32,10 @@ import type {
 } from '@core/types/editor.types'
 import type { Asset, DeskSplitConfig } from '@core/types/asset.types'
 import type { TourKey } from '@/features/project/services/tour-definitions'
-import { OPTICAL_DEPTH_PRESETS } from '@core/constants/editor'
 import { toast } from '@/ui/shared/services/toast.service'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
 import { useRigRuntime } from '../rig-calibration/useRigRuntime'
 import StudioGlobalToolbar from './StudioGlobalToolbar.vue'
-import type { OpticalDepthPreset } from './optical-depth-controls'
 import { StudioSelectionToolbar, type DeskPlacement } from './studio-selection-toolbar'
 
 const { isSavedSnapshotsOpen = false } = defineProps<{
@@ -159,7 +157,7 @@ const activeCamera = computed<CameraFrame>({
 
 const depthOfField = computed(() => editorStore.currentDocument.depthOfField)
 
-type StudioInspectorId = 'visual-effects' | 'optical-depth'
+type StudioInspectorId = 'visual-effects'
 const activeStudioPanel = ref<StudioInspectorId | null>(null)
 
 function panelOpenModel(panelId: StudioInspectorId) {
@@ -174,12 +172,11 @@ function panelOpenModel(panelId: StudioInspectorId) {
 
 const isVisualEffectsEditorOpen = panelOpenModel('visual-effects')
 const isDepthOfFieldEditorOpen = ref(false)
-const isOpticalDepthEditorOpen = panelOpenModel('optical-depth')
 const isSelectionToolsOpen = computed(
   () =>
     Boolean(activeSelectedLayer.value) &&
     !isDepthOfFieldEditorOpen.value &&
-    (activeStudioPanel.value === null || activeStudioPanel.value === 'optical-depth')
+    activeStudioPanel.value === null
 )
 let visualEffectsFrame: number | null = null
 let pendingColorGrading: ColorGradingSettings | null = null
@@ -257,10 +254,6 @@ function resetVisualEffects(): void {
 let depthOfFieldFrame: number | null = null
 let pendingDepthOfField: DepthOfFieldOverlayValue | null = null
 let hasDepthOfFieldGesture = false
-let opticalDepthFrame: number | null = null
-let pendingOpticalDepth: { targetType: 'layer' | 'group'; targetId: string; value: number } | null =
-  null
-let hasOpticalDepthGesture = false
 
 const showSelection = computed(() => !activeCamera.value.enabled)
 
@@ -350,149 +343,6 @@ const selectedDeskPlacement = computed<DeskPlacement>({
     if (!layer) return
     editorStore.updateLayerZIndex(layer.id, stagePlacementZIndexes.value[value])
   }
-})
-
-const canEditSelectedOpticalDepth = computed(() => {
-  if (isGroupTarget.value && activeSelectedGroup.value?.kind === 'character') return true
-  const category = activeSelectedLayer.value?.category ?? editorStore.selectedLayer?.category
-  if (!category) return false
-  return category !== 'background'
-})
-
-function resolvedSelectedOpticalDepth(): number {
-  if (isGroupTarget.value && activeSelectedGroup.value) {
-    const group = activeSelectedGroup.value
-    if (Number.isFinite(group.opticalDepth)) {
-      return Math.max(0, Math.min(1, group.opticalDepth!))
-    }
-    const primaryLayer = editorStore.currentDocument.layers.find(
-      (l) => l.groupId === group.id && !l.muted
-    )
-    if (primaryLayer && Number.isFinite(primaryLayer.opticalDepth)) {
-      return Math.max(0, Math.min(1, primaryLayer.opticalDepth!))
-    }
-    return group.depthRole === 'background'
-      ? OPTICAL_DEPTH_PRESETS.far
-      : OPTICAL_DEPTH_PRESETS.focus
-  }
-
-  const layer = activeSelectedLayer.value ?? editorStore.selectedLayer
-  if (!layer) return OPTICAL_DEPTH_PRESETS.focus
-  if (Number.isFinite(layer.opticalDepth)) {
-    return Math.max(0, Math.min(1, layer.opticalDepth!))
-  }
-  return layer.category !== 'foreground' && layer.depthRole === 'background'
-    ? OPTICAL_DEPTH_PRESETS.far
-    : OPTICAL_DEPTH_PRESETS.focus
-}
-
-const selectedOpticalDepthPercent = computed(() => Math.round(resolvedSelectedOpticalDepth() * 100))
-
-const selectedOpticalDepthLabel = computed(() => {
-  const percent = selectedOpticalDepthPercent.value
-  if (Math.abs(percent - 50) <= 5) return 'Plan net'
-  if (percent < 50) return percent <= 10 ? 'Arrière-plan' : 'Plan intermédiaire'
-  return percent >= 90 ? 'Très proche' : 'Premier plan'
-})
-
-const selectedOpticalPreset = computed<OpticalDepthPreset>({
-  get: () => {
-    const depth = resolvedSelectedOpticalDepth()
-    if (Math.abs(depth - OPTICAL_DEPTH_PRESETS.far) < 0.001) return 'far'
-    if (Math.abs(depth - OPTICAL_DEPTH_PRESETS.focus) < 0.001) return 'focus'
-    if (Math.abs(depth - OPTICAL_DEPTH_PRESETS.near) < 0.001) return 'near'
-    return 'custom'
-  },
-  set: (preset) => {
-    if (isGroupTarget.value && activeSelectedGroup.value) {
-      const group = activeSelectedGroup.value
-      if (preset === 'far') editorStore.setGroupDepthRole(group.id, 'background')
-      else if (preset === 'focus') editorStore.setGroupDepthRole(group.id, 'subject')
-      else if (preset === 'near') {
-        editorStore.setGroupOpticalDepth(group.id, OPTICAL_DEPTH_PRESETS.near)
-      }
-      return
-    }
-
-    const layer = activeSelectedLayer.value ?? editorStore.selectedLayer
-    if (!layer) return
-    if (preset === 'far') editorStore.setLayerDepthRole(layer.id, 'background')
-    else if (preset === 'focus') editorStore.setLayerDepthRole(layer.id, 'subject')
-    else if (preset === 'near') {
-      editorStore.setLayerOpticalDepth(layer.id, OPTICAL_DEPTH_PRESETS.near)
-    }
-  }
-})
-
-function scalarValue(value: number | number[]): number {
-  return Array.isArray(value) ? (value[0] ?? 50) : value
-}
-
-function beginOpticalDepthInteraction() {
-  if (hasOpticalDepthGesture) return
-  hasOpticalDepthGesture = true
-  editorStore.beginGesture('Régler la distance caméra')
-}
-
-function flushOpticalDepthUpdate() {
-  opticalDepthFrame = null
-  const pending = pendingOpticalDepth
-  pendingOpticalDepth = null
-  if (pending) {
-    if (pending.targetType === 'group') {
-      editorStore.setGroupOpticalDepth(pending.targetId, pending.value)
-    } else {
-      editorStore.setLayerOpticalDepth(pending.targetId, pending.value)
-    }
-  }
-}
-
-function scheduleOpticalDepthUpdate(value: number | number[]) {
-  const normValue = Math.max(0, Math.min(100, scalarValue(value))) / 100
-  if (isGroupTarget.value && activeSelectedGroup.value) {
-    pendingOpticalDepth = {
-      targetType: 'group',
-      targetId: activeSelectedGroup.value.id,
-      value: normValue
-    }
-  } else {
-    const layer = activeSelectedLayer.value ?? editorStore.selectedLayer
-    if (!layer) return
-    pendingOpticalDepth = {
-      targetType: 'layer',
-      targetId: layer.id,
-      value: normValue
-    }
-  }
-  if (opticalDepthFrame !== null) return
-  opticalDepthFrame = window.requestAnimationFrame(flushOpticalDepthUpdate)
-}
-
-function finishOpticalDepthInteraction() {
-  if (opticalDepthFrame !== null) {
-    window.cancelAnimationFrame(opticalDepthFrame)
-    opticalDepthFrame = null
-  }
-  flushOpticalDepthUpdate()
-  if (hasOpticalDepthGesture) {
-    hasOpticalDepthGesture = false
-    editorStore.endGesture()
-  }
-}
-
-function resetSelectedOpticalDepth() {
-  if (isGroupTarget.value && activeSelectedGroup.value) {
-    editorStore.setGroupDepthRole(activeSelectedGroup.value.id, 'auto')
-    return
-  }
-  const layer = activeSelectedLayer.value ?? editorStore.selectedLayer
-  if (!layer) return
-  editorStore.setLayerDepthRole(layer.id, 'auto')
-}
-
-watch([selectedLayerId, () => editorStore.selectedGroupId], () => {
-  finishOpticalDepthInteraction()
-  if (activeStudioPanel.value === 'optical-depth') activeStudioPanel.value = null
 })
 
 function toggleCameraFrame() {
@@ -767,9 +617,6 @@ onUnmounted(() => {
   if (depthOfFieldFrame !== null) window.cancelAnimationFrame(depthOfFieldFrame)
   if (pendingDepthOfField) editorStore.updateDepthOfField(pendingDepthOfField)
   if (hasDepthOfFieldGesture) editorStore.endGesture()
-  if (opticalDepthFrame !== null) window.cancelAnimationFrame(opticalDepthFrame)
-  flushOpticalDepthUpdate()
-  if (hasOpticalDepthGesture) editorStore.endGesture()
   if (visualEffectsFrame !== null) window.cancelAnimationFrame(visualEffectsFrame)
   flushVisualEffectsUpdate()
   editorStore.endGesture()
@@ -1292,22 +1139,11 @@ function onCanvasDoubleClick(e: MouseEvent) {
           "
           :can-edit-desk-placement="canEditSelectedDeskPlacement"
           :desk-placement="selectedDeskPlacement"
-          :can-edit-optical-depth="canEditSelectedOpticalDepth"
-          :optical-depth-open="isOpticalDepthEditorOpen"
-          :optical-depth-percent="selectedOpticalDepthPercent"
-          :optical-depth-preset="selectedOpticalPreset"
-          :optical-depth-label="selectedOpticalDepthLabel"
           :can-edit-desk-split="Boolean(selectedDeskAsset)"
           :desk-split-open="isDeskSplitModalOpen"
           :flipped="isSelectedFlippedHorizontally"
           :delete-label="deleteSelectionLabel"
           @update:desk-placement="selectedDeskPlacement = $event"
-          @update:optical-depth-open="isOpticalDepthEditorOpen = $event"
-          @update:optical-depth-percent="scheduleOpticalDepthUpdate"
-          @update:optical-depth-preset="selectedOpticalPreset = $event"
-          @optical-depth-interaction-start="beginOpticalDepthInteraction"
-          @optical-depth-interaction-end="finishOpticalDepthInteraction"
-          @reset-optical-depth="resetSelectedOpticalDepth"
           @open-desk-split="openDeskSplitEditor"
           @flip="flipSelectedHorizontal"
           @delete="removeSelectedFromViewport"

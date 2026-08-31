@@ -52,7 +52,6 @@ function updateCompactPane(value: AcceptableValue | AcceptableValue[]): void {
     </Heading>
 
     <header
-      id="studio-global-toolbar-host"
       class="relative z-20 min-w-0 shrink-0 border-b border-border-default bg-bg-elevated empty:hidden"
       data-layout-region="header"
     >

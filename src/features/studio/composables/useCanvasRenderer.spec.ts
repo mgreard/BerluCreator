@@ -219,17 +219,18 @@ describe('export du canvas', () => {
   })
 
   it('compose le grading avant le shader et conserve le matte', () => {
-    const contextFactory = () => ({
-      clearRect: vi.fn(),
-      fillRect: vi.fn(),
-      drawImage: vi.fn(),
-      save: vi.fn(),
-      restore: vi.fn(),
-      fillStyle: '',
-      filter: 'none',
-      globalCompositeOperation: 'source-over',
-      globalAlpha: 1
-    }) as unknown as CanvasRenderingContext2D
+    const contextFactory = () =>
+      ({
+        clearRect: vi.fn(),
+        fillRect: vi.fn(),
+        drawImage: vi.fn(),
+        save: vi.fn(),
+        restore: vi.fn(),
+        fillStyle: '',
+        filter: 'none',
+        globalCompositeOperation: 'source-over',
+        globalAlpha: 1
+      }) as unknown as CanvasRenderingContext2D
     const rawContext = contextFactory()
     const gradedContext = contextFactory()
     const shaderContext = contextFactory()
@@ -271,17 +272,18 @@ describe('export du canvas', () => {
   })
 
   it('applique les effets spatiaux dans le cadre caméra recadré', () => {
-    const contextFactory = () => ({
-      clearRect: vi.fn(),
-      fillRect: vi.fn(),
-      drawImage: vi.fn(),
-      save: vi.fn(),
-      restore: vi.fn(),
-      fillStyle: '',
-      filter: 'none',
-      globalCompositeOperation: 'source-over',
-      globalAlpha: 1
-    }) as unknown as CanvasRenderingContext2D
+    const contextFactory = () =>
+      ({
+        clearRect: vi.fn(),
+        fillRect: vi.fn(),
+        drawImage: vi.fn(),
+        save: vi.fn(),
+        restore: vi.fn(),
+        fillStyle: '',
+        filter: 'none',
+        globalCompositeOperation: 'source-over',
+        globalAlpha: 1
+      }) as unknown as CanvasRenderingContext2D
     const contexts = [contextFactory(), contextFactory(), contextFactory(), contextFactory()]
     const canvases = contexts.map((context) => ({
       width: 0,
@@ -370,12 +372,12 @@ describe('profondeur de champ', () => {
         [{ ...backgroundLayer, category: 'foreground', opticalDepth: 0.65 }],
         { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS, enabled: true }
       )
-    ).toBe(true)
+    ).toBe(false)
     expect(
-      shouldApplyDepthOfField(
-        [{ ...backgroundLayer, category: 'props_set', opticalDepth: 0.5 }],
-        { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS, enabled: true }
-      )
+      shouldApplyDepthOfField([{ ...backgroundLayer, category: 'props_set', opticalDepth: 0.5 }], {
+        ...DEFAULT_DEPTH_OF_FIELD_SETTINGS,
+        enabled: true
+      })
     ).toBe(false)
   })
 
@@ -512,60 +514,34 @@ describe('profondeur de champ', () => {
     expect(mainDrawImage.mock.calls[0]?.[0]).toBe(image)
   })
 
-  it('inverse le masque sous la ligne pour un premier plan proche', () => {
-    const gradient = { addColorStop: vi.fn() }
-    const contextFactory = () =>
-      ({
-        clearRect: vi.fn(),
-        save: vi.fn(),
-        restore: vi.fn(),
-        drawImage: vi.fn(),
-        fillRect: vi.fn(),
-        translate: vi.fn(),
-        createLinearGradient: vi.fn(() => gradient),
-        filter: 'none',
-        globalAlpha: 1,
-        globalCompositeOperation: 'source-over',
-        fillStyle: ''
-      }) as unknown as CanvasRenderingContext2D
-    const contexts = [contextFactory(), contextFactory(), contextFactory()]
-    const canvases = contexts.map((context) => ({
-      width: 0,
-      height: 0,
-      getContext: vi.fn(() => context)
-    })) as unknown as HTMLCanvasElement[]
-    const createElement = document.createElement.bind(document)
-    vi.spyOn(document, 'createElement').mockImplementation((tagName, options) =>
-      tagName === 'canvas' ? canvases.shift()! : createElement(tagName, options)
-    )
-    const image = { complete: true, naturalWidth: 100 } as HTMLImageElement
-    const foreground = {
-      ...backgroundLayer,
-      category: 'foreground',
-      opticalDepth: 0.65,
-      opacity: 1,
-      rotation: 0,
-      scaleX: 1,
-      scaleY: 1,
-      transformOriginX: 50,
-      transformOriginY: 50,
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 100
-    } as RenderableLayer
+  it('ignore les anciennes distances individuelles au profit du rôle global', () => {
+    expect(
+      shouldApplyDepthOfField(
+        [
+          {
+            ...backgroundLayer,
+            category: 'props_set',
+            depthRole: 'subject',
+            opticalDepth: 0.9
+          }
+        ],
+        { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS, enabled: true }
+      )
+    ).toBe(false)
 
-    drawSceneLayersOnContext(
-      contextFactory(),
-      [foreground],
-      322,
-      124,
-      { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS, enabled: true },
-      new Map([['blob-background', image]])
-    )
-
-    expect(gradient.addColorStop).toHaveBeenNthCalledWith(1, 0, 'rgba(0, 0, 0, 0)')
-    expect(gradient.addColorStop).toHaveBeenNthCalledWith(2, 1, 'rgba(0, 0, 0, 1)')
+    expect(
+      shouldApplyDepthOfField(
+        [
+          {
+            ...backgroundLayer,
+            category: 'props_set',
+            depthRole: 'background',
+            opticalDepth: 0.9
+          }
+        ],
+        { ...DEFAULT_DEPTH_OF_FIELD_SETTINGS, enabled: true }
+      )
+    ).toBe(true)
   })
 
   describe('color grading global', () => {

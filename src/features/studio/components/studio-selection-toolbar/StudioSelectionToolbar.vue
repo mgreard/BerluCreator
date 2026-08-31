@@ -2,21 +2,13 @@
 import { ToolbarButton, ToolbarRoot, ToolbarSeparator } from 'reka-ui'
 import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
-import { Popover } from '@/components/ui/popover'
 import { SegmentedControl, type SegmentOption } from '@/components/ui/segmented-control'
-import { OpticalDepthControls, type OpticalDepthPreset } from '../optical-depth-controls'
 import type { DeskPlacement, StudioSelectionToolbarProps } from './types'
 
 defineProps<StudioSelectionToolbarProps>()
 
 const emit = defineEmits<{
   (event: 'update:deskPlacement', value: DeskPlacement): void
-  (event: 'update:opticalDepthOpen', open: boolean): void
-  (event: 'update:opticalDepthPercent', value: number): void
-  (event: 'update:opticalDepthPreset', value: OpticalDepthPreset): void
-  (event: 'opticalDepthInteractionStart'): void
-  (event: 'opticalDepthInteractionEnd'): void
-  (event: 'resetOpticalDepth'): void
   (event: 'openDeskSplit'): void
   (event: 'flip'): void
   (event: 'delete'): void
@@ -61,46 +53,6 @@ const deskPlacementOptions: SegmentOption[] = [
         />
         <ToolbarSeparator class="h-5 w-px shrink-0 bg-white/15" />
       </div>
-
-      <Popover
-        v-if="canEditOpticalDepth"
-        :model-value="opticalDepthOpen"
-        title="Distance caméra"
-        description="Affecte le flou, jamais l’ordre des calques."
-        width="lg"
-        surface="glass"
-        side="top"
-        align="center"
-        :side-offset="20"
-        body-class="p-3 overflow-hidden"
-        data-optical-depth-popover
-        @update:model-value="emit('update:opticalDepthOpen', $event)"
-      >
-        <template #trigger>
-          <ToolbarButton as-child>
-            <IconButton
-              icon="tune"
-              size="xs"
-              variant="ghost"
-              class="viewport-action size-7"
-              :active="opticalDepthOpen"
-              aria-label="Régler la distance caméra du calque"
-              title="Distance caméra (flou optique du calque)"
-            />
-          </ToolbarButton>
-        </template>
-
-        <OpticalDepthControls
-          :model-value="opticalDepthPercent"
-          :preset="opticalDepthPreset"
-          :label="opticalDepthLabel"
-          @update:model-value="emit('update:opticalDepthPercent', $event)"
-          @update:preset="emit('update:opticalDepthPreset', $event)"
-          @interaction-start="emit('opticalDepthInteractionStart')"
-          @interaction-end="emit('opticalDepthInteractionEnd')"
-          @reset="emit('resetOpticalDepth')"
-        />
-      </Popover>
 
       <ToolbarButton v-if="canEditDeskSplit" as-child>
         <IconButton

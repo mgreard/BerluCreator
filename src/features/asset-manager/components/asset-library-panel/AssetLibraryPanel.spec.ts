@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
-import { useAssetStore } from '../stores/useAssetStore'
+import { useAssetStore } from '../../stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import AssetLibraryPanel from './AssetLibraryPanel.vue'
+import AssetCard from '../AssetCard.vue'
 
 vi.mock('@infrastructure/db/repositories/editor-document.repository', () => ({
   editorDocumentRepository: {
@@ -30,7 +31,7 @@ vi.mock('@infrastructure/storage/blob-cache.service', () => ({
   blobCacheService: { acquire: vi.fn(async () => 'blob:source'), release: vi.fn() }
 }))
 
-vi.mock('../services/alpha-thumbnail-cache.service', () => ({
+vi.mock('../../services/alpha-thumbnail-cache.service', () => ({
   alphaThumbnailCacheService: { acquire: vi.fn(async () => 'blob:thumbnail'), release: vi.fn() }
 }))
 
@@ -50,10 +51,22 @@ function mockAsset(id: string, name: string, category: AssetCategory): Asset {
   }
 }
 
-describe('AssetLibraryPanel - Filtrage par rig actif', () => {
+describe('AssetLibraryPanel', () => {
   beforeEach(() => {
     localStorage.clear()
     setActivePinia(createPinia())
+  })
+
+  it('regroupe navigation, recherche et résultats dans une seule colonne', () => {
+    const assetStore = useAssetStore()
+    assetStore.assets = [mockAsset('bg-1', 'Plateau TV', 'background')]
+
+    const wrapper = mount(AssetLibraryPanel, { props: { open: true } })
+
+    expect(wrapper.classes()).toContain('flex-col')
+    expect(wrapper.get('input[aria-label="Rechercher dans la bibliothèque"]')).toBeDefined()
+    expect(wrapper.get('[role="listbox"]')).toBeDefined()
+    expect(wrapper.findAllComponents(AssetCard)).toHaveLength(1)
   })
 
   it('filtre les catégories et les sprites selon le rig actif', async () => {
@@ -63,37 +76,35 @@ describe('AssetLibraryPanel - Filtrage par rig actif', () => {
 
     const bodyA = mockAsset('body-a', 'Buste', 'body')
     const bodyB = mockAsset('body-b', 'Corps complet', 'body')
-    const head1 = mockAsset('head-1', 'Tête A', 'head')
-
-    assetStore.assets = [bodyA, bodyB, head1]
+    const head = mockAsset('head-1', 'Tête A', 'head')
+    assetStore.assets = [bodyA, bodyB, head]
     rigCatalog.initialize(assetStore.assets)
 
     const [bustRig] = rigCatalog.rigs
-
-    // Activer bustRig dans l'éditeur sur le groupe Berlu par défaut
     const group = editorStore.currentDocument.groups.find(
-      (g): g is import('@core/types/editor.types').CharacterGroup =>
-        g.kind === 'character' && g.characterKey === 'berlu'
+      (candidate): candidate is import('@core/types/editor.types').CharacterGroup =>
+        candidate.kind === 'character' && candidate.characterKey === 'berlu'
     )!
     group.activeRigId = bustRig!.id
 
-    const wrapper = mount(AssetLibraryPanel, {
-      props: { open: true }
-    })
-
+    const wrapper = mount(AssetLibraryPanel, { props: { open: true } })
     const characterTab = wrapper
       .findAll('[role="tab"]')
-      .find((tab) => tab.attributes('title')?.startsWith('Personnages'))
-    expect(characterTab).toBeDefined()
+      .find((tab) => tab.text().includes('Personnages'))
     await characterTab?.trigger('mousedown', { button: 0, ctrlKey: false })
 
-    expect(wrapper.text()).toContain('Corps')
-    expect(wrapper.text()).toContain('Têtes')
+    const bodyFilter = wrapper
+      .findAll('button[aria-pressed]')
+      .find((button) => button.text().includes('Corps'))
+    expect(bodyFilter?.text()).toContain('2')
+    expect(assetStore.librarySelection.type).toBe('character')
+  })
 
-    // Les 2 corps restent toujours disponibles pour permettre le switch de rig
-    const navItems = wrapper.findAllComponents({ name: 'NavigationItem' })
-    const bodyNav = navItems.find((item) => item.props('label') === 'Corps')
-    expect(bodyNav).toBeDefined()
-    expect(bodyNav?.props('count')).toBe(2)
+  it('replie toute la bibliothèque depuis son en-tête', async () => {
+    const wrapper = mount(AssetLibraryPanel, { props: { open: true } })
+
+    await wrapper.get('button[aria-label="Replier la bibliothèque"]').trigger('click')
+
+    expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
   })
 })

@@ -22,11 +22,6 @@ describe('StudioSelectionToolbar', () => {
         layerIcon: 'person',
         canEditDeskPlacement: false,
         deskPlacement: 'front',
-        canEditOpticalDepth: false,
-        opticalDepthOpen: false,
-        opticalDepthPercent: 50,
-        opticalDepthPreset: 'focus',
-        opticalDepthLabel: 'Plan net',
         canEditDeskSplit: false,
         deskSplitOpen: false,
         flipped: false,
@@ -40,6 +35,11 @@ describe('StudioSelectionToolbar', () => {
     expect(toolbar?.classList.contains('viewport-glass')).toBe(true)
     expect(toolbar?.classList.contains('absolute')).toBe(true)
     expect(toolbar?.classList.contains('bottom-3')).toBe(true)
+    expect(
+      document.querySelector(
+        '#studio-selection-overlay-host button[aria-label="Régler la distance caméra du calque"]'
+      )
+    ).toBeNull()
 
     await toolbar?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     expect(wrapper.emitted('clearSelection')).toHaveLength(1)
@@ -55,11 +55,6 @@ describe('StudioSelectionToolbar', () => {
         layerIcon: 'desk',
         canEditDeskPlacement: false,
         deskPlacement: 'front',
-        canEditOpticalDepth: false,
-        opticalDepthOpen: false,
-        opticalDepthPercent: 50,
-        opticalDepthPreset: 'focus',
-        opticalDepthLabel: 'Plan net',
         canEditDeskSplit: true,
         deskSplitOpen: false,
         flipped: false,
