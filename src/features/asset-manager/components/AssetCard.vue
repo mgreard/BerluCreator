@@ -19,10 +19,11 @@ import { Heading } from '@/components/ui/heading'
 import { SelectableSurface } from '@/components/ui/selectable-surface'
 import { Skeleton } from '@/components/ui/skeleton'
 
-const { asset, selected = false, allowDuplicate = false } = defineProps<{
+const { asset, selected = false, allowDuplicate = false, disabled = false } = defineProps<{
   asset: Asset
   selected?: boolean
   allowDuplicate?: boolean
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -124,9 +125,14 @@ function onPreviewError(): void {
     role="option"
     :selected="selected"
     :data-selected="selected"
+    :data-disabled="disabled"
     :style="accentStyle"
     @click="emit('select', asset)"
   >
+    <span
+      v-if="disabled"
+      class="absolute inset-0 z-20 flex items-end justify-center rounded-xl bg-black/35 p-2 text-center text-[10px] font-semibold text-white backdrop-blur-[1px]"
+    >Configurer la série</span>
     <div
       ref="previewContainer"
       class="asset-preview relative w-full aspect-square rounded-lg flex items-center justify-center overflow-hidden border"

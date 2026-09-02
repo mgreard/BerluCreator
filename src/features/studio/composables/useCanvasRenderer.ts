@@ -283,18 +283,21 @@ export function drawLayersOnContext(
         (layer.scaleY !== undefined && layer.scaleY !== 1)
 
       if (hasTransform) {
-        const centerX = layer.transformOriginX
-        const centerY = layer.transformOriginY
-        ctx.translate(centerX, centerY)
+        const scaleOriginX = layer.transformOriginX
+        const scaleOriginY = layer.transformOriginY
+        const rotationOriginX = layer.rotationOriginX ?? scaleOriginX
+        const rotationOriginY = layer.rotationOriginY ?? scaleOriginY
+        ctx.translate(rotationOriginX, rotationOriginY)
         if (layer.rotation) {
           ctx.rotate((layer.rotation * Math.PI) / 180)
         }
+        ctx.translate(scaleOriginX - rotationOriginX, scaleOriginY - rotationOriginY)
         if (layer.scaleX !== undefined || layer.scaleY !== undefined) {
           ctx.scale(layer.scaleX ?? 1, layer.scaleY ?? 1)
         }
 
-        const localX = layer.x - centerX
-        const localY = layer.y - centerY
+        const localX = layer.x - scaleOriginX
+        const localY = layer.y - scaleOriginY
 
         if (layer.clipPolygon && layer.clipPolygon.length >= 3) {
           ctx.beginPath()
@@ -457,6 +460,8 @@ function depthOfFieldSceneKey(
         height: layer.height,
         transformOriginX: layer.transformOriginX,
         transformOriginY: layer.transformOriginY,
+        rotationOriginX: layer.rotationOriginX,
+        rotationOriginY: layer.rotationOriginY,
         scaleX: layer.scaleX,
         scaleY: layer.scaleY,
         rotation: layer.rotation,

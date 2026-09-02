@@ -172,14 +172,14 @@ export const OPTICAL_DEPTH_PRESETS = {
 } as const
 
 export const CHARACTER_CATEGORIES = [
-  'character_full',
+  'perso',
   'body',
-  'head'
+  'head',
+  'mouth',
+  'props_character'
 ] as const
 
 export const FREE_ACCESSORY_CATEGORIES = [
-  'eyes',
-  'props_host',
   'props_set',
   'props_desk',
   'foreground'
@@ -197,6 +197,7 @@ export const DEFAULT_CHARACTER_GROUP: CharacterGroup = {
   locked: false,
   collapsed: false,
   color: 'indigo',
+  stagePlane: 'rear',
   allowedCategories: [...CHARACTER_CATEGORIES],
   isDefault: true
 }
@@ -215,6 +216,19 @@ export const DEFAULT_EDITOR_GROUPS: EditorGroup[] = [
     allowedCategories: ['background'],
     isDefault: true
   },
+  {
+    id: 'grp_background_overlay',
+    name: 'Décor intermédiaire',
+    kind: 'stage',
+    zIndex: 5,
+    transform: { ...DEFAULT_TRANSFORM },
+    muted: false,
+    locked: false,
+    collapsed: false,
+    color: 'blue',
+    allowedCategories: ['background_overlay'],
+    isDefault: true
+  },
   DEFAULT_CHARACTER_GROUP,
   {
     id: 'grp_accessories',
@@ -226,7 +240,7 @@ export const DEFAULT_EDITOR_GROUPS: EditorGroup[] = [
     locked: false,
     collapsed: false,
     color: 'purple',
-    allowedCategories: ['eyes', 'props_host'],
+    allowedCategories: [],
     isDefault: true
   },
   {

@@ -1,5 +1,14 @@
 import { db } from '@infrastructure/db/dexie'
 
+export const LEGACY_RIG_CATALOG_STORAGE_KEYS = [
+  'berlu-creator:rig-profiles:v1',
+  'berlu-creator:rig-catalog:v2',
+  'berlu-creator:rig-catalog:v3',
+  'berlu-creator:rig-catalog:v4',
+  'berlu-creator:rig-catalog:v5',
+  'berlu-creator:rig-catalog:v6'
+] as const
+
 export const APPLICATION_STORAGE_KEYS = [
   'berlu.asset-sidebar-width',
   'berlu.asset-sidebar-width.v2',
@@ -11,6 +20,7 @@ export const APPLICATION_STORAGE_KEYS = [
   'berlu-creator:rig-catalog:v4',
   'berlu-creator:rig-catalog:v5',
   'berlu-creator:rig-catalog:v6',
+  'berlu-creator:rig-catalog:v7',
   'berlu.rig-calibration-sidebar-width.v1',
   'mycomplib-theme'
 ] as const
@@ -29,4 +39,9 @@ export async function resetApplicationToFactoryDefaults(): Promise<void> {
   for (const key of APPLICATION_STORAGE_KEYS) {
     window.localStorage.removeItem(key)
   }
+}
+
+export function removeLegacyRigCatalogs(): void {
+  if (typeof window === 'undefined') return
+  for (const key of LEGACY_RIG_CATALOG_STORAGE_KEYS) window.localStorage.removeItem(key)
 }

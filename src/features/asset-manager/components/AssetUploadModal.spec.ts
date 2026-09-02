@@ -7,6 +7,17 @@ import type { EditorLayer } from '@core/types/editor.types'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useAssetStore } from '../stores/useAssetStore'
 import AssetUploadModal from './AssetUploadModal.vue'
+import { trimAndResizeImage } from '../services/transparent-image-trimmer'
+
+vi.mock('../services/transparent-image-trimmer', () => ({
+  trimAndResizeImage: vi.fn(async (file: File) => ({
+    blob: file,
+    file,
+    width: 1,
+    height: 1,
+    changed: false
+  }))
+}))
 
 function findMode(label: string): HTMLElement {
   const mode = [...document.body.querySelectorAll<HTMLElement>('[role="radio"]')].find((element) =>
@@ -33,7 +44,7 @@ function characterAsset(key: string, name: string, category: AssetCategory = 'he
     blobId: `blob-${key}-${category}`,
     width: 840,
     height: 908,
-    character: { key, name, form: category === 'character_full' ? 'full' : 'rig' },
+    character: { key, name, form: category === 'perso' ? 'full' : 'rig' },
     isMovable: false,
     createdAt: 1,
     updatedAt: 1
@@ -127,6 +138,7 @@ describe('AssetUploadModal', () => {
   })
 
   it('importe un sprite dans le personnage existant sélectionné', async () => {
+    vi.mocked(trimAndResizeImage).mockClear()
     const pedro = characterAsset('pedro', 'Pedro')
     const { assetStore, editorStore } = mountModal(
       { open: true, initialCategory: 'head', initialCharacterKey: 'pedro' },
@@ -146,16 +158,20 @@ describe('AssetUploadModal', () => {
         key: 'pedro',
         name: 'Pedro',
         form: 'rig'
+      }, {
+        headSeriesId: 'berlu',
+        characterPropSlot: undefined
       })
     })
+    expect(trimAndResizeImage).not.toHaveBeenCalled()
   })
 
   it('permet de créer un nouveau personnage pendant l’import', async () => {
     const { assetStore, editorStore } = mountModal({
       open: true,
-      initialCategory: 'character_full'
+      initialCategory: 'perso'
     })
-    const imported = characterAsset('alice-invitee', 'Alice Invitée', 'character_full')
+    const imported = characterAsset('alice-invitee', 'Alice Invitée', 'perso')
     const importAsset = vi.spyOn(assetStore, 'importAsset').mockResolvedValue(imported)
     vi.spyOn(editorStore, 'assignAssetToGroup').mockReturnValue({} as EditorLayer)
 
@@ -175,10 +191,13 @@ describe('AssetUploadModal', () => {
     findButton('Importer (1)').click()
 
     await vi.waitFor(() => {
-      expect(importAsset).toHaveBeenCalledWith(expect.any(File), 'character_full', 'alice', [], {
+      expect(importAsset).toHaveBeenCalledWith(expect.any(File), 'perso', 'alice', [], {
         key: 'alice-invitee',
         name: 'Alice Invitée',
         form: 'full'
+      }, {
+        headSeriesId: undefined,
+        characterPropSlot: undefined
       })
     })
   })

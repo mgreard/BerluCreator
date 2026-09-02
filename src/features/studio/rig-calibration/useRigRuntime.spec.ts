@@ -1,112 +1,81 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import type { Asset, AssetCategory } from '@core/types/asset.types'
+import type { Asset } from '@core/types/asset.types'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
+import { headCalibration } from './rig-catalog.service'
 import { useRigCatalogStore } from './rig-catalog.store'
 import { useRigRuntime } from './useRigRuntime'
 
 vi.mock('@infrastructure/db/repositories/editor-document.repository', () => ({
   editorDocumentRepository: {
-    getById: vi.fn(),
-    getByProjectId: vi.fn().mockResolvedValue([]),
-    save: vi.fn().mockResolvedValue(undefined)
+    getById: vi.fn(), getByProjectId: vi.fn().mockResolvedValue([]), save: vi.fn().mockResolvedValue(undefined)
   }
 }))
 
-function asset(id: string, name: string, category: AssetCategory): Asset {
+function asset(id: string, category: Asset['category'], series?: string): Asset {
+  const isBody = category === 'body'
+  const isBerlu = series === 'berlu'
   return {
-    id,
-    name,
-    category,
-    tags: [],
-    blobId: `blob-${id}`,
-    width: category === 'body' ? 800 : 260,
-    height: category === 'body' ? 900 : 309,
+    id, name: id, category, tags: [], blobId: `blob-${id}`,
+    width: isBody ? 800 : isBerlu ? 1205 : 900,
+    height: isBody ? 1000 : isBerlu ? 1305 : 1000,
+    headSeriesId: series,
     character: { key: 'berlu', name: 'Berlu', form: 'rig' },
-    isMovable: false,
-    createdAt: 1,
-    updatedAt: 1
+    isMovable: false, createdAt: 1, updatedAt: 1
   }
 }
 
-describe('useRigRuntime (v6)', () => {
+describe('useRigRuntime v7', () => {
   beforeEach(() => {
     localStorage.clear()
     setActivePinia(createPinia())
   })
 
-  it('remplace un slot dans le rig courant mais change tout le rig pour une pièce externe', () => {
-    const assetStore = useAssetStore()
+  it('preserves the complete instance pose when switching inside one series', () => {
+    const assets = useAssetStore()
     const editor = useEditorStore()
     const catalog = useRigCatalogStore()
-    const bodyA = asset('body-a', 'Corps A', 'body')
-    const bodyB = asset('body-b', 'Corps B', 'body')
-    const sharedHead = asset('head-shared', 'Tête partagée', 'head')
-    const otherHead = asset('head-b', 'Tête B', 'head')
-    assetStore.assets = [bodyA, bodyB, sharedHead, otherHead]
-    catalog.initialize(assetStore.assets)
-    const rigA = catalog.rigs.find((r) => r.body.name === 'Corps A')!
-    const rigB = catalog.rigs.find((r) => r.body.name === 'Corps B')!
-    catalog.setPartCompatibility(rigA.id, otherHead, false)
+    const body = asset('body', 'body')
+    const first = asset('first', 'head', 'berlu')
+    const second = asset('second', 'head', 'berlu')
+    assets.assets = [body, first, second]
+    catalog.initialize(assets.assets)
+    const rig = catalog.rigs[0]!
+    catalog.setSeriesCompatibility(rig.id, 'berlu', true)
     const runtime = useRigRuntime()
+    runtime.activateRig(rig, first)
+    const head = editor.currentDocument.layers.find((layer) => layer.category === 'head')!
+    editor.updateLayerTransform(head.id, { x: head.transform.x + 18, y: head.transform.y - 9, scaleX: 0.7, scaleY: 0.7, rotation: 14 })
 
-    runtime.activateRig(rigA)
-    const group = editor.currentDocument.groups.find(
-      (candidate) => candidate.kind === 'character' && candidate.characterKey === 'berlu'
-    )
-    expect(group?.kind).toBe('character')
-    if (!group || group.kind !== 'character') throw new Error('Groupe personnage introuvable')
-    expect(group.activeRigId).toBe(rigA.id)
-    expect(
-      editor.currentDocument.layers.find(
-        (layer) => layer.groupId === group.id && layer.category === 'body'
-      )?.assetId
-    ).toBe(bodyA.id)
-
-    runtime.selectCharacterAsset(sharedHead)
-    expect(group.activeRigId).toBe(rigA.id)
-    expect(
-      editor.currentDocument.layers.filter(
-        (layer) => layer.groupId === group.id && layer.category === 'head'
-      )
-    ).toHaveLength(1)
-
-    runtime.selectCharacterAsset(otherHead)
-    expect(group.activeRigId).toBe(rigB.id)
-    expect(
-      editor.currentDocument.layers.find(
-        (layer) => layer.groupId === group.id && layer.category === 'body'
-      )?.assetId
-    ).toBe(bodyB.id)
-    expect(
-      editor.currentDocument.layers.find(
-        (layer) => layer.groupId === group.id && layer.category === 'head'
-      )?.assetId
-    ).toBe(otherHead.id)
+    const switched = runtime.selectCharacterAsset(second)!
+    expect(switched.transform).toMatchObject({ x: head.transform.x, y: head.transform.y, scaleX: 0.7, scaleY: 0.7, rotation: 14 })
   })
 
-  it('omet les pièces des catégories désactivées lors de l’activation d’un rig', () => {
-    const assetStore = useAssetStore()
+  it('keeps neck offset but applies new-series defaults and removes the previous mouth', () => {
+    const assets = useAssetStore()
     const editor = useEditorStore()
     const catalog = useRigCatalogStore()
-    const body = asset('body-a', 'Corps A', 'body')
-    const head = asset('head-1', 'Tête', 'head')
-    assetStore.assets = [body, head]
-    catalog.initialize(assetStore.assets)
-    const rig = catalog.rigs.find((r) => r.body.name === 'Corps A')!
-
-    catalog.setCategoryEnabled(rig.id, 'head', false)
+    const body = asset('body', 'body')
+    const berluHead = asset('berlu-head', 'head', 'berlu')
+    const berluMouth = asset('berlu-mouth', 'mouth', 'berlu')
+    const pedroHead = asset('pedro-head', 'head', 'pedro')
+    assets.assets = [body, berluHead, berluMouth, pedroHead]
+    catalog.initialize(assets.assets)
+    const rig = catalog.rigs[0]!
+    catalog.setSeriesCompatibility(rig.id, 'berlu', true)
+    catalog.setSeriesCompatibility(rig.id, 'pedro', true)
+    catalog.updateSeriesDefaults(rig.id, 'pedro', { defaultScale: 0.3, defaultRotation: 11 })
     const runtime = useRigRuntime()
-    runtime.activateRig(rig)
+    runtime.activateRig(rig, berluHead)
+    runtime.selectCharacterAsset(berluMouth)
+    const current = editor.currentDocument.layers.find((layer) => layer.category === 'head')!
+    const currentBase = headCalibration(rig, catalog.seriesById('berlu')!, berluHead)!
+    editor.updateLayerTransform(current.id, { x: currentBase.x + 20, y: currentBase.y - 12 })
 
-    const group = editor.currentDocument.groups.find(
-      (candidate) => candidate.kind === 'character' && candidate.characterKey === 'berlu'
-    )
-    expect(group).toBeDefined()
-
-    const layers = editor.currentDocument.layers.filter((l) => l.groupId === group!.id)
-    expect(layers.some((l) => l.category === 'body')).toBe(true)
-    expect(layers.some((l) => l.category === 'head')).toBe(false)
+    const next = runtime.selectCharacterAsset(pedroHead)!
+    const nextBase = headCalibration(rig, catalog.seriesById('pedro')!, pedroHead)!
+    expect(next.transform).toMatchObject({ x: nextBase.x + 20, y: nextBase.y - 12, scaleX: 0.3, scaleY: 0.3, rotation: 11 })
+    expect(editor.currentDocument.layers.some((layer) => layer.category === 'mouth')).toBe(false)
   })
 })

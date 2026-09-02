@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+﻿import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type {
   CameraFrame,
@@ -195,10 +195,13 @@ function normalizeDocument(document: EditorDocument): EditorDocument {
     shaderSettings: normalizeShaderSettings(document.shaderSettings),
     groups: document.groups.map((group) => ({
       ...group,
+      stagePlane: group.stagePlane ?? (group.kind === 'character' ? 'rear' : undefined),
       transform: normalizeTransform(group.transform)
     })),
     layers: document.layers.map((layer) => ({
       ...layer,
+      locked: layer.category === 'background_overlay' ? true : layer.locked,
+      stagePlane: layer.stagePlane ?? (layer.category === 'props_set' ? 'front' : undefined),
       depthRole: normalizeLayerDepthRole(layer.depthRole),
       opticalDepth: normalizeOpticalDepth(layer.opticalDepth),
       transform: normalizeTransform(layer.transform)
@@ -280,6 +283,7 @@ function createCharacterGroup(name: string, key: string, zIndex: number): Charac
     locked: false,
     collapsed: false,
     color: 'indigo',
+    stagePlane: 'rear',
     allowedCategories: [...CHARACTER_CATEGORIES],
     isDefault: false
   }
@@ -289,7 +293,7 @@ export const useEditorStore = defineStore('editor', () => {
   const currentDocument = ref<EditorDocument>(createDefaultDocument())
   const selectedLayerId = ref<string | null>(null)
   const selectedGroupId = ref<string | null>(null)
-  const editScope = ref<'group' | 'layer'>('layer')
+  const editScope = ref<'group' | 'layer' | 'head'>('layer')
   const undoStack = ref<StudioHistoryEntry[]>([])
   const redoStack = ref<StudioHistoryEntry[]>([])
   const activeGesture = ref<StudioGesture | null>(null)
@@ -350,8 +354,8 @@ export const useEditorStore = defineStore('editor', () => {
     const stage = useProjectStore().currentProject.stage
     const rigCatalog = useRigCatalogStore()
     const rig = rigCatalog.rigById(group.activeRigId) ?? rigCatalog.defaultRig(group.characterKey)
-    const referenceWidth = Math.max(1, rig?.canvasWidth ?? DEFAULT_RIG_CANVAS.width)
-    const referenceHeight = Math.max(1, rig?.canvasHeight ?? DEFAULT_RIG_CANVAS.height)
+    const referenceWidth = Math.max(1, rig?.body.width ?? DEFAULT_RIG_CANVAS.width)
+    const referenceHeight = Math.max(1, rig?.body.height ?? DEFAULT_RIG_CANVAS.height)
     const baseScale = Math.min(
       1,
       (stage.width * 0.7) / referenceWidth,
@@ -643,10 +647,16 @@ export const useEditorStore = defineStore('editor', () => {
         ? findOrCreateCharacterGroup(asset, targetGroupId)
         : findStageGroup(category, targetGroupId)
       const singleton =
-        ASSET_CATEGORIES[category].layerCardinality === 'singleton' || isCharacterCategory(category)
+        ASSET_CATEGORIES[category].layerCardinality === 'singleton' ||
+        (isCharacterCategory(category) && category !== 'props_character') ||
+        category === 'props_character'
       const existing = singleton
         ? currentDocument.value.layers.find(
-            (layer) => layer.groupId === group.id && layer.category === category
+            (layer) =>
+              layer.groupId === group.id &&
+              layer.category === category &&
+              (category !== 'props_character' ||
+                layer.characterPropSlot === asset?.characterPropSlot)
           )
         : undefined
       const calibration = calibrationOverride ?? asset?.calibration
@@ -654,6 +664,8 @@ export const useEditorStore = defineStore('editor', () => {
       if (existing) {
         existing.assetId = assetId
         existing.name = name || asset?.name || existing.name
+        existing.headSeriesId = asset?.headSeriesId
+        existing.characterPropSlot = asset?.characterPropSlot
         existing.muted = false
         if (group.kind === 'character') {
           existing.transform = normalizeTransform(calibration)
@@ -663,7 +675,7 @@ export const useEditorStore = defineStore('editor', () => {
           existing.zIndex = calibration.zIndex ?? existing.zIndex
         }
         if (group.kind === 'character') {
-          group.activeMode = category === 'character_full' ? 'full' : 'rig'
+          group.activeMode = category === 'perso' ? 'full' : 'rig'
           group.muted = false
         }
         selectedLayerId.value = group.kind === 'character' ? null : existing.id
@@ -683,7 +695,10 @@ export const useEditorStore = defineStore('editor', () => {
         zIndex: calibration?.zIndex ?? ASSET_CATEGORIES[category].defaultZIndex,
         order: nextOrder,
         muted: false,
-        locked: false,
+        locked: category === 'background_overlay',
+        stagePlane: category === 'props_set' ? 'front' : undefined,
+        headSeriesId: asset?.headSeriesId,
+        characterPropSlot: asset?.characterPropSlot,
         depthRole: 'auto',
         transform: normalizeTransform(calibration)
       }
@@ -694,7 +709,7 @@ export const useEditorStore = defineStore('editor', () => {
       }
       currentDocument.value.layers.push(layer)
       if (group.kind === 'character') {
-        group.activeMode = category === 'character_full' ? 'full' : 'rig'
+        group.activeMode = category === 'perso' ? 'full' : 'rig'
         group.muted = false
       }
       selectedLayerId.value = group.kind === 'character' ? null : layer.id
@@ -718,11 +733,13 @@ export const useEditorStore = defineStore('editor', () => {
       if (!group) return null
 
       currentDocument.value.layers = currentDocument.value.layers.filter(
-        (layer) => layer.groupId !== group.id || layer.category === 'character_full'
+        (layer) => layer.groupId !== group.id || layer.category === 'perso'
       )
       let nextOrder =
         currentDocument.value.layers.reduce((max, layer) => Math.max(max, layer.order), -1) + 1
-      const created: EditorLayer[] = presets.map((preset) => ({
+      const created: EditorLayer[] = presets.map((preset) => {
+        const asset = resolveAsset(preset.assetId)
+        return {
         id: generateId('layer'),
         assetId: preset.assetId,
         name: preset.name,
@@ -732,9 +749,12 @@ export const useEditorStore = defineStore('editor', () => {
         order: nextOrder++,
         muted: false,
         locked: false,
+        headSeriesId: asset?.headSeriesId,
+        characterPropSlot: asset?.characterPropSlot,
         depthRole: 'auto',
         transform: normalizeTransform(preset.calibration)
-      }))
+        }
+      })
       currentDocument.value.layers.push(...created)
       group.activeMode = 'rig'
       group.activeRigId = rigId
@@ -772,7 +792,7 @@ export const useEditorStore = defineStore('editor', () => {
       : undefined
     const compatibleMode =
       group?.kind !== 'character' ||
-      (group.activeMode === 'full') === (category === 'character_full')
+      (group.activeMode === 'full') === (category === 'perso')
     const isVisible = Boolean(existing && !existing.muted && !group?.muted && compatibleMode)
 
     if (existing && isVisible) {
@@ -786,7 +806,7 @@ export const useEditorStore = defineStore('editor', () => {
         existing.muted = false
         group.muted = false
         if (group.kind === 'character') {
-          group.activeMode = category === 'character_full' ? 'full' : 'rig'
+          group.activeMode = category === 'perso' ? 'full' : 'rig'
         }
         selectedLayerId.value = group.kind === 'character' ? null : existing.id
         selectedGroupId.value = group.id
@@ -840,8 +860,8 @@ export const useEditorStore = defineStore('editor', () => {
       const removesLayer = (layer: EditorLayer) =>
         layer.groupId === group.id &&
         (group.activeMode === 'full'
-          ? layer.category === 'character_full'
-          : layer.category !== 'character_full')
+          ? layer.category === 'perso'
+          : layer.category !== 'perso')
       const removedCount = currentDocument.value.layers.filter(removesLayer).length
       currentDocument.value.layers = currentDocument.value.layers.filter(
         (layer) => !removesLayer(layer)
@@ -1185,6 +1205,16 @@ export const useEditorStore = defineStore('editor', () => {
     editScope.value = 'layer'
   }
 
+  function selectHeadForEditing(layerId: string): void {
+    const layer = currentDocument.value.layers.find((candidate) => candidate.id === layerId)
+    if (!layer || layer.category !== 'head') return
+    const group = currentDocument.value.groups.find((candidate) => candidate.id === layer.groupId)
+    if (group?.kind !== 'character' || group.activeMode !== 'rig') return
+    selectedLayerId.value = layer.id
+    selectedGroupId.value = group.id
+    editScope.value = 'head'
+  }
+
   function selectGroupForEditing(groupId: string): void {
     const group = currentDocument.value.groups.find((candidate) => candidate.id === groupId)
     if (!group) return
@@ -1240,10 +1270,10 @@ export const useEditorStore = defineStore('editor', () => {
       )
       if (!group || group.activeMode !== 'full') continue
       const hasFull = currentDocument.value.layers.some(
-        (layer) => layer.groupId === group.id && layer.category === 'character_full'
+        (layer) => layer.groupId === group.id && layer.category === 'perso'
       )
       const hasRig = currentDocument.value.layers.some(
-        (layer) => layer.groupId === group.id && layer.category !== 'character_full'
+        (layer) => layer.groupId === group.id && layer.category !== 'perso'
       )
       if (!hasFull && hasRig) group.activeMode = 'rig'
     }
@@ -1311,6 +1341,7 @@ export const useEditorStore = defineStore('editor', () => {
     resetVisualEffects,
     selectLayerForEditing,
     selectRigLayerForCalibration,
+    selectHeadForEditing,
     selectGroupForEditing,
     clearStudioSelection,
     beginGesture,

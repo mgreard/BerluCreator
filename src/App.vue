@@ -5,6 +5,7 @@ import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useWorkspaceBackupStore } from '@/features/project/stores/useWorkspaceBackupStore'
 import { syncBundledAssets } from '@/features/asset-manager/services/demo-asset-seeder'
+import { removeLegacyRigCatalogs } from '@/features/project/services/factory-reset.service'
 
 import { AssetLibraryPanel } from '@/features/asset-manager/components/asset-library-panel'
 import { AssetLibraryGlobalActions } from '@/features/asset-manager/components/asset-library-global-actions'
@@ -63,6 +64,7 @@ const { currentSteps, currentStorageKey, tourRef, startTour } = useProductTourMa
 
 onMounted(async () => {
   try {
+    removeLegacyRigCatalogs()
     splashStatus.value = 'Initialisation du projet...'
     splashProgress.value = 25
     const project = await projectStore.loadInitialProject()
@@ -80,7 +82,11 @@ onMounted(async () => {
       editorStore.syncRigCatalogSnapshot(JSON.stringify(rigCatalogStore.exportCatalog()))
     }
     stopRigCatalogWatch = watch(
-      [() => rigCatalogStore.rigs, () => rigCatalogStore.defaultRigByCharacter],
+      [
+        () => rigCatalogStore.rigs,
+        () => rigCatalogStore.headSeries,
+        () => rigCatalogStore.defaultRigByCharacter
+      ],
       () => editorStore.syncRigCatalogSnapshot(JSON.stringify(rigCatalogStore.exportCatalog())),
       { deep: true }
     )
@@ -92,6 +98,7 @@ onMounted(async () => {
         () => editorStore.currentDocument,
         () => assetStore.assets,
         () => rigCatalogStore.rigs,
+        () => rigCatalogStore.headSeries,
         () => rigCatalogStore.defaultRigByCharacter
       ],
       () => workspaceBackupStore.markDirty(),
@@ -167,7 +174,7 @@ watch(
         </ResizableSidebar>
       </template>
 
-      <div class="size-full h-screen min-h-0 min-w-0 overflow-hidden">
+      <div class="h-full w-full min-h-0 min-w-0 overflow-hidden">
         <StudioViewport
           :is-saved-snapshots-open="isSavedSnapshotsOpen"
           @open-export="isExportOpen = true"

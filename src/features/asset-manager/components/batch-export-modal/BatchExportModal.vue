@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onWatcherCleanup } from 'vue'
+import { ref, computed, watch, onWatcherCleanup } from 'vue'
 import { Modal } from '@/components/ui/modal'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Icon } from '@/components/ui/icon'
 import { Text } from '@/components/ui/text'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 import { SegmentedControl, type SegmentOption } from '@/components/ui/segmented-control'
 import { FormGroup } from '@/components/ui/form-group'
 import { toast } from '@/ui/shared/services/toast.service'
@@ -20,7 +21,6 @@ import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 
 import {
   useBatchExporter,
-  type BatchExportItem,
   type BatchExportOptions
 } from '../../composables/useBatchExporter'
 
@@ -34,6 +34,7 @@ const selectedItemIds = ref<string[]>([])
 
 const formatOption = ref<'image/png' | 'image/webp'>('image/png')
 const scaleOption = ref<number>(1)
+const trimAlphaOption = ref<boolean>(false)
 
 const typeFilterOptions = computed<SegmentOption[]>(() => [
   {
@@ -143,14 +144,6 @@ const allFilteredSelected = computed(() => {
   return filteredItems.value.every((item) => selectedItemIds.value.includes(item.id))
 })
 
-const someFilteredSelected = computed(() => {
-  if (filteredItems.value.length === 0) return false
-  const selectedInFiltered = filteredItems.value.filter((item) =>
-    selectedItemIds.value.includes(item.id)
-  )
-  return selectedInFiltered.length > 0 && selectedInFiltered.length < filteredItems.value.length
-})
-
 function selectAll() {
   const currentIds = new Set(selectedItemIds.value)
   for (const item of filteredItems.value) {
@@ -180,7 +173,8 @@ async function handleStartExport() {
 
   const options: BatchExportOptions = {
     format: formatOption.value,
-    scale: Number(scaleOption.value)
+    scale: Number(scaleOption.value),
+    trimAlpha: trimAlphaOption.value
   }
 
   try {
@@ -227,7 +221,7 @@ async function handleStartExport() {
 
           <Button
             size="xs"
-            variant="outline"
+            variant="secondary"
             class="gap-1 text-[11px]"
             :disabled="allFilteredSelected || filteredItems.length === 0"
             @click="selectAll"
@@ -260,7 +254,7 @@ async function handleStartExport() {
             Prêt pour l’export
           </Badge>
         </div>
-        <Text v-if="filteredItems.length !== exportableItems.length" variant="muted" class="text-[11px] italic">
+        <Text v-if="filteredItems.length !== exportableItems.length" variant="caption" class="text-[11px] italic">
           {{ filteredItems.length }} élément(s) filtré(s)
         </Text>
       </div>
@@ -302,7 +296,7 @@ async function handleStartExport() {
               <Badge
                 v-if="item.type === 'rig'"
                 variant="accent"
-                size="xs"
+                size="sm"
                 class="font-mono text-[9px] uppercase tracking-wider shadow-sm"
               >
                 RIG
@@ -344,13 +338,13 @@ async function handleStartExport() {
               </Text>
               <div class="flex items-center justify-between text-[10px] text-text-muted">
                 <Text
-                  variant="muted"
+                  variant="caption"
                   class="text-[10px] truncate max-w-[90px]"
                 >
                   {{ item.characterName || item.category }}
                 </Text>
                 <Text
-                  variant="muted"
+                  variant="caption"
                   class="text-[10px] font-mono shrink-0"
                 >
                   {{ item.width }}×{{ item.height }}
@@ -371,7 +365,7 @@ async function handleStartExport() {
           <template #action>
             <Button
               size="xs"
-              variant="outline"
+              variant="secondary"
               @click="
                 searchQuery = '';
                 selectedTypeFilter = 'all'
@@ -383,28 +377,44 @@ async function handleStartExport() {
         </EmptyState>
       </Card>
 
-      <!-- Configuration du format et facteur d'échelle -->
+      <!-- Configuration du format, facteur d'échelle et rognage -->
       <Card
         padding="sm"
-        class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-bg-surface border border-border-default"
+        class="flex flex-col gap-3 bg-bg-surface border border-border-default"
       >
-        <FormGroup label="Format de sortie" class="mb-0">
-          <Select
-            v-model="formatOption"
-            :options="formatSelectOptions"
-            size="sm"
-            aria-label="Format de sortie des images"
-          />
-        </FormGroup>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormGroup label="Format de sortie" class="mb-0">
+            <Select
+              v-model="formatOption"
+              :options="formatSelectOptions"
+              size="sm"
+              aria-label="Format de sortie des images"
+            />
+          </FormGroup>
 
-        <FormGroup label="Facteur de Résolution" class="mb-0">
-          <Select
-            v-model="scaleOption"
-            :options="scaleSelectOptions"
-            size="sm"
-            aria-label="Résolution d’export HD"
-          />
-        </FormGroup>
+          <FormGroup label="Facteur de Résolution" class="mb-0">
+            <Select
+              v-model="scaleOption"
+              :options="scaleSelectOptions"
+              size="sm"
+              aria-label="Résolution d’export HD"
+            />
+          </FormGroup>
+        </div>
+
+        <Separator class="my-0.5" />
+
+        <div class="flex items-center justify-between">
+          <div class="space-y-0.5 pr-2">
+            <Text variant="body" weight="medium" class="text-xs text-text-primary">
+              Supprimer les bordures transparentes (Auto-crop)
+            </Text>
+            <Text variant="caption" color="muted" class="text-[11px]">
+              Rogne les marges transparentes de chaque sprite ou rig avant la génération de l'archive.
+            </Text>
+          </div>
+          <Switch v-model="trimAlphaOption" aria-label="Supprimer les bordures transparentes" />
+        </div>
       </Card>
 
       <!-- Progression de l'export avec Progress & Card de la librairie -->

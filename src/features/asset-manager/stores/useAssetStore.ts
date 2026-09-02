@@ -1,13 +1,61 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import type { Asset, AssetCategory, CharacterAssetMetadata } from '@core/types/asset.types'
+import type {
+  Asset,
+  AssetCategory,
+  CharacterAssetMetadata,
+  CharacterPropSlot,
+  HeadSeriesId
+} from '@core/types/asset.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { assetRepository } from '@infrastructure/db/repositories/asset.repository'
 import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 import { generateId } from '@/lib/utils'
 import type { ActiveSelection } from '../types/asset-nav.types'
+import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
+import { initialBodyRigGeometry } from '@/features/studio/rig-calibration/rig-catalog.service'
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'])
+
+async function getAlphaBounds(
+  blob: Blob,
+  width: number,
+  height: number
+): Promise<{ x: number; y: number; width: number; height: number } | undefined> {
+  if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return undefined
+  try {
+    const bitmap = await createImageBitmap(blob)
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    if (!context) {
+      bitmap.close()
+      return undefined
+    }
+    context.drawImage(bitmap, 0, 0, width, height)
+    bitmap.close()
+    const pixels = context.getImageData(0, 0, width, height).data
+    let minX = width
+    let minY = height
+    let maxX = -1
+    let maxY = -1
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        if (pixels[(y * width + x) * 4 + 3] === 0) continue
+        minX = Math.min(minX, x)
+        minY = Math.min(minY, y)
+        maxX = Math.max(maxX, x)
+        maxY = Math.max(maxY, y)
+      }
+    }
+    return maxX >= minX && maxY >= minY
+      ? { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 }
+      : undefined
+  } catch {
+    return undefined
+  }
+}
 
 async function getImageDimensions(blob: Blob): Promise<{ width: number; height: number }> {
   return await new Promise((resolve, reject) => {
@@ -44,14 +92,14 @@ function validateCharacterMetadata(
   character?: CharacterAssetMetadata
 ): void {
   const isCharacter = ASSET_CATEGORIES[category].placementMode === 'character-anchored'
-  if (!isCharacter) return
+  if (!isCharacter || category === 'props_character') return
   if (!character?.key.trim() || !character.name.trim()) {
     throw new Error('Le nom du personnage est obligatoire.')
   }
-  if (category === 'character_full' && character.form !== 'full') {
+  if (category === 'perso' && character.form !== 'full') {
     throw new Error('Un sprite complet doit utiliser la forme « full ».')
   }
-  if (category !== 'character_full' && character.form !== 'rig') {
+  if (category !== 'perso' && character.form !== 'rig') {
     throw new Error('Un élément de rig doit utiliser la forme « rig ».')
   }
 }
@@ -84,10 +132,30 @@ export const useAssetStore = defineStore('asset', () => {
     category: AssetCategory,
     name?: string,
     tags: string[] = [],
-    character?: CharacterAssetMetadata
+    character?: CharacterAssetMetadata,
+    metadata?: { headSeriesId?: HeadSeriesId; characterPropSlot?: CharacterPropSlot }
   ): Promise<Asset> {
     validateCharacterMetadata(category, character)
     const dimensions = await validateAssetImage(file)
+    const alphaBounds =
+      category === 'body'
+        ? await getAlphaBounds(file, dimensions.width, dimensions.height)
+        : undefined
+    const rigCatalog = useRigCatalogStore()
+    if ((category === 'head' || category === 'mouth') && !metadata?.headSeriesId) {
+      throw new Error('Sélectionnez une série de têtes pour cet asset.')
+    }
+    if (category === 'props_character' && !metadata?.characterPropSlot) {
+      throw new Error('Sélectionnez un slot d’accessoire.')
+    }
+    if (category === 'head' && metadata?.headSeriesId) {
+      const series = rigCatalog.seriesById(metadata.headSeriesId)
+      if (series && (series.width !== dimensions.width || series.height !== dimensions.height)) {
+        throw new Error(
+          `Cette tête mesure ${dimensions.width}×${dimensions.height}, au lieu de ${series.width}×${series.height} pour la série ${series.label}.`
+        )
+      }
+    }
     const now = Date.now()
     const defaultName =
       file instanceof File
@@ -104,6 +172,9 @@ export const useAssetStore = defineStore('asset', () => {
       blobId: generateId('blob'),
       width: dimensions.width,
       height: dimensions.height,
+      source: 'uploaded',
+      headSeriesId: metadata?.headSeriesId,
+      characterPropSlot: metadata?.characterPropSlot,
       character: character ? { ...character } : undefined,
       isMovable: ASSET_CATEGORIES[category].placementMode === 'free-transform',
       createdAt: now,
@@ -112,6 +183,16 @@ export const useAssetStore = defineStore('asset', () => {
 
     await assetRepository.create(asset, file)
     assets.value.push(asset)
+    rigCatalog.initialize(assets.value)
+    if (category === 'body' && alphaBounds) {
+      const rig = rigCatalog.compatibleRigs(asset)[0]
+      if (rig) {
+        rigCatalog.updateRigGeometry(
+          rig.id,
+          initialBodyRigGeometry(asset.width, asset.height, alphaBounds)
+        )
+      }
+    }
     selectedAssetId.value = asset.id
     return asset
   }

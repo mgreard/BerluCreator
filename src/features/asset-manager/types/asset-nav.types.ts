@@ -24,15 +24,16 @@ export type ActiveSelection =
   | { type: 'stage'; category: AssetCategory }
 
 export const CHARACTER_CATEGORIES: CharacterCategory[] = [
-  { id: 'full', label: 'Sprites complets', icon: 'person', category: 'character_full' },
+  { id: 'full', label: 'Personnages complets', icon: 'person', category: 'perso' },
   { id: 'body', label: 'Corps', icon: 'body_system', category: 'body' },
-  { id: 'head', label: 'Têtes', icon: 'face', category: 'head' }
+  { id: 'head', label: 'Têtes', icon: 'face', category: 'head' },
+  { id: 'mouth', label: 'Bouches', icon: 'mood', category: 'mouth' },
+  { id: 'props-character', label: 'Accessoires', icon: 'apparel', category: 'props_character' }
 ]
 
 export const STAGE_CATEGORIES: StageCategoryItem[] = [
   { category: 'background', label: 'Arrière-plans', icon: 'tv_gen' },
-  { category: 'eyes', label: 'Accessoires visage', icon: 'visibility' },
-  { category: 'props_host', label: 'Accessoires', icon: 'apparel' },
+  { category: 'background_overlay', label: 'Décors intermédiaires', icon: 'layers' },
   { category: 'desk', label: 'Bureaux', icon: 'desk' },
   { category: 'props_desk', label: 'Objets du bureau', icon: 'inventory_2' },
   { category: 'props_set', label: 'Accessoires plateau', icon: 'category' },

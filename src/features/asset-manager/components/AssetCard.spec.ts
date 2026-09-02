@@ -77,7 +77,7 @@ describe('AssetCard', () => {
 
   it('propose une occurrence supplémentaire uniquement quand elle est autorisée', async () => {
     const wrapper = mount(AssetCard, {
-      props: { asset: { ...headAsset, category: 'eyes' }, allowDuplicate: true }
+      props: { asset: { ...headAsset, category: 'props_character' }, allowDuplicate: true }
     })
     await flushPromises()
 

@@ -96,7 +96,7 @@ describe('migration Dexie v4 vers v5', () => {
       displayHeight: 454
     }))
 
-    expect(migrated.category).toBe('character_full')
+    expect(migrated.category).toBe('perso')
     expect(migrated.character).toEqual({ key: 'berlu', name: 'Berlu', form: 'full' })
     expect(migrated).not.toHaveProperty('displayWidth')
     expect(migrated).not.toHaveProperty('displayHeight')
@@ -128,7 +128,7 @@ describe('migration Dexie v4 vers v5', () => {
       zIndex: 28,
       transform: { x: 45, y: -10, scaleX: 1.2, scaleY: 1.2, rotation: 4 }
     })
-    expect(migrated.layers.map((layer) => layer.category)).toEqual(['character_full', 'head'])
+    expect(migrated.layers.map((layer) => layer.category)).toEqual(['perso', 'head'])
     expect(migrated.layers[0].transform).toMatchObject({
       x: 3,
       y: 4,

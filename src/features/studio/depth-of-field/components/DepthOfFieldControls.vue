@@ -3,6 +3,7 @@ import { onBeforeUnmount, ref, watch } from 'vue'
 import { cn } from '@/shared/utils/cn'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
+import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import type {
   DepthOfFieldControlsEmits,
@@ -119,7 +120,7 @@ onBeforeUnmount(finishInteraction)
     <div class="space-y-1.5">
       <span class="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Préréglages cinématiques</span>
       <div class="grid grid-cols-3 gap-1.5">
-        <button
+        <Button
           v-for="preset in CINEMATIC_PRESETS"
           :key="preset.id"
           type="button"
@@ -128,7 +129,7 @@ onBeforeUnmount(finishInteraction)
           @click="applyPreset(preset)"
         >
           {{ preset.name }}
-        </button>
+        </Button>
       </div>
     </div>
 

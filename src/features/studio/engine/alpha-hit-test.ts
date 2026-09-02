@@ -8,6 +8,8 @@ export interface TransformGeometry {
   rotation?: number
   transformOriginX?: number
   transformOriginY?: number
+  rotationOriginX?: number
+  rotationOriginY?: number
 }
 
 interface AlphaMask {
@@ -29,17 +31,21 @@ export function mapPointToImagePixel(
   const rotation = geometry.rotation || 0
   const transformOriginX = geometry.transformOriginX ?? geometry.x + geometry.width / 2
   const transformOriginY = geometry.transformOriginY ?? geometry.y + geometry.height / 2
+  const rotationOriginX = geometry.rotationOriginX ?? transformOriginX
+  const rotationOriginY = geometry.rotationOriginY ?? transformOriginY
 
   const radians = (rotation * Math.PI) / 180
   const cos = Math.cos(radians)
   const sin = Math.sin(radians)
-  const deltaX = point.x - transformOriginX
-  const deltaY = point.y - transformOriginY
+  const deltaX = point.x - rotationOriginX
+  const deltaY = point.y - rotationOriginY
 
   const unrotatedX = cos * deltaX + sin * deltaY
   const unrotatedY = -sin * deltaX + cos * deltaY
-  const localX = transformOriginX + unrotatedX / scaleX
-  const localY = transformOriginY + unrotatedY / scaleY
+  const scaledX = rotationOriginX + unrotatedX
+  const scaledY = rotationOriginY + unrotatedY
+  const localX = transformOriginX + (scaledX - transformOriginX) / scaleX
+  const localY = transformOriginY + (scaledY - transformOriginY) / scaleY
 
   if (
     localX < geometry.x ||

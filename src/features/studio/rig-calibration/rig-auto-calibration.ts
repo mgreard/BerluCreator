@@ -21,7 +21,7 @@ interface CategoryTarget {
 
 const TARGETS: Partial<Record<AssetCategory, CategoryTarget>> = {
   body: { maxWidth: 0.92, maxHeight: 0.92, anchorX: 0.5, anchorY: 0.97, pivotX: 0.5, pivotY: 1 },
-  head: { maxWidth: 0.38, maxHeight: 0.34, anchorX: 0.5, anchorY: 0.36, pivotX: 0.5, pivotY: 1 }
+  head: { maxWidth: 0.75, maxHeight: 0.60, anchorX: 0.5, anchorY: 0.18, pivotX: 0.5, pivotY: 0.94 }
 }
 
 export function computeSuggestedRigCalibration(

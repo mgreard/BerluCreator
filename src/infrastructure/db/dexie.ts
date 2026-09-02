@@ -160,15 +160,16 @@ function isFullAsset(asset: V4Asset): boolean {
 }
 
 function migrateCategory(category: string, full = false): AssetCategory {
-  if (full) return 'character_full'
+  if (full) return 'perso'
   if (category === 'torso') return 'body'
   const allowed: readonly string[] = [
     'background',
-    'character_full',
+    'background_overlay',
+    'perso',
     'body',
     'head',
-    'eyes',
-    'props_host',
+    'mouth',
+    'props_character',
     'props_set',
     'desk',
     'props_desk',
@@ -267,7 +268,7 @@ function migrateGroups(
       const firstAsset = assets.get(characterLayers[0]?.assetId)
       const name = firstAsset?.character?.name || raw.customCategory || raw.name || 'Berlu'
       const hasVisibleFull = characterLayers.some(
-        (layer) => assets.get(layer.assetId)?.category === 'character_full' && !layer.muted
+        (layer) => assets.get(layer.assetId)?.category === 'perso' && !layer.muted
       )
       return {
         ...base,
@@ -443,7 +444,7 @@ export class BerluDatabase extends Dexie {
             viewportSnapshots: (workspace.viewportSnapshots ?? []).map((snapshot) =>
               migrateV4Snapshot(snapshot, workspaceAssetMap)
             )
-          } satisfies WorkspaceSnapshot)
+          } as WorkspaceSnapshot)
         } else if (workspace) {
           await transaction.table('workspaceSnapshots').delete('manual')
         }
@@ -461,6 +462,28 @@ export class BerluDatabase extends Dexie {
               }) satisfies Project
           )
         )
+      })
+
+    this.version(6)
+      .stores({
+        assets: 'id, name, category, character.key, headSeriesId, source, sourcePath, blobId, createdAt, updatedAt',
+        assetBlobs: 'id, mimeType, createdAt',
+        projects: 'id, createdAt, updatedAt',
+        editorDocuments: 'id, projectId, createdAt, updatedAt',
+        viewportSnapshots: 'id, name, createdAt, updatedAt',
+        workspaceSnapshots: 'id, createdAt',
+        characters: null
+      })
+      .upgrade(async (transaction) => {
+        const domainTables = [
+          'assets',
+          'assetBlobs',
+          'projects',
+          'editorDocuments',
+          'viewportSnapshots',
+          'workspaceSnapshots'
+        ]
+        await Promise.all(domainTables.map((table) => transaction.table(table).clear()))
       })
   }
 }

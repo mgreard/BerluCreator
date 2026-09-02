@@ -448,7 +448,7 @@ describe('profondeur de champ', () => {
     } as RenderableLayer
     const protectedLayer = {
       ...renderable,
-      category: 'character_full',
+      category: 'perso',
       asset: { blobId: 'blob-character' }
     } as RenderableLayer
     const imageCache = new Map([

@@ -17,7 +17,8 @@ export interface Project {
 
 export interface WorkspaceSnapshot {
   id: 'manual'
-  schemaVersion: 4 | 5
+  /** Les anciennes valeurs restent typables afin que Dexie puisse les supprimer/refuser explicitement. */
+  schemaVersion: 4 | 5 | 6
   activeProjectId: string
   createdAt: number
   projects: Project[]
@@ -25,7 +26,6 @@ export interface WorkspaceSnapshot {
   viewportSnapshots: ViewportSnapshot[]
   assets: Asset[]
   assetBlobs: AssetBlobRecord[]
-  /** Catalogue de rigs sérialisé. Absent uniquement sur les snapshots legacy v4. */
   rigCatalogJson?: string
 }
 

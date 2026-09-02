@@ -3,7 +3,8 @@ import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useRigCatalogStore } from './rig-catalog.store'
 import { isRigConfigurableCategory } from './rig-catalog.service'
-import type { RigConfigurableCategory } from './rig-catalog.types'
+
+type RigConfigurableCategory = Extract<AssetCategory, 'head' | 'mouth' | 'props_character'>
 
 export interface CalibrationSelection {
   category: RigConfigurableCategory

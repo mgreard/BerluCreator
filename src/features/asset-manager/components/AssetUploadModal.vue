@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, useId, watch, useTemplateRef } from 'vue'
-import type { AssetCategory, CharacterAssetMetadata } from '@core/types/asset.types'
+import type {
+  AssetCategory,
+  CharacterAssetMetadata,
+  CharacterPropSlot
+} from '@core/types/asset.types'
 import type { CharacterGroup } from '@core/types/editor.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { generateId } from '@/lib/utils'
@@ -18,7 +22,10 @@ import { Select, type SelectOption } from '@/components/ui/select'
 import { FormGroup } from '@/components/ui/form-group'
 import { SelectableSurface } from '@/components/ui/selectable-surface'
 import { SegmentedControl } from '@/components/ui/segmented-control'
+import { Switch } from '@/components/ui/switch'
 import { toast } from '@/ui/shared/services/toast.service'
+import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
+import { trimAndResizeImage } from '../services/transparent-image-trimmer'
 
 interface PreparedFile {
   id: string
@@ -47,13 +54,20 @@ const props = withDefaults(defineProps<Props>(), {
 const open = defineModel<boolean>('open', { default: false })
 const assetStore = useAssetStore()
 const editorStore = useEditorStore()
+const rigCatalog = useRigCatalogStore()
 
 const isDragging = ref(false)
 const fileInputRef = useTemplateRef<HTMLInputElement>('fileInput')
 const characterSelectId = useId()
 const newCharacterNameId = useId()
+const headSeriesSelectId = useId()
+const propSlotSelectId = useId()
 const isImporting = ref(false)
+const autoCropAlpha = ref(true)
 const preparedFiles = ref<PreparedFile[]>([])
+const canAutoCropAlpha = computed(
+  () => selectedCategory.value !== 'head' && selectedCategory.value !== 'mouth'
+)
 
 // Domaine d'upload : Personnages vs Plateau & Décor
 const assetScope = ref<'character' | 'stage'>('character')
@@ -67,7 +81,9 @@ const selectedCharacterKey = ref('')
 const newCharacterName = ref('')
 
 // Catégorie active résolue
-const selectedCategory = ref<AssetCategory>('character_full')
+const selectedCategory = ref<AssetCategory>('perso')
+const selectedHeadSeriesId = ref('berlu')
+const selectedCharacterPropSlot = ref<CharacterPropSlot>('sunglass')
 
 const CHARACTER_SKELETON_SLOTS: {
   id: AssetCategory
@@ -86,6 +102,18 @@ const CHARACTER_SKELETON_SLOTS: {
     label: 'Tête & Visage',
     icon: 'face',
     description: 'Expressions faciales et regards'
+  },
+  {
+    id: 'mouth',
+    label: 'Bouche',
+    icon: 'mood',
+    description: 'Bouche appartenant à une série'
+  },
+  {
+    id: 'props_character',
+    label: 'Accessoire',
+    icon: 'apparel',
+    description: 'Lunettes ou chapeau ancré'
   }
 ]
 
@@ -97,16 +125,10 @@ const STAGE_SLOTS: { id: AssetCategory; label: string; icon: string; description
     description: 'Décors et fonds de plateau'
   },
   {
-    id: 'eyes',
-    label: 'Accessoires Visage',
-    icon: 'visibility',
-    description: 'Lunettes et effets de visage libres'
-  },
-  {
-    id: 'props_host',
-    label: 'Accessoires Personnage',
-    icon: 'apparel',
-    description: 'Chapeaux, objets tenus'
+    id: 'background_overlay',
+    label: 'Décor intermédiaire',
+    icon: 'layers',
+    description: 'Overlay entre le fond et les sujets'
   },
   { id: 'desk', label: 'Bureau', icon: 'desk', description: 'Comptoir et mobilier' },
   {
@@ -162,6 +184,13 @@ const characterSelectOptions = computed<SelectOption[]>(() =>
     label: character.name
   }))
 )
+const headSeriesOptions = computed<SelectOption[]>(() =>
+  rigCatalog.headSeries.map((series) => ({ value: series.id, label: `${series.label} · ${series.width}×${series.height}` }))
+)
+const characterPropSlotOptions: SelectOption[] = [
+  { value: 'sunglass', label: 'Lunettes' },
+  { value: 'hat', label: 'Chapeau' }
+]
 
 const newCharacterNameError = computed<string | undefined>(() => {
   const key = slugifyCharacterName(newCharacterName.value)
@@ -173,6 +202,7 @@ const newCharacterNameError = computed<string | undefined>(() => {
 
 const isCharacterTargetValid = computed(() => {
   if (assetScope.value !== 'character') return true
+  if (selectedCategory.value === 'props_character') return true
   if (characterTargetMode.value === 'new') {
     return newCharacterName.value.trim().length > 0 && !newCharacterNameError.value
   }
@@ -181,12 +211,12 @@ const isCharacterTargetValid = computed(() => {
 
 function selectFullCharacterMode() {
   characterMode.value = 'full'
-  selectedCategory.value = 'character_full'
+  selectedCategory.value = 'perso'
 }
 
 function selectSkeletonMode() {
   characterMode.value = 'skeleton'
-  if (selectedCategory.value === 'character_full') {
+  if (selectedCategory.value === 'perso') {
     selectedCategory.value = 'head'
   }
 }
@@ -194,7 +224,7 @@ function selectSkeletonMode() {
 watch(assetScope, (newScope) => {
   if (newScope === 'character') {
     if (characterMode.value === 'full') {
-      selectedCategory.value = 'character_full'
+      selectedCategory.value = 'perso'
     } else if (!CHARACTER_SKELETON_SLOTS.some((s) => s.id === selectedCategory.value)) {
       selectedCategory.value = 'head'
     }
@@ -211,7 +241,7 @@ watch(selectedCategory, (category) => {
 
 function applyCategoryContext(category: AssetCategory): void {
   selectedCategory.value = category
-  if (category === 'character_full') {
+  if (category === 'perso') {
     assetScope.value = 'character'
     characterMode.value = 'full'
   } else if (CHARACTER_SKELETON_SLOTS.some((slot) => slot.id === category)) {
@@ -232,7 +262,7 @@ function selectedEditorCharacterKey(): string | null {
 
 function resetFormFromContext(): void {
   const fallbackCategory =
-    assetStore.selectedCategory === 'all' ? 'character_full' : assetStore.selectedCategory
+    assetStore.selectedCategory === 'all' ? 'perso' : assetStore.selectedCategory
   applyCategoryContext(props.initialCategory ?? fallbackCategory)
 
   const preferredKey = props.initialCharacterKey ?? selectedEditorCharacterKey()
@@ -314,14 +344,41 @@ async function performImport() {
       item.error = null
       let importedAssetId: string | null = null
       try {
-        const isCharacter = ASSET_CATEGORIES[item.category].placementMode === 'character-anchored'
+        let fileToImport: File = item.file
+        if (autoCropAlpha.value && item.category !== 'head' && item.category !== 'mouth') {
+          try {
+            const processed = await trimAndResizeImage(item.file, { trimAlpha: true })
+            if (processed.file) {
+              fileToImport = processed.file
+            } else if (processed.blob) {
+              fileToImport = new File([processed.blob], item.file.name, {
+                type: processed.blob.type,
+                lastModified: Date.now()
+              })
+            }
+          } catch (trimErr) {
+            console.warn('Rognage alpha ignoré sur erreur :', trimErr)
+          }
+        }
+
+        const isCharacter =
+          ASSET_CATEGORIES[item.category].placementMode === 'character-anchored' &&
+          item.category !== 'props_character'
         const character = isCharacter ? resolveCharacterMetadata(item.category) : undefined
         const asset = await assetStore.importAsset(
-          item.file,
+          fileToImport,
           item.category,
           item.name,
           [],
-          character
+          character,
+          {
+            headSeriesId:
+              item.category === 'head' || item.category === 'mouth'
+                ? selectedHeadSeriesId.value
+                : undefined,
+            characterPropSlot:
+              item.category === 'props_character' ? selectedCharacterPropSlot.value : undefined
+          }
         )
         importedAssetId = asset.id
         editorStore.assignAssetToGroup(asset.id, item.category, null, item.name)
@@ -369,7 +426,7 @@ function slugifyCharacterName(name: string): string {
 }
 
 function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetadata {
-  const form = category === 'character_full' ? 'full' : 'rig'
+  const form = category === 'perso' ? 'full' : 'rig'
   if (characterTargetMode.value === 'new') {
     return buildCharacterMetadata(newCharacterName.value, form === 'full' ? 'full' : 'skeleton')
   }
@@ -553,6 +610,38 @@ function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetada
                 <span class="truncate text-[11px]">{{ slot.label }}</span>
               </SelectableSurface>
             </div>
+
+            <FormGroup
+              v-if="selectedCategory === 'head' || selectedCategory === 'mouth'"
+              label="Série de têtes"
+              :label-for="headSeriesSelectId"
+              helper-text="Toutes les têtes d'une série partagent le même format et les mêmes ancrages."
+              class="mb-0"
+            >
+              <Select
+                :id="headSeriesSelectId"
+                v-model="selectedHeadSeriesId"
+                :options="headSeriesOptions"
+                size="sm"
+                aria-label="Série de têtes"
+              />
+            </FormGroup>
+
+            <FormGroup
+              v-if="selectedCategory === 'props_character'"
+              label="Type d'accessoire"
+              :label-for="propSlotSelectId"
+              helper-text="L'accessoire restera global, avec une calibration propre à chaque série."
+              class="mb-0"
+            >
+              <Select
+                :id="propSlotSelectId"
+                v-model="selectedCharacterPropSlot"
+                :options="characterPropSlotOptions"
+                size="sm"
+                aria-label="Type d'accessoire"
+              />
+            </FormGroup>
           </div>
         </div>
 
@@ -621,9 +710,30 @@ function resolveCharacterMetadata(category: AssetCategory): CharacterAssetMetada
           Cliquez pour choisir des images ou glissez-déposez vos fichiers ici
         </Text>
         <Text variant="caption" color="muted" class="text-[11px] mt-1 text-center">
-          PNG, WebP, JPG ou SVG. Les dimensions natives et proportions $840\times908$ sont
-          conservées.
+          PNG, WebP, JPG ou SVG. Les dimensions natives sont conservées.
         </Text>
+      </div>
+
+      <!-- Option d'optimisation / Auto-crop -->
+      <div class="flex items-center justify-between rounded-lg border border-border-subtle bg-bg-surface p-3">
+        <div class="space-y-0.5 pr-2">
+          <Text variant="body" weight="medium" class="text-xs text-text-primary">
+            Rognage automatique des marges transparentes (Auto-crop)
+          </Text>
+          <Text variant="caption" color="muted" class="text-[11px]">
+            <template v-if="canAutoCropAlpha">
+              Supprime les bordures alpha superflues pour optimiser les performances et la précision des calques.
+            </template>
+            <template v-else>
+              Désactivé pour préserver le format commun des têtes et des bouches de la série.
+            </template>
+          </Text>
+        </div>
+        <Switch
+          v-model="autoCropAlpha"
+          :disabled="!canAutoCropAlpha"
+          aria-label="Rognage automatique des marges alpha"
+        />
       </div>
 
       <!-- 3. Liste des fichiers préparés -->

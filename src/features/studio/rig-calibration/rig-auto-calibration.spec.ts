@@ -20,8 +20,8 @@ describe('computeSuggestedRigCalibration', () => {
       { x: 10, y: 8, width: 240, height: 290 },
       profile
     )
-    const visibleBottom = calibration.y + (8 + 290) * calibration.scaleY
-    expect(visibleBottom).toBeCloseTo(profile.canvasHeight * 0.36, 0)
+    const visibleNeckPivot = calibration.y + (8 + 290 * 0.94) * calibration.scaleY
+    expect(visibleNeckPivot).toBeCloseTo(profile.canvasHeight * 0.18, 0)
     expect(calibration.scaleX).toBe(calibration.scaleY)
   })
 

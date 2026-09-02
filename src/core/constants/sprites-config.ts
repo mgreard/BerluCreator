@@ -9,11 +9,12 @@ import { ASSET_CATEGORIES } from './categories'
 export const SPRITES_CONFIG: SpritesConfigFile = {
   categoryDefaults: {
     background: { isMovable: false, defaultZIndex: 0 },
-    character_full: { isMovable: false, defaultZIndex: 10 },
+    background_overlay: { isMovable: false, defaultZIndex: 5 },
+    perso: { isMovable: false, defaultZIndex: 10 },
     body: { isMovable: false, defaultZIndex: 10 },
     head: { isMovable: false, defaultZIndex: 20 },
-    eyes: { isMovable: true, defaultZIndex: 26 },
-    props_host: { isMovable: true, defaultZIndex: 30 },
+    mouth: { isMovable: false, defaultZIndex: 22 },
+    props_character: { isMovable: false, defaultZIndex: 24 },
     props_set: { isMovable: true, defaultZIndex: 30 },
     desk: { isMovable: true, defaultZIndex: 10 },
     props_desk: { isMovable: true, defaultZIndex: 30 },

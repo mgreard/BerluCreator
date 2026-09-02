@@ -3,7 +3,7 @@ import type { WorkspaceSnapshot } from '@core/types/project.types'
 import { parseRigCatalogFile } from '@/features/studio/rig-calibration/rig-catalog.service'
 
 export const WORKSPACE_BACKUP_FILE_SCHEMA = 'berlu-creator/workspace-backup' as const
-export const WORKSPACE_BACKUP_FILE_VERSION = 1 as const
+export const WORKSPACE_BACKUP_FILE_VERSION = 2 as const
 
 interface SerializedAssetBlobRecord extends Omit<AssetBlobRecord, 'data'> {
   dataBase64: string
@@ -157,7 +157,7 @@ export function parseWorkspaceBackupFile(raw: string): WorkspaceSnapshot {
   const rigCatalogJson = JSON.stringify(parseRigCatalogFile(JSON.stringify(parsed.rigCatalog)))
   const snapshot: WorkspaceSnapshot = {
     id: 'manual',
-    schemaVersion: 5,
+    schemaVersion: 6,
     activeProjectId: requireString(workspace, 'activeProjectId'),
     createdAt: requireFiniteNumber(workspace, 'createdAt'),
     projects: requireArray(workspace, 'projects') as WorkspaceSnapshot['projects'],

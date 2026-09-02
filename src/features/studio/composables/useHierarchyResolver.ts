@@ -7,11 +7,13 @@ import type {
   CharacterGroup,
   EditorGroup,
   EditorLayer,
-  LayerDepthRole
+  LayerDepthRole,
+  StagePlane
 } from '@core/types/editor.types'
 import { clampBackgroundCover } from '../engine/background-cover.engine'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
 import { DEFAULT_RIG_CANVAS } from '../rig-calibration/rig-catalog.service'
+import type { HeadSeriesProfile } from '../rig-calibration/rig-catalog.types'
 import { OPTICAL_DEPTH_PRESETS } from '@core/constants/editor'
 import type { Point2D } from '../engine/transform-matrix'
 import {
@@ -26,6 +28,8 @@ export interface RenderableLayer {
   category: AssetCategory
   groupId: string
   groupName: string
+  groupKind: EditorGroup['kind']
+  stagePlane: StagePlane
   groupZIndex: number
   layerZIndex: number
   sceneZIndex: number
@@ -37,6 +41,8 @@ export interface RenderableLayer {
   height: number
   transformOriginX: number
   transformOriginY: number
+  rotationOriginX?: number
+  rotationOriginY?: number
   scaleX: number
   scaleY: number
   localX: number
@@ -62,6 +68,8 @@ interface CharacterGeometry {
   baseScale: number
   originX: number
   originY: number
+  neckX: number
+  neckY: number
 }
 
 export function useHierarchyResolver() {
@@ -84,8 +92,12 @@ export function useHierarchyResolver() {
         const rig =
           rigCatalog.rigById(group.activeRigId) ?? rigCatalog.defaultRig(group.characterKey)
         return {
-          canvasWidth: rig?.canvasWidth ?? DEFAULT_RIG_CANVAS.width,
-          canvasHeight: rig?.canvasHeight ?? DEFAULT_RIG_CANVAS.height
+          canvasWidth: rig?.body.width ?? DEFAULT_RIG_CANVAS.width,
+          canvasHeight: rig?.body.height ?? DEFAULT_RIG_CANVAS.height,
+          neckAnchor: rig?.neckAnchor ?? {
+            x: (rig?.body.width ?? DEFAULT_RIG_CANVAS.width) / 2,
+            y: (rig?.body.height ?? DEFAULT_RIG_CANVAS.height) * 0.12
+          }
         }
       },
       stage
@@ -136,9 +148,14 @@ export function useHierarchyResolver() {
       }
     }
 
+    attachHeadDependents(result, rigCatalog.headSeries)
+
+    const hasSplitDesk = result.some(
+      (layer) => layer.category === 'desk' && Boolean(layer.splitRole)
+    )
     return result.sort(
       (left, right) =>
-        sceneBand(left) - sceneBand(right) ||
+        sceneBand(left, hasSplitDesk) - sceneBand(right, hasSplitDesk) ||
         left.sceneZIndex - right.sceneZIndex ||
         left.layerZIndex - right.layerZIndex ||
         left.order - right.order
@@ -148,17 +165,102 @@ export function useHierarchyResolver() {
   return { activeLayers }
 }
 
-function sceneBand(layer: RenderableLayer): number {
-  if (layer.category === 'foreground') return 2
-  if (layer.category === 'eyes' || layer.category === 'props_host') return 1
-  return 0
+function sceneBand(layer: RenderableLayer, hasSplitDesk: boolean): number {
+  if (layer.category === 'background') return 0
+  if (layer.category === 'background_overlay') return 10
+  if (layer.category === 'foreground') return 80
+  if (layer.category === 'props_desk') return 60
+  if (layer.category === 'desk') {
+    if (layer.splitRole === 'back') return 30
+    if (layer.splitRole === 'front') return 50
+    return 40
+  }
+  if (layer.stagePlane === 'front') return 70
+  if (!hasSplitDesk) return 30
+  if (layer.category === 'props_set') return 20
+  if (layer.groupKind === 'character') return 40
+  return 45
+}
+
+function transformPointAround(
+  point: { x: number; y: number },
+  scaleOrigin: { x: number; y: number },
+  scaleX: number,
+  scaleY: number,
+  rotation: number,
+  rotationOrigin = scaleOrigin
+): { x: number; y: number } {
+  const radians = (rotation * Math.PI) / 180
+  const scaledX = scaleOrigin.x + (point.x - scaleOrigin.x) * scaleX
+  const scaledY = scaleOrigin.y + (point.y - scaleOrigin.y) * scaleY
+  const dx = scaledX - rotationOrigin.x
+  const dy = scaledY - rotationOrigin.y
+  return {
+    x: rotationOrigin.x + dx * Math.cos(radians) - dy * Math.sin(radians),
+    y: rotationOrigin.y + dx * Math.sin(radians) + dy * Math.cos(radians)
+  }
+}
+
+function attachHeadDependents(layers: RenderableLayer[], seriesList: HeadSeriesProfile[]): void {
+  for (const dependent of layers) {
+    if (dependent.category !== 'mouth' && dependent.category !== 'props_character') continue
+    const head = layers.find(
+      (candidate) => candidate.groupId === dependent.groupId && candidate.category === 'head'
+    )
+    if (!head?.asset.headSeriesId) continue
+    const series = seriesList.find((candidate) => candidate.id === head.asset.headSeriesId)
+    if (!series) continue
+    const slot = dependent.asset.characterPropSlot
+    const anchor =
+      dependent.category === 'mouth'
+        ? series.mouthAnchor
+        : slot
+          ? series.propAnchors[slot]
+          : undefined
+    if (!anchor) continue
+    const calibration = dependent.asset.anchoredCalibrationBySeries?.[series.id] ?? {
+      pivot: { x: 0.5, y: 0.5 },
+      offsetX: 0,
+      offsetY: 0,
+      scale: 1,
+      rotation: 0
+    }
+    const anchorPoint = transformPointAround(
+      { x: head.x + anchor.x * head.width, y: head.y + anchor.y * head.height },
+      { x: head.transformOriginX, y: head.transformOriginY },
+      head.scaleX,
+      head.scaleY,
+      head.rotation,
+      {
+        x: head.rotationOriginX ?? head.transformOriginX,
+        y: head.rotationOriginY ?? head.transformOriginY
+      }
+    )
+    const radians = (head.rotation * Math.PI) / 180
+    const offsetX = calibration.offsetX * head.scaleX
+    const offsetY = calibration.offsetY * head.scaleY
+    const centerX = anchorPoint.x + offsetX * Math.cos(radians) - offsetY * Math.sin(radians)
+    const centerY = anchorPoint.y + offsetX * Math.sin(radians) + offsetY * Math.cos(radians)
+    dependent.x = centerX - dependent.width * calibration.pivot.x
+    dependent.y = centerY - dependent.height * calibration.pivot.y
+    dependent.transformOriginX = centerX
+    dependent.transformOriginY = centerY
+    dependent.scaleX = head.scaleX * calibration.scale
+    dependent.scaleY = head.scaleY * calibration.scale
+    dependent.rotation = head.rotation + calibration.rotation
+    dependent.isMovable = false
+  }
 }
 
 function resolveCharacterGeometries(
   layers: EditorLayer[],
   groups: CharacterGroup[],
   assets: Map<string, Asset>,
-  getProfile: (group: CharacterGroup) => { canvasWidth: number; canvasHeight: number },
+  getProfile: (group: CharacterGroup) => {
+    canvasWidth: number
+    canvasHeight: number
+    neckAnchor: { x: number; y: number }
+  },
   stage: { width: number; height: number }
 ): Map<string, CharacterGeometry> {
   const geometries = new Map<string, CharacterGeometry>()
@@ -169,7 +271,7 @@ function resolveCharacterGeometries(
         ? layers
             .filter(
               (layer) =>
-                layer.groupId === group.id && !layer.muted && layer.category === 'character_full'
+                layer.groupId === group.id && !layer.muted && layer.category === 'perso'
             )
             .map((layer) => assets.get(layer.assetId))
             .find((asset): asset is Asset => Boolean(asset))
@@ -188,7 +290,9 @@ function resolveCharacterGeometries(
       y,
       baseScale,
       originX: x + (referenceWidth * baseScale) / 2,
-      originY: y + (referenceHeight * baseScale) / 2
+      originY: y + (referenceHeight * baseScale) / 2,
+      neckX: x + profile.neckAnchor.x * baseScale,
+      neckY: y + profile.neckAnchor.y * baseScale
     })
   }
   return geometries
@@ -196,8 +300,8 @@ function resolveCharacterGeometries(
 
 function isLayerActiveForCharacter(layer: EditorLayer, group: CharacterGroup): boolean {
   return group.activeMode === 'full'
-    ? layer.category === 'character_full'
-    : layer.category !== 'character_full'
+    ? layer.category === 'perso'
+    : layer.category !== 'perso'
 }
 
 function commonLayer(
@@ -212,6 +316,8 @@ function commonLayer(
   | 'category'
   | 'groupId'
   | 'groupName'
+  | 'groupKind'
+  | 'stagePlane'
   | 'groupZIndex'
   | 'layerZIndex'
   | 'sceneZIndex'
@@ -249,6 +355,8 @@ function commonLayer(
     category: layer.category,
     groupId: group.id,
     groupName: group.name,
+    groupKind: group.kind,
+    stagePlane: layer.stagePlane ?? group.stagePlane ?? (layer.category === 'props_set' ? 'front' : 'rear'),
     groupZIndex: group.zIndex,
     layerZIndex: layer.zIndex,
     sceneZIndex: group.kind === 'character' ? group.zIndex : layer.zIndex,
@@ -259,8 +367,6 @@ function commonLayer(
     locked: layer.locked || group.locked,
     depthRole,
     opticalDepth,
-    // Les anciens bureaux peuvent encore porter isMovable=false en IndexedDB.
-    // La catégorie desk est désormais toujours manipulable, sans migration destructive.
     isMovable: group.kind === 'character' || asset.category === 'desk' || asset.isMovable
   }
 }
@@ -274,7 +380,7 @@ function resolveLayer(
 ): RenderableLayer {
   const transform = layer.transform
 
-  if (layer.category === 'background') {
+  if (layer.category === 'background' || layer.category === 'background_overlay') {
     const clamped = clampBackgroundCover(transform, {
       assetWidth: asset.width || stage.width,
       assetHeight: asset.height || stage.height,
@@ -306,7 +412,15 @@ function resolveLayer(
 
   if (group.kind === 'character') {
     const rig = group.transform
-    const geometry = characterGeometry ?? { x: 0, y: 0, baseScale: 1, originX: 0, originY: 0 }
+    const geometry = characterGeometry ?? {
+      x: 0,
+      y: 0,
+      baseScale: 1,
+      originX: 0,
+      originY: 0,
+      neckX: 0,
+      neckY: 0
+    }
     const width = asset.width * geometry.baseScale
     const height = asset.height * geometry.baseScale
     const unrotatedX = geometry.x + transform.x * geometry.baseScale + rig.x
@@ -326,16 +440,30 @@ function resolveLayer(
     finalCenterX = groupOriginX + (dx * Math.cos(rad) - dy * Math.sin(rad))
     finalCenterY = groupOriginY + (dx * Math.sin(rad) + dy * Math.cos(rad))
 
+    const neckDx = (geometry.neckX - geometry.originX) * rig.scaleX
+    const neckDy = (geometry.neckY - geometry.originY) * rig.scaleY
+    const neckOriginX = groupOriginX + neckDx * Math.cos(rad) - neckDy * Math.sin(rad)
+    const neckOriginY = groupOriginY + neckDx * Math.sin(rad) + neckDy * Math.cos(rad)
+
+    const resolvedX = Math.round(finalCenterX - width / 2)
+    const resolvedY = Math.round(finalCenterY - height / 2)
+    const scaleX = transform.scaleX * rig.scaleX
+    const scaleY = transform.scaleY * rig.scaleY
+    const rotationOriginX = neckOriginX + (resolvedX + width / 2 - neckOriginX) * scaleX
+    const rotationOriginY = neckOriginY + (resolvedY + height / 2 - neckOriginY) * scaleY
+
     return {
       ...commonLayer(layer, asset, group),
-      x: Math.round(finalCenterX - width / 2),
-      y: Math.round(finalCenterY - height / 2),
+      x: resolvedX,
+      y: resolvedY,
       width,
       height,
-      transformOriginX: finalCenterX,
-      transformOriginY: finalCenterY,
-      scaleX: transform.scaleX * rig.scaleX,
-      scaleY: transform.scaleY * rig.scaleY,
+      transformOriginX: layer.category === 'head' ? neckOriginX : finalCenterX,
+      transformOriginY: layer.category === 'head' ? neckOriginY : finalCenterY,
+      rotationOriginX: layer.category === 'head' ? rotationOriginX : undefined,
+      rotationOriginY: layer.category === 'head' ? rotationOriginY : undefined,
+      scaleX,
+      scaleY,
       localX: transform.x,
       localY: transform.y,
       localScaleX: transform.scaleX,

@@ -45,11 +45,11 @@ describe('useHierarchyResolver', () => {
     const editor = useEditorStore()
     const assets = useAssetStore()
     assets.assets = [
-      asset('full', 'character_full', 'full'),
+      asset('full', 'perso', 'full'),
       asset('body', 'body', 'rig'),
       asset('head', 'head', 'rig')
     ]
-    const full = editor.assignAssetToGroup('full', 'character_full')
+    const full = editor.assignAssetToGroup('full', 'perso')
     const body = editor.assignAssetToGroup('body', 'body')
     const head = editor.assignAssetToGroup('head', 'head')
     const { activeLayers } = useHierarchyResolver()
@@ -74,6 +74,28 @@ describe('useHierarchyResolver', () => {
       expect(layer.x).toBe(initial.x + 100)
       expect(layer.y).toBe(initial.y + 50)
     }
+  })
+
+  it('fait pivoter la tête autour du centre visuel tout en gardant le cou pour l’échelle', () => {
+    const editor = useEditorStore()
+    const assets = useAssetStore()
+    assets.assets = [asset('body', 'body', 'rig'), asset('head', 'head', 'rig', 260, 309)]
+    editor.assignAssetToGroup('body', 'body')
+    const head = editor.assignAssetToGroup('head', 'head')
+    editor.updateLayerTransform(head.id, { x: 210, y: 24, scaleX: 0.5, scaleY: 0.5 })
+
+    const { activeLayers } = useHierarchyResolver()
+    const resolved = activeLayers.value.find((layer) => layer.layerId === head.id)!
+
+    expect(resolved.rotationOriginX).toBeCloseTo(
+      resolved.transformOriginX +
+        (resolved.x + resolved.width / 2 - resolved.transformOriginX) * resolved.scaleX
+    )
+    expect(resolved.rotationOriginY).toBeCloseTo(
+      resolved.transformOriginY +
+        (resolved.y + resolved.height / 2 - resolved.transformOriginY) * resolved.scaleY
+    )
+    expect(resolved.rotationOriginY).not.toBe(resolved.transformOriginY)
   })
 
   it('exclut les calques et groupes masqués du rendu', () => {
@@ -135,7 +157,7 @@ describe('useHierarchyResolver', () => {
     )
   })
 
-  it('place individuellement un accessoire devant ou derrière le bureau selon son z-index', () => {
+  it('place un accessoire devant ou derrière le bureau selon son plan persistant', () => {
     const editor = useEditorStore()
     const assets = useAssetStore()
     assets.assets = [asset('desk', 'desk'), asset('prop', 'props_set')]
@@ -145,7 +167,7 @@ describe('useHierarchyResolver', () => {
 
     expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([desk.id, prop.id])
 
-    editor.updateLayerZIndex(prop.id, desk.zIndex - 1)
+    editor.updateLayer(prop.id, { stagePlane: 'rear' })
     expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([prop.id, desk.id])
 
     editor.undo()
@@ -160,10 +182,10 @@ describe('useHierarchyResolver', () => {
     const assets = useAssetStore()
     assets.assets = [
       asset('flowers', 'foreground'),
-      asset('pedro-full', 'character_full', 'full', 840, 908, 'pedro')
+      asset('pedro-full', 'perso', 'full', 840, 908, 'pedro')
     ]
     const foreground = editor.assignAssetToGroup('flowers', 'foreground')
-    const character = editor.assignAssetToGroup('pedro-full', 'character_full')
+    const character = editor.assignAssetToGroup('pedro-full', 'perso')
     const { activeLayers } = useHierarchyResolver()
 
     expect(
@@ -194,10 +216,10 @@ describe('useHierarchyResolver', () => {
     const editor = useEditorStore()
     const assets = useAssetStore()
     assets.assets = [
-      asset('full', 'character_full', 'full', 1200, 600),
+      asset('full', 'perso', 'full', 1200, 600),
       asset('body', 'body', 'rig', 600, 900)
     ]
-    const full = editor.assignAssetToGroup('full', 'character_full')
+    const full = editor.assignAssetToGroup('full', 'perso')
     const body = editor.assignAssetToGroup('body', 'body')
     const { activeLayers } = useHierarchyResolver()
 
@@ -257,9 +279,9 @@ describe('useHierarchyResolver', () => {
         { x: 1, y: 0.5 }
       ]
     }
-    assets.assets = [deskAsset, asset('char', 'character_full', 'full', 400, 600)]
+    assets.assets = [deskAsset, asset('char', 'perso', 'full', 400, 600)]
 
-    const charLayer = editor.assignAssetToGroup('char', 'character_full')
+    const charLayer = editor.assignAssetToGroup('char', 'perso')
     const deskLayer = editor.assignAssetToGroup('pool', 'desk')
 
     const { activeLayers } = useHierarchyResolver()

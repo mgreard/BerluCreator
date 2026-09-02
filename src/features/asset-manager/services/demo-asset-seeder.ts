@@ -1,6 +1,10 @@
-import type { Asset, AssetCategory } from '@core/types/asset.types'
-import { isAssetCategory } from '@core/types/asset.types'
-import { ASSET_CATEGORIES } from '@core/constants/categories'
+import type {
+  Asset,
+  AssetCategory,
+  CharacterAssetMetadata,
+  CharacterPropSlot
+} from '@core/types/asset.types'
+import { CHARACTER_PROP_SLOTS, isAssetCategory } from '@core/types/asset.types'
 import { resolveSpriteConfig } from '@core/constants/sprites-config'
 import { assetRepository } from '@infrastructure/db/repositories/asset.repository'
 import { generateId } from '@/lib/utils'
@@ -13,182 +17,181 @@ function getImageDimensions(blob: Blob): Promise<{ width: number; height: number
       URL.revokeObjectURL(url)
       resolve({ width: img.naturalWidth, height: img.naturalHeight })
     }
-    img.onerror = (err) => {
+    img.onerror = (error) => {
       URL.revokeObjectURL(url)
-      reject(err)
+      reject(error)
     }
     img.src = url
   })
 }
 
-/**
- * Nettoie les catégories obsolètes et déduplique la base de données locale.
- */
-export async function cleanupObsoleteAndDuplicateAssets(): Promise<void> {
-  const allAssets = await assetRepository.getAll()
-  const seenIdentities = new Map<string, Asset>()
+function bundledPath(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, '/')
+  const marker = '/assets/sprites/'
+  const index = normalized.indexOf(marker)
+  return index >= 0 ? normalized.slice(index + marker.length) : normalized
+}
 
+export const PERSO_FAMILY_MANIFEST = [
+  { key: 'berleak', name: 'Berleak', pattern: /^berleak/i },
+  { key: 'pedro-1', name: 'Pedro 1', pattern: /^pedro1/i },
+  { key: 'pedro-2', name: 'Pedro 2', pattern: /^pedro2/i },
+  { key: 'moman', name: 'Moman', pattern: /^moman/i }
+] as const
+
+function characterFamily(fileName: string): CharacterAssetMetadata {
+  const value = fileName.toLowerCase()
+  const family = PERSO_FAMILY_MANIFEST.find((entry) => entry.pattern.test(value))
+  if (family) return { key: family.key, name: family.name, form: 'full' }
+  const key = fileName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+  return { key, name: fileName.replace(/[_-]+/g, ' '), form: 'full' }
+}
+
+export interface BundledSpriteMetadata {
+  name: string
+  category: AssetCategory
+  tags: string[]
+  sourcePath: string
+  headSeriesId?: string
+  characterPropSlot?: CharacterPropSlot
+  character?: CharacterAssetMetadata
+}
+
+export function parseSpriteMetadata(filePath: string): BundledSpriteMetadata | null {
+  const sourcePath = bundledPath(filePath)
+  const parts = sourcePath.split('/').filter(Boolean)
+  if (parts.length < 2) return null
+  const root = parts[0]
+  if (!isAssetCategory(root)) return null
+  const fileName = parts.at(-1)!.replace(/\.(png|jpe?g|webp|svg)$/i, '')
+  const name = fileName.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim()
+  const tags: string[] = [root]
+  let headSeriesId: string | undefined
+  let characterPropSlot: CharacterPropSlot | undefined
+  let character: CharacterAssetMetadata | undefined
+
+  if (root === 'head' || root === 'mouth') {
+    headSeriesId = parts.length >= 3 ? parts[1] : 'berlu'
+    tags.push(headSeriesId)
+    character = { key: headSeriesId, name: headSeriesId === 'berlu' ? 'Berlu' : headSeriesId, form: 'rig' }
+  } else if (root === 'body') {
+    const key = parts.length >= 3 ? parts[1] : 'berlu'
+    character = { key, name: key === 'berlu' ? 'Berlu' : key, form: 'rig' }
+  } else if (root === 'perso') {
+    character = characterFamily(fileName)
+  } else if (root === 'props_character') {
+    const slot = parts.length >= 3 ? parts[1] : undefined
+    if (!slot || !CHARACTER_PROP_SLOTS.includes(slot as CharacterPropSlot)) return null
+    characterPropSlot = slot as CharacterPropSlot
+    tags.push(characterPropSlot)
+  }
+
+  return {
+    name,
+    category: root,
+    tags,
+    sourcePath,
+    headSeriesId,
+    characterPropSlot,
+    character
+  }
+}
+
+function assetIdentity(asset: Pick<Asset, 'category' | 'name'>): string {
+  return `${asset.category}:${asset.name.trim().toLocaleLowerCase('fr')}`
+}
+
+export function findMissingBundledSpritePaths(
+  paths: string[],
+  existing: Array<Pick<Asset, 'name' | 'category' | 'sourcePath' | 'source'>>
+): string[] {
+  const existingPaths = new Set(existing.map((asset) => asset.sourcePath).filter(Boolean))
+  const legacyIdentities = new Set(
+    existing
+      .filter((asset) => asset.source !== 'uploaded' && !asset.sourcePath)
+      .map(assetIdentity)
+  )
+  return paths.filter((path) => {
+    const metadata = parseSpriteMetadata(path)
+    if (!metadata) return false
+    if (existingPaths.has(metadata.sourcePath)) return false
+    return !legacyIdentities.has(assetIdentity(metadata))
+  })
+}
+
+export async function cleanupObsoleteAndDuplicateAssets(validBundledPaths?: Set<string>): Promise<void> {
+  const allAssets = await assetRepository.getAll()
+  const seen = new Set<string>()
   for (const asset of allAssets) {
-    // 1. Supprimer les catégories obsolètes (ex: mouth, arms_left, arms_right)
     if (!isAssetCategory(asset.category)) {
       await assetRepository.delete(asset.id)
       continue
     }
-
-    // 2. Dédupliquer par identité (catégorie + nom normalisé)
-    const identity = spriteIdentity(asset.name, asset.category)
-    if (seenIdentities.has(identity)) {
-      // Déjà présent : supprimer le doublon
+    // Les imports utilisateur ne sont jamais réconciliés ni dédoublonnés automatiquement.
+    if (asset.source === 'uploaded') continue
+    if (
+      asset.source === 'bundled' &&
+      asset.sourcePath &&
+      validBundledPaths &&
+      !validBundledPaths.has(asset.sourcePath)
+    ) {
       await assetRepository.delete(asset.id)
-    } else {
-      seenIdentities.set(identity, asset)
+      continue
     }
+    const identity = asset.sourcePath ? `path:${asset.sourcePath}` : assetIdentity(asset)
+    if (seen.has(identity)) await assetRepository.delete(asset.id)
+    else seen.add(identity)
   }
 }
 
 export async function syncBundledDemoAssets(): Promise<void> {
   const spriteModules = import.meta.glob<string>(
-    '@/assets/sprites/**/*.{png,PNG}',
-    {
-      eager: true,
-      import: 'default'
-    }
+    '@/assets/sprites/**/*.{png,PNG,jpg,JPG,jpeg,JPEG,webp,WEBP,svg,SVG}',
+    { eager: true, import: 'default' }
+  )
+  const metadataByPath = new Map<string, BundledSpriteMetadata>()
+  for (const path of Object.keys(spriteModules)) {
+    const metadata = parseSpriteMetadata(path)
+    if (metadata) metadataByPath.set(path, metadata)
+  }
+  await cleanupObsoleteAndDuplicateAssets(
+    new Set([...metadataByPath.values()].map((metadata) => metadata.sourcePath))
   )
 
-  // 1. Assainir la base de données : supprimer doublons et catégories obsolètes
-  await cleanupObsoleteAndDuplicateAssets()
-
-  // 2. Identifier les sprites manquants
   const existing = await assetRepository.getAll()
-  const missingPaths = new Set(
-    findMissingBundledSpritePaths(Object.keys(spriteModules), existing)
-  )
-
-  const registeredIdentities = new Set(
-    existing.map((asset) => spriteIdentity(asset.name, asset.category))
-  )
-
+  const missing = new Set(findMissingBundledSpritePaths([...metadataByPath.keys()], existing))
   for (const [path, url] of Object.entries(spriteModules)) {
-    if (!missingPaths.has(path)) continue
+    if (!missing.has(path)) continue
+    const metadata = metadataByPath.get(path)
+    if (!metadata) continue
     try {
-      const metadata = parseSpriteMetadata(path)
-      if (!metadata) continue
-      const { name, category, tags } = metadata
-      const identity = spriteIdentity(name, category)
-
-      // Éviter toute insertion en double dans la même boucle
-      if (registeredIdentities.has(identity)) continue
-      registeredIdentities.add(identity)
-
       const response = await fetch(url)
       const blob = await response.blob()
       const dimensions = await getImageDimensions(blob)
-      const spriteConfig = resolveSpriteConfig(name, category)
-
-      const assetId = generateId(`asset_${category}`)
-      const blobId = generateId('blob')
-
+      const spriteConfig = resolveSpriteConfig(metadata.name, metadata.category)
+      const now = Date.now()
       const asset: Asset = {
-        id: assetId,
-        name,
-        category,
-        tags,
-        blobId,
+        id: generateId(`asset_${metadata.category}`),
+        name: metadata.name,
+        category: metadata.category,
+        tags: metadata.tags,
+        blobId: generateId('blob'),
         width: dimensions.width,
         height: dimensions.height,
-        character:
-          ASSET_CATEGORIES[category]?.placementMode === 'character-anchored'
-            ? { key: 'berlu', name: 'Berlu', form: 'rig' }
-            : undefined,
+        source: 'bundled',
+        sourcePath: metadata.sourcePath,
+        headSeriesId: metadata.headSeriesId,
+        characterPropSlot: metadata.characterPropSlot,
+        character: metadata.character,
         isMovable: spriteConfig.isMovable,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
+        createdAt: now,
+        updatedAt: now
       }
-
       await assetRepository.create(asset, blob)
-    } catch (err) {
-      console.error(`Erreur chargement sprite ${path}:`, err)
+    } catch (error) {
+      console.error(`Erreur chargement sprite ${path}:`, error)
     }
   }
 }
 
 export const syncBundledAssets = syncBundledDemoAssets
-
-function spriteIdentity(name: string, category: AssetCategory): string {
-  return `${category}:${name.trim().toLocaleLowerCase('fr')}`
-}
-
-export function findMissingBundledSpritePaths(
-  paths: string[],
-  existing: Array<Pick<Asset, 'name' | 'category'>>
-): string[] {
-  const existingIdentities = new Set(
-    existing.map((asset) => spriteIdentity(asset.name, asset.category))
-  )
-  const missing: string[] = []
-  for (const path of paths) {
-    const metadata = parseSpriteMetadata(path)
-    if (!metadata) continue
-    const identity = spriteIdentity(metadata.name, metadata.category)
-    if (existingIdentities.has(identity)) continue
-    existingIdentities.add(identity)
-    missing.push(path)
-  }
-  return missing
-}
-
-export function parseSpriteMetadata(filePath: string): {
-  name: string
-  category: AssetCategory
-  tags: string[]
-} | null {
-  const parts = filePath.replace(/\\/g, '/').split('/')
-  const fileName = parts[parts.length - 1].replace(/\.png$/i, '')
-  const folder = parts[parts.length - 2]
-
-  // Ignorer les dossiers obsolètes
-  if (folder === 'arms' || folder === 'mouth') {
-    return null
-  }
-
-  let category: AssetCategory
-  const tags: string[] = [folder]
-
-  const formattedName = fileName
-    .replace(/_/g, ' ')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .trim()
-
-  if (folder === 'head') {
-    category = 'head'
-    tags.push('head', 'visage', 'expression', 'berlu')
-  } else if (folder === 'torso') {
-    category = 'body'
-    tags.push('body', 'corps', 'berlu')
-  } else if (folder === 'background') {
-    category = 'background'
-    tags.push('background', 'fond')
-  } else if (folder === 'desk') {
-    category = 'desk'
-    tags.push('desk', 'bureau')
-  } else if (folder === 'eyes') {
-    category = 'eyes'
-    tags.push('eyes', 'regard', 'lunettes', 'berlu')
-  } else if (folder === 'props-host') {
-    category = 'props_host'
-    tags.push('props_host', 'presentateur', 'accessoire', 'berlu')
-  } else if (folder === 'props-set') {
-    category = 'props_set'
-    tags.push('props_set', 'plateau', 'objet')
-  } else if (folder === 'props-desk') {
-    category = 'props_desk'
-    tags.push('props_desk', 'bureau', 'objet')
-  } else if (folder === 'foreground') {
-    category = 'foreground'
-    tags.push('foreground', 'premier-plan', 'ambiance')
-  } else {
-    return null
-  }
-
-  return { name: formattedName, category, tags }
-}

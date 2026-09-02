@@ -2,120 +2,73 @@ import { describe, expect, it } from 'vitest'
 import type { Asset } from '@core/types/asset.types'
 import { findMissingBundledSpritePaths, parseSpriteMetadata } from './demo-asset-seeder'
 
-const bundledSpritePaths = Object.keys(import.meta.glob('@/assets/sprites/**/*.png'))
+const bundledSpritePaths = Object.keys(
+  import.meta.glob('@/assets/sprites/**/*.{png,jpg,jpeg,webp,svg}')
+)
 
-describe('default sprite metadata', () => {
+describe('bundled sprite metadata v6', () => {
   it.each([
     ['background/background1.png', 'background'],
-    ['torso/Torse.png', 'body'],
-    ['head/smile_head.png', 'head'],
-    ['eyes/hearts_eyes.png', 'eyes'],
-    ['props-host/party_hat.png', 'props_host'],
-    ['props-set/Item_stop.png', 'props_set'],
-    ['desk/Desk_tiki.png', 'desk'],
-    ['props-desk/Item_vote.png', 'props_desk'],
+    ['background_overlay/halo.webp', 'background_overlay'],
+    ['body/Body1.png', 'body'],
+    ['head/berlu/Neutre_head.png', 'head'],
+    ['mouth/berlu/smile.svg', 'mouth'],
+    ['props_character/sunglass/classic.png', 'props_character'],
+    ['props_character/hat/party.png', 'props_character'],
+    ['props_set/Item_stop.jpg', 'props_set'],
+    ['desk/Desk_tiki.jpeg', 'desk'],
+    ['props_desk/Item_vote.png', 'props_desk'],
     ['foreground/pollution_foreground.png', 'foreground']
   ] as const)('maps %s to %s', (path, expectedCategory) => {
     expect(parseSpriteMetadata(`/src/assets/sprites/${path}`)?.category).toBe(expectedCategory)
   })
 
+  it('extracts series and global prop slots from nested folders', () => {
+    expect(parseSpriteMetadata('/src/assets/sprites/head/berlu/Neutre_head.png')).toMatchObject({
+      headSeriesId: 'berlu',
+      sourcePath: 'head/berlu/Neutre_head.png'
+    })
+    expect(parseSpriteMetadata('/src/assets/sprites/mouth/pedro/smile.svg')).toMatchObject({
+      headSeriesId: 'pedro'
+    })
+    expect(parseSpriteMetadata('/src/assets/sprites/props_character/hat/party.webp')).toMatchObject({
+      characterPropSlot: 'hat'
+    })
+  })
+
   it.each([
-    ['head/Head_enthousiaste.png', 'head'],
-    ['head/Head_gené.png', 'head'],
-    ['torso/Torse_tropi_thumbup.png', 'body'],
-    ['desk/Desk_pool.png', 'desk'],
-    ['foreground/Plante_6_foreground.png', 'foreground'],
-    ['props-set/Flamingo_propset.png', 'props_set']
-  ] as const)('maps the new sprite %s to %s', (path, expectedCategory) => {
-    expect(parseSpriteMetadata(`/src/assets/sprites/${path}`)?.category).toBe(expectedCategory)
+    ['perso/Berleak1.png', 'berleak'],
+    ['perso/pedro1_1.png', 'pedro-1'],
+    ['perso/pedro2_1.png', 'pedro-2'],
+    ['perso/moman_decontract.png', 'moman']
+  ] as const)('groups %s in the %s family', (path, family) => {
+    expect(parseSpriteMetadata(`/src/assets/sprites/${path}`)?.character?.key).toBe(family)
   })
 
-  it('classifies or safely skips every bundled PNG', () => {
-    expect(bundledSpritePaths.length).toBeGreaterThan(0)
-    for (const path of bundledSpritePaths) {
-      expect(() => parseSpriteMetadata(path)).not.toThrow()
-    }
+  it('classifies every bundled supported image', () => {
+    expect(bundledSpritePaths).toHaveLength(83)
+    for (const path of bundledSpritePaths) expect(parseSpriteMetadata(path)).not.toBeNull()
   })
 
-  it('ignores obsolete arms and mouth sprites', () => {
-    expect(parseSpriteMetadata('/src/assets/sprites/mouth/mouth_smile.png')).toBeNull()
-    expect(parseSpriteMetadata('/src/assets/sprites/arms/left_arm.png')).toBeNull()
-  })
-
-  it('keeps an existing asset and only returns missing bundled sprites', () => {
+  it('reconciles bundled assets by source path and preserves uploaded identities', () => {
     const existing = [
-      { name: 'Head amuse', category: 'head' },
-      { name: 'Desk tiki', category: 'desk' }
-    ] satisfies Array<Pick<Asset, 'name' | 'category'>>
+      { name: 'Neutre head', category: 'head', sourcePath: 'head/berlu/Neutre_head.png' },
+      { name: 'Custom', category: 'head' }
+    ] satisfies Array<Pick<Asset, 'name' | 'category' | 'sourcePath'>>
 
     expect(
       findMissingBundledSpritePaths(
         [
-          '/src/assets/sprites/head/Head_amuse.png',
-          '/src/assets/sprites/head/Head_rire.png',
-          '/src/assets/sprites/desk/Desk_tiki.png'
+          '/src/assets/sprites/head/berlu/Neutre_head.png',
+          '/src/assets/sprites/head/berlu/Peur_head.png'
         ],
         existing
       )
-    ).toEqual(['/src/assets/sprites/head/Head_rire.png'])
+    ).toEqual(['/src/assets/sprites/head/berlu/Peur_head.png'])
   })
 
-  it('returns null for a folder that is not part of the default sprite structure', () => {
+  it('rejects unknown roots and unsupported prop slots', () => {
     expect(parseSpriteMetadata('/src/assets/sprites/legacy/item.png')).toBeNull()
-  })
-
-  it('supprime les doublons et les catégories invalides lors du nettoyage', async () => {
-    const { cleanupObsoleteAndDuplicateAssets } = await import('./demo-asset-seeder')
-    const { assetRepository } = await import('@infrastructure/db/repositories/asset.repository')
-
-    const mockAssets: Asset[] = [
-      {
-        id: 'asset-1',
-        name: 'Glaciere propset',
-        category: 'props_set',
-        tags: [],
-        blobId: 'blob-1',
-        width: 100,
-        height: 100,
-        isMovable: true,
-        createdAt: 1,
-        updatedAt: 1
-      },
-      {
-        id: 'asset-2',
-        name: 'Glaciere propset', // Doublon exact
-        category: 'props_set',
-        tags: [],
-        blobId: 'blob-2',
-        width: 100,
-        height: 100,
-        isMovable: true,
-        createdAt: 2,
-        updatedAt: 2
-      },
-      {
-        id: 'asset-3',
-        name: 'Bouche',
-        category: 'mouth' as Asset['category'], // Catégorie obsolète
-        tags: [],
-        blobId: 'blob-3',
-        width: 100,
-        height: 100,
-        isMovable: true,
-        createdAt: 3,
-        updatedAt: 3
-      }
-    ]
-
-    const deletedIds: string[] = []
-    assetRepository.getAll = async () => mockAssets
-    assetRepository.delete = async (id: string) => {
-      deletedIds.push(id)
-    }
-
-    await cleanupObsoleteAndDuplicateAssets()
-    expect(deletedIds).toContain('asset-2') // Le doublon a été supprimé
-    expect(deletedIds).toContain('asset-3') // La catégorie obsolète a été supprimée
-    expect(deletedIds).not.toContain('asset-1') // L'original est conservé
+    expect(parseSpriteMetadata('/src/assets/sprites/props_character/crown/item.png')).toBeNull()
   })
 })

@@ -14,7 +14,6 @@ import { Select, type SelectOption } from '@/components/ui/select'
 import { Tabs, type TabItem } from '@/components/ui/tabs'
 import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import { useRigRuntime } from '@/features/studio/rig-calibration/useRigRuntime'
-import { isRigSlotCategory } from '@/features/studio/rig-calibration/rig-catalog.service'
 import type { RigDefinition } from '@/features/studio/rig-calibration/rig-catalog.types'
 import type { CharacterGroup } from '@core/types/editor.types'
 import {
@@ -52,30 +51,19 @@ function activeRigForCharacterKey(key: string): RigDefinition | undefined {
   return rigCatalog.defaultRig(key)
 }
 
-function isAssetAvailableInRig(asset: Asset, rig?: RigDefinition): boolean {
-  if (!asset.character || !isRigSlotCategory(asset.category)) return true
-  if (asset.category === 'body') return true
-  if (!rig) return true
-
-  const categoryDef = rig.categories.find((c) => c.category === asset.category)
-  if (categoryDef && !categoryDef.enabled) return false
-
-  return Boolean(rigCatalog.partForAsset(rig, asset))
-}
-
 function availableCategoriesForCharacter(key: string): CharacterCategory[] {
-  const activeRig = activeRigForCharacterKey(key)
   return CHARACTER_CATEGORIES.filter((cat) => {
-    if (cat.id === 'full' || cat.id === 'body') return true
-    if (!activeRig) return true
-    const catDef = activeRig.categories.find((c) => c.category === cat.category)
-    if (catDef && !catDef.enabled) return false
-    return true
+    return characterAssets(key).some((asset) => asset.category === cat.category)
   })
 }
 
 const availableCharacters = computed<CharacterSummary[]>(() => {
   const characters = new Map<string, CharacterSummary>()
+  for (const group of editorStore.currentDocument.groups) {
+    if (group.kind === 'character') {
+      characters.set(group.characterKey, { key: group.characterKey, name: group.name })
+    }
+  }
   for (const asset of assetStore.assets) {
     if (ASSET_CATEGORIES[asset.category].placementMode !== 'character-anchored') continue
     const key = characterKey(asset)
@@ -129,10 +117,14 @@ function matchesCharacterCategory(asset: Asset, definition: CharacterCategory): 
 function characterAssets(key: string): Asset[] {
   const activeRig = activeRigForCharacterKey(key)
   return assetStore.assets.filter(
-    (asset) =>
-      ASSET_CATEGORIES[asset.category].placementMode === 'character-anchored' &&
-      characterKey(asset) === key &&
-      (rigCatalog.isCalibrationOpen ? true : isAssetAvailableInRig(asset, activeRig))
+    (asset) => {
+      if (ASSET_CATEGORIES[asset.category].placementMode !== 'character-anchored') return false
+      if (asset.category === 'props_character') return true
+      if (asset.category === 'head' || asset.category === 'mouth') {
+        return activeRig ? true : characterKey(asset) === key
+      }
+      return characterKey(asset) === key
+    }
   )
 }
 
@@ -143,6 +135,9 @@ function characterCategoryCount(key: string, definition: CharacterCategory): num
 function stageCategoryCount(category: AssetCategory): number {
   return assetStore.assets.filter((asset) => asset.category === category).length
 }
+const availableStageCategories = computed(() =>
+  STAGE_CATEGORIES.filter((category) => stageCategoryCount(category.category) > 0)
+)
 
 function selectAll(): void {
   selection.value = { type: 'all' }
@@ -220,7 +215,7 @@ function selectCategoryTab(key: string | number): void {
       drawerOpen.value = true
       return
     }
-    const category = STAGE_CATEGORIES[0]
+    const category = availableStageCategories.value[0]
     if (category) selectStage(category.category)
   }
 }
@@ -349,13 +344,13 @@ function selectCategoryTab(key: string | number): void {
           size="sm"
           class="px-1.5 py-0 text-[9px] normal-case tracking-normal"
         >
-          {{ STAGE_CATEGORIES.length }} filtres
+          {{ availableStageCategories.length }} filtres
         </Badge>
       </div>
 
       <div class="category-grid grid grid-cols-2 gap-1.5" aria-label="Catégories du plateau">
         <Button
-          v-for="category in STAGE_CATEGORIES"
+          v-for="category in availableStageCategories"
           :key="category.category"
           variant="secondary"
           size="xs"

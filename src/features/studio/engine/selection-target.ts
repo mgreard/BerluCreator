@@ -3,7 +3,7 @@ import type { EditorGroup } from '@core/types/editor.types'
 export interface StudioSelectionTarget {
   selectedLayerId: string | null
   selectedGroupId: string | null
-  editScope: 'group' | 'layer'
+  editScope: 'group' | 'layer' | 'head'
 }
 
 export interface CanvasHitTarget {
@@ -21,6 +21,10 @@ export function isActiveSelectionHit(
   hit: CanvasHitTarget
 ): boolean {
   if (selection.editScope === 'group') {
+    return Boolean(hit.groupId && hit.groupId === selection.selectedGroupId)
+  }
+
+  if (selection.editScope === 'head') {
     return Boolean(hit.groupId && hit.groupId === selection.selectedGroupId)
   }
 

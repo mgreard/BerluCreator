@@ -109,7 +109,7 @@ export async function createManualWorkspaceSnapshot(
       ])
       return {
         id: MANUAL_SNAPSHOT_ID,
-        schemaVersion: 5,
+        schemaVersion: 6,
         activeProjectId,
         createdAt: Date.now(),
         projects: project ? [project] : [],
@@ -134,10 +134,10 @@ export async function restoreManualWorkspaceSnapshot(): Promise<WorkspaceSnapsho
 export async function restoreWorkspaceSnapshot(
   snapshot: WorkspaceSnapshot
 ): Promise<WorkspaceSnapshot> {
-  if (snapshot.schemaVersion !== 4 && snapshot.schemaVersion !== 5) {
+  if (snapshot.schemaVersion !== 6) {
     throw new Error(`Version de sauvegarde non prise en charge : ${snapshot.schemaVersion}`)
   }
-  if (snapshot.schemaVersion === 5 && !snapshot.rigCatalogJson) {
+  if (!snapshot.rigCatalogJson) {
     throw new Error('Le catalogue de rigs est absent de la sauvegarde.')
   }
   if (snapshot.rigCatalogJson) parseRigCatalogFile(snapshot.rigCatalogJson)

@@ -8,7 +8,6 @@ import { getCachedAssetImage, useCanvasRenderer } from '../composables/useCanvas
 import { isLayerPointOpaque } from '../engine/alpha-hit-test'
 import { isActiveSelectionHit, shouldTargetWholeGroup } from '../engine/selection-target'
 import { clampBackgroundCover } from '../engine/background-cover.engine'
-import { resolveStagePlacementZIndexes } from '../engine/stage-layer-placement'
 import {
   computeResizeScales,
   computeTransformedBounds,
@@ -36,6 +35,7 @@ import type { TourKey } from '@/features/project/services/tour-definitions'
 import { toast } from '@/ui/shared/services/toast.service'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
 import { useRigRuntime } from '../rig-calibration/useRigRuntime'
+import { clampHeadOffset, headCalibration } from '../rig-calibration/rig-catalog.service'
 import StudioGlobalToolbar from './StudioGlobalToolbar.vue'
 import { StudioSelectionToolbar, type DeskPlacement } from './studio-selection-toolbar'
 
@@ -123,26 +123,7 @@ function closeRigCalibration(): void {
 }
 
 async function persistLayerCalibration(layer: RenderableLayer): Promise<void> {
-  const sourceLayer = editorStore.currentDocument.layers.find(
-    (candidate) => candidate.id === layer.layerId
-  )
-  const group = editorStore.currentDocument.groups.find(
-    (candidate): candidate is CharacterGroup =>
-      candidate.id === layer.groupId && candidate.kind === 'character'
-  )
-  const rig = group
-    ? (rigCatalog.rigById(group.activeRigId) ?? rigRuntime.activeRigForGroup(group))
-    : undefined
-  if (!sourceLayer || !rig || !rigCatalog.partForAsset(rig, layer.asset)) return
-  const calibration = {
-    x: Math.round(sourceLayer.transform.x),
-    y: Math.round(sourceLayer.transform.y),
-    scaleX: sourceLayer.transform.scaleX,
-    scaleY: sourceLayer.transform.scaleY,
-    rotation: sourceLayer.transform.rotation,
-    zIndex: sourceLayer.zIndex
-  }
-  rigCatalog.savePartCalibration(rig.id, layer.asset, calibration)
+  void layer
 }
 
 const isSelectionLocked = computed(() =>
@@ -258,24 +239,6 @@ let hasDepthOfFieldGesture = false
 
 const showSelection = computed(() => !activeCamera.value.enabled)
 
-const deskReferenceZIndex = computed(() => {
-  const visibleDesk = editorStore.currentDocument.layers.find((layer) => {
-    if (layer.category !== 'desk' || layer.muted) return false
-    const group = editorStore.currentDocument.groups.find(
-      (candidate) => candidate.id === layer.groupId
-    )
-    return !group?.muted
-  })
-  return visibleDesk?.zIndex ?? ASSET_CATEGORIES.desk.defaultZIndex
-})
-
-const stagePlacementZIndexes = computed(() => {
-  return resolveStagePlacementZIndexes(
-    deskReferenceZIndex.value,
-    editorStore.currentDocument.groups
-  )
-})
-
 const canEditSelectedDeskPlacement = computed(
   () =>
     (editScope.value === 'layer' && editorStore.selectedLayer?.category === 'props_set') ||
@@ -316,24 +279,16 @@ async function handleSaveDeskSplit(config: DeskSplitConfig) {
 const selectedDeskPlacement = computed<DeskPlacement>({
   get: () => {
     if (isGroupTarget.value && activeSelectedGroup.value?.kind === 'character') {
-      return activeSelectedGroup.value.zIndex <= deskReferenceZIndex.value ? 'behind' : 'front'
+      return activeSelectedGroup.value.stagePlane === 'front' ? 'front' : 'behind'
     }
-    return (editorStore.selectedLayer?.zIndex ?? ASSET_CATEGORIES.props_set.defaultZIndex) <=
-      stagePlacementZIndexes.value.behind
-      ? 'behind'
-      : 'front'
+    return editorStore.selectedLayer?.stagePlane === 'rear' ? 'behind' : 'front'
   },
   set: (value) => {
     if (value !== 'behind' && value !== 'front') return
     if (isGroupTarget.value && activeSelectedGroup.value?.kind === 'character') {
       editorStore.updateGroup(
         activeSelectedGroup.value.id,
-        {
-          zIndex:
-            value === 'behind'
-              ? stagePlacementZIndexes.value.behind
-              : stagePlacementZIndexes.value.front
-        },
+        { stagePlane: value === 'behind' ? 'rear' : 'front' },
         value === 'behind'
           ? 'Placer le personnage derrière le bureau'
           : 'Placer le personnage devant le bureau'
@@ -342,7 +297,13 @@ const selectedDeskPlacement = computed<DeskPlacement>({
     }
     const layer = editorStore.selectedLayer
     if (!layer) return
-    editorStore.updateLayerZIndex(layer.id, stagePlacementZIndexes.value[value])
+    editorStore.updateLayer(
+      layer.id,
+      { stagePlane: value === 'behind' ? 'rear' : 'front' },
+      value === 'behind'
+        ? 'Placer l’accessoire derrière le bureau'
+        : 'Placer l’accessoire devant le bureau'
+    )
   }
 })
 
@@ -602,6 +563,8 @@ function onHistoryKeydown(event: KeyboardEvent) {
     event.preventDefault()
     if (editorStore.hasActiveGesture) {
       editorStore.cancelGesture()
+    } else if (editorStore.editScope === 'head' && editorStore.selectedGroupId) {
+      editorStore.selectGroupForEditing(editorStore.selectedGroupId)
     } else if (isRigCalibrationOpen.value) {
       closeRigCalibration()
     } else {
@@ -761,6 +724,7 @@ function hitTestLayer(pos: { x: number; y: number }): RenderableLayer | null {
   for (const layer of reversed) {
     const isFullScreenBg =
       layer.category === 'background' ||
+      layer.category === 'background_overlay' ||
       (layer.category === 'foreground' && !layer.isMovable) ||
       (layer.width >= stage.value.width * 0.95 &&
         layer.height >= stage.value.height * 0.95 &&
@@ -793,6 +757,16 @@ function hitTestLayer(pos: { x: number; y: number }): RenderableLayer | null {
   return null
 }
 
+function activeTransformPivot(bounds: BoxBounds): { x: number; y: number } {
+  if (editorStore.editScope === 'head' && activeSelectedLayer.value) {
+    return {
+      x: activeSelectedLayer.value.rotationOriginX ?? activeSelectedLayer.value.transformOriginX,
+      y: activeSelectedLayer.value.rotationOriginY ?? activeSelectedLayer.value.transformOriginY
+    }
+  }
+  return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+}
+
 function onCanvasPointerDown(e: PointerEvent) {
   const pos = getStageCoordinates(e)
   if (!pos) return
@@ -804,8 +778,7 @@ function onCanvasPointerDown(e: PointerEvent) {
       editorStore.beginGesture('Pivoter la sélection')
       isRotating.value = true
       activeHandle.value = 'rot'
-      const centerX = selectedBounds.value.x + selectedBounds.value.width / 2
-      const centerY = selectedBounds.value.y + selectedBounds.value.height / 2
+      const { x: centerX, y: centerY } = activeTransformPivot(selectedBounds.value)
       dragStartAngleRad.value = Math.atan2(pos.y - centerY, pos.x - centerX)
 
       if (isGroupTarget.value && activeSelectedGroup.value) {
@@ -906,7 +879,13 @@ function onCanvasPointerDown(e: PointerEvent) {
     const target = e.currentTarget as HTMLElement
     target?.setPointerCapture?.(e.pointerId)
   } else {
-    if (!editorStore.hasActiveGesture) editorStore.clearStudioSelection()
+    if (!editorStore.hasActiveGesture) {
+      if (editorStore.editScope === 'head' && editorStore.selectedGroupId) {
+        editorStore.selectGroupForEditing(editorStore.selectedGroupId)
+      } else {
+        editorStore.clearStudioSelection()
+      }
+    }
   }
 }
 
@@ -916,8 +895,7 @@ function onCanvasPointerMove(e: PointerEvent) {
 
   // A. Rotation
   if (isRotating.value && selectedBounds.value) {
-    const centerX = selectedBounds.value.x + selectedBounds.value.width / 2
-    const centerY = selectedBounds.value.y + selectedBounds.value.height / 2
+    const { x: centerX, y: centerY } = activeTransformPivot(selectedBounds.value)
     const currentAngle = Math.atan2(pos.y - centerY, pos.x - centerX)
     let deltaAngleDeg = ((currentAngle - dragStartAngleRad.value) * 180) / Math.PI
     let nextRot = Math.round(dragStartRotation.value + deltaAngleDeg)
@@ -986,7 +964,29 @@ function onCanvasPointerMove(e: PointerEvent) {
             : 1
         const newX = Math.round(dragStartLayerPos.value.x + dx / rigUnitScale)
         const newY = Math.round(dragStartLayerPos.value.y + dy / rigUnitScale)
-        editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, { x: newX, y: newY })
+        if (
+          editorStore.editScope === 'head' &&
+          activeSelectedLayer.value.category === 'head' &&
+          activeSelectedGroup.value?.kind === 'character'
+        ) {
+          const rig = rigRuntime.activeRigForGroup(activeSelectedGroup.value)
+          const series = rigCatalog.seriesById(activeSelectedLayer.value.asset.headSeriesId)
+          const base = rig && series
+            ? headCalibration(rig, series, activeSelectedLayer.value.asset)
+            : null
+          if (rig && base) {
+            const offset = clampHeadOffset(
+              { x: newX - base.x, y: newY - base.y },
+              rig.headMotionRadius
+            )
+            editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, {
+              x: Math.round(base.x + offset.x),
+              y: Math.round(base.y + offset.y)
+            })
+          }
+        } else {
+          editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, { x: newX, y: newY })
+        }
       }
     }
     return
@@ -1024,6 +1024,22 @@ function onCanvasDoubleClick(e: MouseEvent) {
   const hit = hitTestLayer(pos)
   if (
     hit &&
+    ['head', 'mouth', 'props_character'].includes(hit.category) &&
+    editorStore.currentDocument.groups.some(
+      (group) => group.id === hit.groupId && group.kind === 'character' && group.activeMode === 'rig'
+    )
+  ) {
+    const head = activeLayers.value.find(
+      (layer) => layer.groupId === hit.groupId && layer.category === 'head'
+    )
+    if (head) {
+      editorStore.selectHeadForEditing(head.layerId)
+      assetStore.selectAsset(head.asset.id)
+      return
+    }
+  }
+  if (
+    hit &&
     isActiveSelectionHit(
       {
         selectedLayerId: editorStore.selectedLayerId,
@@ -1051,7 +1067,11 @@ function onCanvasDoubleClick(e: MouseEvent) {
     }
     assetStore.selectAsset(hit.asset.id)
   } else if (!hit && !editorStore.hasActiveGesture) {
-    editorStore.clearStudioSelection()
+    if (editorStore.editScope === 'head' && editorStore.selectedGroupId) {
+      editorStore.selectGroupForEditing(editorStore.selectedGroupId)
+    } else {
+      editorStore.clearStudioSelection()
+    }
     assetStore.selectAsset(null)
   }
 }

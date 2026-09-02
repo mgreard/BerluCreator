@@ -1,785 +1,982 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { AssetCalibration } from '@core/types/asset.types'
-import type { CharacterGroup } from '@core/types/editor.types'
-import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
-import { useEditorStore } from '@/features/editor/stores/useEditorStore'
-import {
-  DuplicateRigModal,
-  RigCalibrationPanel,
-  type RigCalibrationCategoryConfig,
-  type RigCalibrationHeritageState,
-  type RigCalibrationPanelItem,
-  type RigCalibrationPanelRig,
-  type RigCalibrationPanelValue
-} from '../rig-calibration/components/rig-calibration-panel'
-import { toast } from '@/ui/shared/services/toast.service'
+import { computed, ref, useId, useTemplateRef, watch } from 'vue'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
+import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useRigRuntime } from '../rig-calibration/useRigRuntime'
-import {
-  DEFAULT_RIG_CANVAS,
-  effectiveCalibration,
-  identityCalibration,
-  isRigConfigurableCategory,
-  partCalibrationToAbsolute,
-  rigAssetKey
-} from '../rig-calibration/rig-catalog.service'
-import {
-  RIG_CONFIGURABLE_CATEGORIES,
-  type DuplicateRigOptions,
-  type RigConfigurableCategory,
-  type RigDefinition
-} from '../rig-calibration/rig-catalog.types'
-import { ASSET_CATEGORIES } from '@core/constants/categories'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
+import { FormGroup } from '@/components/ui/form-group'
+import { Heading } from '@/components/ui/heading'
+import { Input } from '@/components/ui/input'
+import { Select, type SelectOption } from '@/components/ui/select'
+import { Text } from '@/components/ui/text'
+import { Icon } from '@/components/ui/icon'
+import type { AnchoredAssetCalibration, CharacterPropSlot } from '@core/types/asset.types'
+import type { HeadSeriesProfile } from '../rig-calibration/rig-catalog.types'
+import { rigAssetKey, DEFAULT_RIG_CANVAS } from '../rig-calibration/rig-catalog.service'
 import { suggestRigCalibration } from '../rig-calibration/rig-auto-calibration'
-import { useRigCalibrationSelection } from '../rig-calibration/useRigCalibrationSelection'
+import { toast } from '@/ui/shared/services/toast.service'
 
-interface RigCalibrationDraft {
-  rigId: string
-  assetKey: string
-  value: AssetCalibration
-  dirty: boolean
-}
-
-const assetStore = useAssetStore()
-const editorStore = useEditorStore()
 const rigCatalog = useRigCatalogStore()
+const assetStore = useAssetStore()
 const rigRuntime = useRigRuntime()
-const calibrationSelection = useRigCalibrationSelection()
 
-const isDuplicateModalOpen = ref(false)
-const isEditingOrigin = ref(false)
-const busy = ref(false)
+const seriesSelectId = useId()
+const rigSelectId = useId()
 
-// Sélection d'asset par catégorie (ex: { head: 'id-1', eyes: 'id-2', ... })
-const selectedAssetByCat = ref<Record<string, string>>({})
-const drafts = ref<Record<string, RigCalibrationDraft>>({})
+// Accordion Collapsed states
+const isBodySectionOpen = ref(true)
+const isPartsSectionOpen = ref(true)
+const isAnchorsCardOpen = ref(false)
+const isAccessoriesCardOpen = ref(false)
+const isCopyModalOpen = ref(false)
+const selectedSourceRigId = ref('')
+const catalogInputRef = useTemplateRef<HTMLInputElement>('catalogInputRef')
 
-const activeGroup = computed<CharacterGroup | null>(() => {
-  if (editorStore.selectedGroupId) {
-    const selected = editorStore.currentDocument.groups.find(
-      (group): group is CharacterGroup =>
-        group.kind === 'character' && group.id === editorStore.selectedGroupId
-    )
-    if (selected) return selected
-  }
-  if (editorStore.selectedLayerId) {
-    const layer = editorStore.currentDocument.layers.find(
-      (l) => l.id === editorStore.selectedLayerId
-    )
-    if (layer?.groupId) {
-      const selected = editorStore.currentDocument.groups.find(
-        (group): group is CharacterGroup =>
-          group.kind === 'character' && group.id === layer.groupId
-      )
-      if (selected) return selected
-    }
-  }
-  return (
-    editorStore.currentDocument.groups.find(
-      (group): group is CharacterGroup => group.kind === 'character' && group.activeMode === 'rig'
-    ) ??
-    editorStore.currentDocument.groups.find(
-      (group): group is CharacterGroup => group.kind === 'character'
-    ) ??
-    null
-  )
-})
+// Series Creation Form
+const newSeriesId = ref('')
+const newSeriesLabel = ref('')
+const newSeriesWidth = ref(1205)
+const newSeriesHeight = ref(1305)
 
-const selectedRig = computed<RigDefinition | undefined>(() => {
-  const group = activeGroup.value
-  return (
-    rigCatalog.rigById(rigCatalog.selectedRigId) ??
-    (group ? rigRuntime.activeRigForGroup(group) : undefined) ??
-    (group ? rigCatalog.defaultRig(group.characterKey) : rigCatalog.rigs[0])
-  )
-})
+// Accessories Slot Selection
+const selectedPropSlot = ref<CharacterPropSlot>('sunglass')
+const selectedAccessoryId = ref('')
+const propSlotOptions: SelectOption[] = [
+  { value: 'sunglass', label: 'Lunettes' },
+  { value: 'hat', label: 'Chapeaux' }
+]
 
-const characterKey = computed(
-  () => selectedRig.value?.characterKey ?? activeGroup.value?.characterKey ?? 'berlu'
-)
-const characterName = computed(
-  () => selectedRig.value?.characterName ?? activeGroup.value?.name ?? 'Berlu'
-)
-
-const characterAssets = computed(() =>
-  assetStore.assets.filter(
-    (asset) =>
-      asset.character?.key === characterKey.value &&
-      isRigConfigurableCategory(asset.category)
-  )
-)
-
-const rigOptions = computed<RigCalibrationPanelRig[]>(() =>
-  rigCatalog.rigsForCharacter(characterKey.value).map((rig) => ({
-    id: rig.id,
-    label: rig.name,
-    bodyLabel: `${rig.body.name} · ${rig.body.width} × ${rig.body.height} px`,
-    isDefault: rigCatalog.defaultRigByCharacter[rig.characterKey] === rig.id
+// Computed Options
+const seriesOptions = computed<SelectOption[]>(() =>
+  rigCatalog.headSeries.map((series) => ({
+    value: series.id,
+    label: `${series.label} (${series.width}×${series.height})`
   }))
 )
 
-// Catégories configurables disponibles pour le personnage
-const configurableCategories = computed<RigConfigurableCategory[]>(() => {
-  const available = new Set(characterAssets.value.map((a) => a.category as RigConfigurableCategory))
-  return RIG_CONFIGURABLE_CATEGORIES.filter((c) => available.has(c))
+const rigOptions = computed<SelectOption[]>(() =>
+  rigCatalog.rigs.map((rig) => ({ value: rig.id, label: rig.name }))
+)
+
+const selectedRig = computed(() => rigCatalog.rigById(rigCatalog.selectedRigId))
+const selectedSeries = computed(() => rigCatalog.seriesById(rigCatalog.selectedHeadSeriesId))
+const selectedRigSeriesConfig = computed(() =>
+  selectedRig.value?.headSeries.find(
+    (entry) => entry.seriesId === rigCatalog.selectedHeadSeriesId
+  )
+)
+
+// Active Body
+const bodyAsset = computed(() => {
+  if (!selectedRig.value) return undefined
+  return rigCatalog.resolveBodyAsset(selectedRig.value, assetStore.assets)
 })
 
-// Configuration des catégories avec leurs sprites et valeurs
-const categoriesConfig = computed<RigCalibrationCategoryConfig[]>(() => {
-  const rig = selectedRig.value
-  if (!rig) return []
+// Head Sprites for active Series / Character
+const seriesHeads = computed(() => {
+  const series = selectedSeries.value
+  if (!series) return []
+  return assetStore.assets.filter(
+    (asset) => asset.category === 'head' && asset.headSeriesId === series.id
+  )
+})
 
-  return configurableCategories.value.map((catKey) => {
-    const catMeta = ASSET_CATEGORIES[catKey]
-    const catDef = rig.categories.find((c) => c.category === catKey)
-    const catAssets = characterAssets.value.filter((a) => a.category === catKey)
-
-    const items: RigCalibrationPanelItem[] = catAssets.map((asset) => {
-      const part = rigCatalog.partForAsset(rig, asset)
-      const isDefault = Boolean(catDef?.defaultPartKey && part && rigAssetKey(part.asset) === catDef.defaultPartKey)
-      return {
-        id: asset.id,
-        label: asset.name,
-        categoryLabel: catMeta?.label ?? catKey,
-        dimensions: `${asset.width} × ${asset.height} px`,
-        compatible: Boolean(part),
-        isDefault,
-        hasOverride: Boolean(part?.calibrationOverride)
-      }
-    })
-
-    const selectedId = selectedAssetByCat.value[catKey] ?? items[0]?.id
-    const selectedAsset = catAssets.find((a) => a.id === selectedId)
-    const selectedPart = selectedAsset ? rigCatalog.partForAsset(rig, selectedAsset) : undefined
-
-    let heritageState: RigCalibrationHeritageState = 'undefined'
-    if (catDef && catDef.enabled && selectedPart) {
-      const key = rigAssetKey(selectedPart.asset)
-      if (catDef.defaultPartKey === key) heritageState = 'template'
-      else if (selectedPart.calibrationOverride) heritageState = 'custom'
-      else if (catDef.template) heritageState = 'inherited'
+const selectedHeadId = computed({
+  get: () => {
+    if (rigCatalog.calibrationTargetId) {
+      const match = seriesHeads.value.find((h) => h.id === rigCatalog.calibrationTargetId)
+      if (match) return match.id
     }
-
-    const draft = selectedAsset ? drafts.value[selectedAsset.id] : undefined
-    let value: RigCalibrationPanelValue
-
-    if (draft?.dirty) {
-      value = {
-        x: draft.value.x,
-        y: draft.value.y,
-        scale: draft.value.scaleX,
-        rotation: draft.value.rotation ?? 0,
-        zIndex: draft.value.zIndex ?? catMeta?.defaultZIndex ?? 10
-      }
-    } else {
-      const calibration =
-        (selectedPart ? effectiveCalibration(rig, selectedPart, selectedAsset) : undefined) ??
-        catDef?.template ??
-        identityCalibration(selectedAsset)
-
-      value = {
-        x: calibration.x,
-        y: calibration.y,
-        scale: calibration.scaleX,
-        rotation: calibration.rotation ?? 0,
-        zIndex: calibration.zIndex ?? catMeta?.defaultZIndex ?? 10
-      }
+    const defaultKey = selectedRigSeriesConfig.value?.defaultHeadAssetKey
+    if (defaultKey) {
+      const match = seriesHeads.value.find((h) => rigAssetKey(h) === defaultKey)
+      if (match) return match.id
     }
+    return seriesHeads.value[0]?.id ?? ''
+  },
+  set: (id: string | number | boolean | null) => {
+    if (!id) return
+    rigCatalog.calibrationTargetId = String(id)
+    assetStore.selectAsset(String(id))
+  }
+})
 
+const headOptions = computed<SelectOption[]>(() => {
+  return seriesHeads.value.map((head) => {
+    const isDefault =
+      selectedRigSeriesConfig.value?.defaultHeadAssetKey === rigAssetKey(head)
     return {
-      category: catKey,
-      label: catMeta?.label ?? catKey,
-      icon: catMeta?.icon ?? 'category',
-      color: catMeta?.color ?? '#6366f1',
-      enabled: catDef?.enabled ?? true,
-      items,
-      selectedItemId: selectedId,
-      heritageState,
-      value
+      value: head.id,
+      label: `${isDefault ? '✓ ' : ''}${head.name} ${head.calibration ? '(spécifique)' : ''}`
     }
   })
 })
 
-const activeCalibrationCategory = computed<RigConfigurableCategory | undefined>(() => {
-  const targetId = rigCatalog.calibrationTargetId
-  if (!targetId || targetId === 'origin') return undefined
-  const category = assetStore.assets.find((asset) => asset.id === targetId)?.category
-  return category && isRigConfigurableCategory(category) ? category : undefined
+const activeHeadAsset = computed(() =>
+  seriesHeads.value.find((h) => h.id === selectedHeadId.value)
+)
+
+// Default Mouth Options
+const mouthOptions = computed<SelectOption[]>(() => [
+  { value: '', label: 'Aucune bouche par défaut' },
+  ...assetStore.assets
+    .filter(
+      (asset) =>
+        asset.category === 'mouth' && asset.headSeriesId === selectedSeries.value?.id
+    )
+    .map((asset) => ({ value: asset.id, label: asset.name }))
+])
+
+const selectedDefaultMouthId = computed({
+  get: () => {
+    const key = selectedSeries.value?.defaultMouthAssetKey
+    return key
+      ? assetStore.assets.find(
+          (asset) => asset.category === 'mouth' && rigAssetKey(asset) === key
+        )?.id ?? ''
+      : ''
+  },
+  set: (assetId: string | number | boolean | null) => {
+    const series = selectedSeries.value
+    if (!series) return
+    const mouth = assetStore.assets.find(
+      (asset) => asset.id === assetId && asset.category === 'mouth'
+    )
+    rigCatalog.updateHeadSeries(series.id, {
+      defaultMouthAssetKey: mouth ? rigAssetKey(mouth) : undefined
+    })
+  }
 })
 
-const canDuplicate = computed(
-  () => rigCatalog.rigsForCharacter(characterKey.value).length > 1
+// Accessories Options
+const accessoryOptions = computed<SelectOption[]>(() =>
+  assetStore.assets
+    .filter(
+      (asset) =>
+        asset.category === 'props_character' &&
+        asset.characterPropSlot === selectedPropSlot.value
+    )
+    .map((asset) => ({ value: asset.id, label: asset.name }))
 )
 
-const duplicateRigs = computed(() =>
-  rigCatalog
-    .rigsForCharacter(characterKey.value)
-    .filter((r) => r.id !== selectedRig.value?.id)
-    .map((r) => ({
-      id: r.id,
-      label: r.name,
-      bodyLabel: `${r.body.name} · ${r.body.width} × ${r.body.height} px`
-    }))
+const selectedAccessory = computed(() =>
+  assetStore.assets.find((asset) => asset.id === selectedAccessoryId.value)
 )
 
-function chooseDefaultAssets(): void {
-  const rig = selectedRig.value
-  if (!rig) return
-
-  for (const catKey of configurableCategories.value) {
-    const cat = rig.categories.find((c) => c.category === catKey)
-    const activeLayer = activeGroup.value
-      ? editorStore.currentDocument.layers.find(
-          (layer) => layer.groupId === activeGroup.value?.id && layer.category === catKey && !layer.muted
-        )
-      : undefined
-    const activeAsset = activeLayer
-      ? assetStore.assets.find((asset) => asset.id === activeLayer.assetId)
-      : undefined
-    const defaultPart = cat?.defaultPartKey
-      ? rig.parts.find((part) => rigAssetKey(part.asset) === cat.defaultPartKey)
-      : undefined
-
-    const catAssets = characterAssets.value.filter((a) => a.category === catKey)
-    selectedAssetByCat.value[catKey] =
-      activeAsset?.id ??
-      (defaultPart ? rigCatalog.resolvePartAsset(defaultPart, assetStore.assets)?.id : undefined) ??
-      catAssets[0]?.id
-  }
-  const preferred = selectedAssetByCat.value.head ?? Object.values(selectedAssetByCat.value)[0]
-  if (preferred) rigCatalog.calibrationTargetId = preferred
-}
-
-async function persistAllDrafts(): Promise<void> {
-  const rig = selectedRig.value
-  if (!rig) return
-
-  for (const [assetId, draft] of Object.entries(drafts.value)) {
-    if (!draft.dirty) continue
-    const asset = assetStore.assets.find((a) => a.id === assetId)
-    if (!asset) continue
-    rigCatalog.savePartCalibration(rig.id, asset, draft.value)
-    draft.dirty = false
-  }
-}
-
-async function selectRig(rigId: string): Promise<void> {
-  await persistAllDrafts()
-  const rig = rigCatalog.rigById(rigId)
-  if (!rig) return
-  rigCatalog.selectedRigId = rig.id
-  rigRuntime.activateRig(rig)
-  chooseDefaultAssets()
-}
-
-async function selectPart(category: RigConfigurableCategory, assetId: string): Promise<void> {
-  await persistAllDrafts()
-  selectedAssetByCat.value[category] = assetId
-  isEditingOrigin.value = false
-
-  const rig = selectedRig.value
-  const group = activeGroup.value
-  const asset = assetStore.assets.find((candidate) => candidate.id === assetId)
-  if (!rig || !group || !asset || asset.category === 'body') return
-
-  calibrationSelection.selectCalibrationAsset({ category, assetId, groupId: group.id })
-
-  if (!rigCatalog.partForAsset(rig, asset)) {
-    rigCatalog.setPartCompatibility(rig.id, asset, true)
-  }
-
-  const part = rigCatalog.partForAsset(rig, asset)
-  if (!part) return
-  const relativeCalibration = effectiveCalibration(rig, part, asset) ?? identityCalibration(asset)
-  const absoluteCalibration = partCalibrationToAbsolute(rig, relativeCalibration)
-
-  const layer = editorStore.assignAssetToGroup(
-    asset.id,
-    asset.category,
-    group.id,
-    asset.name,
-    absoluteCalibration
+const accessoryCalibration = computed<AnchoredAssetCalibration | null>(() => {
+  const series = selectedSeries.value
+  const accessory = selectedAccessory.value
+  if (!series || !accessory) return null
+  return (
+    accessory.anchoredCalibrationBySeries?.[series.id] ?? {
+      pivot: { x: 0.5, y: 0.5 },
+      offsetX: 0,
+      offsetY: 0,
+      scale: 1,
+      rotation: 0
+    }
   )
-  editorStore.selectRigLayerForCalibration(layer.id)
-  calibrationSelection.selectCalibrationAsset({ category, assetId, groupId: group.id })
-}
-
-function toggleCategoryEnabled(category: RigConfigurableCategory, enabled: boolean): void {
-  const rig = selectedRig.value
-  if (!rig) return
-  rigCatalog.setCategoryEnabled(rig.id, category, enabled)
-}
-
-async function toggleCompatibility(category: RigConfigurableCategory, compatible: boolean): Promise<void> {
-  const rig = selectedRig.value
-  const assetId = selectedAssetByCat.value[category]
-  const asset = assetStore.assets.find((a) => a.id === assetId)
-  if (!rig || !asset) return
-  await persistAllDrafts()
-
-  rigCatalog.setPartCompatibility(rig.id, asset, compatible)
-
-  if (compatible) {
-    await selectPart(category, asset.id)
-  } else {
-    const cat = rig.categories.find((c) => c.category === category)
-    const defaultPart = cat?.defaultPartKey
-      ? rig.parts.find((p) => rigAssetKey(p.asset) === cat.defaultPartKey)
-      : undefined
-    const replacementAsset = defaultPart
-      ? rigCatalog.resolvePartAsset(defaultPart, assetStore.assets)
-      : undefined
-
-    const layer = activeGroup.value
-      ? editorStore.currentDocument.layers.find(
-          (l) => l.groupId === activeGroup.value?.id && l.assetId === asset.id
-        )
-      : undefined
-
-    if (replacementAsset) {
-      await selectPart(category, replacementAsset.id)
-    } else if (layer) {
-      editorStore.removeLayer(layer.id)
-      const catAssets = characterAssets.value.filter((a) => a.category === category)
-      selectedAssetByCat.value[category] = catAssets[0]?.id
-    }
-  }
-}
-
-function setDefaultPart(category: RigConfigurableCategory): void {
-  const rig = selectedRig.value
-  const assetId = selectedAssetByCat.value[category]
-  const asset = assetStore.assets.find((a) => a.id === assetId)
-  if (rig && asset) {
-    rigCatalog.setDefaultPart(rig.id, asset)
-    toast.info('Pièce par défaut définie', `Définit la position commune pour ${ASSET_CATEGORIES[category]?.label ?? category}.`)
-  }
-}
-
-function setDefaultRig(): void {
-  const rig = selectedRig.value
-  if (!rig) return
-  rigCatalog.setDefaultRig(rig.characterKey, rig.id)
-  toast.success('Rig par défaut mis à jour', `${rig.name} sera utilisé pour ce personnage.`)
-}
-
-function toggleOriginEditing(): void {
-  isEditingOrigin.value = !isEditingOrigin.value
-  rigCatalog.calibrationTargetId = isEditingOrigin.value ? 'origin' : selectedAssetByCat.value.head ?? null
-}
-
-function handleDuplicate(payload: { sourceRigId: string; options: DuplicateRigOptions }): void {
-  const targetRig = selectedRig.value
-  if (!targetRig) return
-  rigCatalog.duplicateRigConfiguration(payload.sourceRigId, targetRig.id, payload.options)
-  rigRuntime.activateRig(targetRig)
-  chooseDefaultAssets()
-  toast.success('Configuration copiée', 'Les éléments sélectionnés ont été transférés.')
-}
-
-async function updateValue(
-  category: RigConfigurableCategory,
-  next: RigCalibrationPanelValue
-): Promise<void> {
-  const rig = selectedRig.value
-  const assetId = selectedAssetByCat.value[category]
-  const asset = assetStore.assets.find((a) => a.id === assetId)
-  if (!rig || !asset) return
-
-  const nextCalibration: AssetCalibration = {
-    x: Math.round(next.x),
-    y: Math.round(next.y),
-    scaleX: Math.max(0.01, next.scale),
-    scaleY: Math.max(0.01, next.scale),
-    rotation: next.rotation,
-    zIndex: next.zIndex !== undefined ? Math.round(next.zIndex) : 10
-  }
-
-  // Persistance directe dans le catalogue de rigs
-  rigCatalog.savePartCalibration(rig.id, asset, nextCalibration)
-
-  const layer = activeGroup.value
-    ? editorStore.currentDocument.layers.find(
-        (l) => l.groupId === activeGroup.value?.id && l.assetId === asset.id
-      )
-    : undefined
-
-  if (layer) {
-    const abs = partCalibrationToAbsolute(rig, nextCalibration)
-    editorStore.updateLayerSettings(
-      layer.id,
-      {
-        x: abs.x,
-        y: abs.y,
-        scaleX: abs.scaleX,
-        scaleY: abs.scaleY,
-        rotation: abs.rotation
-      },
-      nextCalibration.zIndex ?? layer.zIndex
-    )
-  }
-}
-
-function savePart(category: RigConfigurableCategory): void {
-  const rig = selectedRig.value
-  const catConfig = categoriesConfig.value.find((c) => c.category === category)
-  const assetId = selectedAssetByCat.value[category]
-  const asset = assetStore.assets.find((a) => a.id === assetId)
-  if (!rig || !catConfig || !asset) return
-
-  const nextRel: AssetCalibration = {
-    x: catConfig.value.x,
-    y: catConfig.value.y,
-    scaleX: catConfig.value.scale,
-    scaleY: catConfig.value.scale,
-    rotation: catConfig.value.rotation,
-    zIndex: catConfig.value.zIndex ?? 10
-  }
-
-  rigCatalog.savePartSpecificPosition(rig.id, asset, nextRel)
-  toast.success('Configuration sauvegardée', `Position enregistrée pour « ${asset.name} ».`)
-
-  const layer = activeGroup.value
-    ? editorStore.currentDocument.layers.find(
-        (l) => l.groupId === activeGroup.value?.id && l.assetId === asset.id
-      )
-    : undefined
-
-  if (layer) {
-    const abs = partCalibrationToAbsolute(rig, nextRel)
-    editorStore.updateLayerSettings(
-      layer.id,
-      { x: abs.x, y: abs.y, scaleX: abs.scaleX, scaleY: abs.scaleY, rotation: abs.rotation },
-      nextRel.zIndex ?? layer.zIndex
-    )
-  }
-}
-
-function setCommonPosition(category: RigConfigurableCategory): void {
-  const rig = selectedRig.value
-  const catConfig = categoriesConfig.value.find((c) => c.category === category)
-  const assetId = selectedAssetByCat.value[category]
-  const asset = assetStore.assets.find((a) => a.id === assetId)
-  if (!rig || !catConfig || !asset) return
-
-  const nextRel: AssetCalibration = {
-    x: catConfig.value.x,
-    y: catConfig.value.y,
-    scaleX: catConfig.value.scale,
-    scaleY: catConfig.value.scale,
-    rotation: catConfig.value.rotation,
-    zIndex: catConfig.value.zIndex ?? 10
-  }
-
-  rigCatalog.savePartCommonPosition(rig.id, category, nextRel)
-  const part = rigCatalog.partForAsset(rig, asset)
-  if (part?.calibrationOverride) {
-    rigCatalog.resetPartToCommon(rig.id, asset)
-  }
-
-  const layer = activeGroup.value
-    ? editorStore.currentDocument.layers.find(
-        (l) => l.groupId === activeGroup.value?.id && l.assetId === asset.id
-      )
-    : undefined
-
-  if (layer) {
-    const abs = partCalibrationToAbsolute(rig, nextRel)
-    editorStore.updateLayerSettings(
-      layer.id,
-      { x: abs.x, y: abs.y, scaleX: abs.scaleX, scaleY: abs.scaleY, rotation: abs.rotation },
-      nextRel.zIndex ?? layer.zIndex
-    )
-  }
-  toast.success('Position commune enregistrée', `Appliquée par défaut à la catégorie ${catConfig.label}.`)
-}
-
-function setSpecificPosition(category: RigConfigurableCategory): void {
-  const rig = selectedRig.value
-  const catConfig = categoriesConfig.value.find((c) => c.category === category)
-  const assetId = selectedAssetByCat.value[category]
-  const asset = assetStore.assets.find((a) => a.id === assetId)
-  if (!rig || !catConfig || !asset) return
-
-  const nextRel: AssetCalibration = {
-    x: catConfig.value.x,
-    y: catConfig.value.y,
-    scaleX: catConfig.value.scale,
-    scaleY: catConfig.value.scale,
-    rotation: catConfig.value.rotation,
-    zIndex: catConfig.value.zIndex ?? 10
-  }
-
-  rigCatalog.savePartSpecificPosition(rig.id, asset, nextRel)
-
-  const layer = activeGroup.value
-    ? editorStore.currentDocument.layers.find(
-        (l) => l.groupId === activeGroup.value?.id && l.assetId === asset.id
-      )
-    : undefined
-
-  if (layer) {
-    const abs = partCalibrationToAbsolute(rig, nextRel)
-    editorStore.updateLayerSettings(
-      layer.id,
-      { x: abs.x, y: abs.y, scaleX: abs.scaleX, scaleY: abs.scaleY, rotation: abs.rotation },
-      nextRel.zIndex ?? layer.zIndex
-    )
-  }
-  toast.info('Position spécifique enregistrée', `Définie uniquement pour « ${asset.name} ».`)
-}
-
-function applyToAllParts(category: RigConfigurableCategory): void {
-  const rig = selectedRig.value
-  const catConfig = categoriesConfig.value.find((c) => c.category === category)
-  const assetId = selectedAssetByCat.value[category]
-  const asset = assetStore.assets.find((a) => a.id === assetId)
-  if (!rig || !catConfig) return
-
-  const nextRel: AssetCalibration = {
-    x: catConfig.value.x,
-    y: catConfig.value.y,
-    scaleX: catConfig.value.scale,
-    scaleY: catConfig.value.scale,
-    rotation: catConfig.value.rotation,
-    zIndex: catConfig.value.zIndex ?? 10
-  }
-
-  rigCatalog.applyPartCalibrationToAll(rig.id, category, nextRel)
-
-  if (asset) {
-    const layer = activeGroup.value
-      ? editorStore.currentDocument.layers.find(
-          (l) => l.groupId === activeGroup.value?.id && l.assetId === asset.id
-        )
-      : undefined
-    if (layer) {
-      const abs = partCalibrationToAbsolute(rig, nextRel)
-      editorStore.updateLayerSettings(
-        layer.id,
-        { x: abs.x, y: abs.y, scaleX: abs.scaleX, scaleY: abs.scaleY, rotation: abs.rotation },
-        nextRel.zIndex ?? layer.zIndex
-      )
-    }
-  }
-  toast.success('Position appliquée', `Toutes les pièces de ${catConfig.label} utilisent désormais cette position.`)
-}
-
-async function autoCalibrate(category: RigConfigurableCategory): Promise<void> {
-  const rig = selectedRig.value
-  const assetId = selectedAssetByCat.value[category]
-  const asset = assetStore.assets.find((a) => a.id === assetId)
-  if (!rig || !asset) return
-  busy.value = true
-  try {
-    const calibration = await suggestRigCalibration(asset, {
-      canvasWidth: rig.canvasWidth,
-      canvasHeight: rig.canvasHeight
-    })
-    await updateValue(category, {
-      x: calibration.x,
-      y: calibration.y,
-      scale: calibration.scaleX,
-      rotation: calibration.rotation ?? 0,
-      zIndex: calibration.zIndex ?? 10
-    })
-    toast.info('Suggestion appliquée', 'Ajustez si nécessaire puis enregistrez.')
-  } finally {
-    busy.value = false
-  }
-}
-
-async function resetPart(category: RigConfigurableCategory): Promise<void> {
-  const rig = selectedRig.value
-  const assetId = selectedAssetByCat.value[category]
-  const asset = assetStore.assets.find((a) => a.id === assetId)
-  if (!rig || !asset) return
-  rigCatalog.resetPartToCommon(rig.id, asset)
-  if (drafts.value[asset.id]) {
-    delete drafts.value[asset.id]
-  }
-
-  const part = rigCatalog.partForAsset(rig, asset)
-  const relCal =
-    (part ? effectiveCalibration(rig, part, asset) : undefined) ?? identityCalibration(asset)
-
-  const layer = activeGroup.value
-    ? editorStore.currentDocument.layers.find(
-        (l) => l.groupId === activeGroup.value?.id && l.assetId === asset.id
-      )
-    : undefined
-
-  if (layer) {
-    const abs = partCalibrationToAbsolute(rig, relCal)
-    editorStore.updateLayerSettings(
-      layer.id,
-      {
-        x: abs.x,
-        y: abs.y,
-        scaleX: abs.scaleX,
-        scaleY: abs.scaleY,
-        rotation: abs.rotation
-      },
-      relCal.zIndex ?? layer.zIndex
-    )
-  }
-  toast.info('Position réinitialisée', 'La pièce hérite désormais de la position commune.')
-}
-
-function resetBodyOrigin(): void {
-  const rig = selectedRig.value
-  if (!rig) return
-  rigCatalog.resetRigBodyOrigin(rig.id)
-  toast.info('Origine recentrée', 'L’origine du corps a été réinitialisée à son centre.')
-}
-
-function exportCatalog(): void {
-  const payload = rigCatalog.exportCatalog()
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = 'berlu_creator_rigs.json'
-  link.click()
-  URL.revokeObjectURL(url)
-  toast.success('Catalogue exporté', `${payload.rigs.length} rig(s) inclus.`)
-}
-
-async function importCatalog(file: File): Promise<void> {
-  busy.value = true
-  try {
-    const imported = rigCatalog.importCatalog(await file.text(), assetStore.assets)
-    const rig = imported.rigs.find((candidate) => candidate.characterKey === characterKey.value)
-    if (rig) await selectRig(rig.id)
-    toast.success('Catalogue importé', `${imported.rigs.length} rig(s) disponibles.`)
-  } catch (error) {
-    toast.error('Import impossible', error instanceof Error ? error.message : 'Fichier invalide.')
-  } finally {
-    busy.value = false
-  }
-}
-
-async function close(): Promise<void> {
-  await persistAllDrafts()
-  rigCatalog.closeCalibration()
-  const group = activeGroup.value
-  if (group) editorStore.selectGroupForEditing(group.id)
-}
-
-watch(selectedRig, (rig) => {
-  if (rig && rigCatalog.selectedRigId !== rig.id) rigCatalog.selectedRigId = rig.id
 })
 
 watch(
-  [
-    () => editorStore.selectedLayerId,
-    () => editorStore.selectedLayer?.assetId,
-    () => editorStore.selectedLayer?.category,
-    () => editorStore.selectedLayer?.groupId
-  ],
-  ([, assetId, category, groupId]) => {
-    if (
-      !rigCatalog.isCalibrationOpen ||
-      !assetId ||
-      !category ||
-      groupId !== activeGroup.value?.id ||
-      !isRigConfigurableCategory(category)
-    ) {
-      return
-    }
-    if (selectedAssetByCat.value[category] !== assetId) {
-      selectedAssetByCat.value[category] = assetId
-    }
-    calibrationSelection.selectCalibrationAsset({ category, assetId, groupId })
-    isEditingOrigin.value = false
-  }
+  () => rigCatalog.rigs,
+  (rigs) => {
+    if (!rigCatalog.selectedRigId && rigs[0]) rigCatalog.selectedRigId = rigs[0].id
+  },
+  { immediate: true }
 )
 
 watch(
-  () => rigCatalog.calibrationTargetId,
-  (assetId) => {
-    if (!assetId || assetId === 'origin') return
-    const asset = assetStore.assets.find((candidate) => candidate.id === assetId)
-    if (!asset || !isRigConfigurableCategory(asset.category)) return
-    if (selectedAssetByCat.value[asset.category] !== asset.id) {
-      selectedAssetByCat.value[asset.category] = asset.id
-    }
-    calibrationSelection.selectCalibrationAsset({
-      category: asset.category,
-      assetId: asset.id,
-      groupId: activeGroup.value?.id
-    })
-    isEditingOrigin.value = false
-  }
-)
-
-watch(
-  activeGroup,
-  (group) => {
-    if (!group) return
-    const activeRig = rigRuntime.activeRigForGroup(group)
-    if (activeRig && activeRig.id !== rigCatalog.selectedRigId) {
-      rigCatalog.selectedRigId = activeRig.id
-      chooseDefaultAssets()
+  accessoryOptions,
+  (options) => {
+    if (!options.some((option) => option.value === selectedAccessoryId.value)) {
+      selectedAccessoryId.value = String(options[0]?.value ?? '')
     }
   },
   { immediate: true }
 )
 
-onMounted(() => {
-  rigCatalog.initialize(assetStore.assets)
-  const group = activeGroup.value
-  const activeRig = group ? rigRuntime.activeRigForGroup(group) : undefined
-  const rig = activeRig ?? selectedRig.value
-  if (rig) {
-    rigCatalog.selectedRigId = rig.id
-  }
-  chooseDefaultAssets()
+function numberValue(value: string | number | undefined, fallback = 0): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+// Relative Head Position Calculations
+const currentHeadOffsetX = computed(() => {
+  const rig = selectedRig.value
+  const series = selectedSeries.value
+  const head = activeHeadAsset.value
+  if (!rig || !series || !head) return 0
+  const pivot = series.neckPivot
+  return Math.round(rig.neckAnchor.x - pivot.x * head.width)
 })
 
-onBeforeUnmount(() => {
-  void persistAllDrafts()
+const currentHeadOffsetY = computed(() => {
+  const rig = selectedRig.value
+  const series = selectedSeries.value
+  const head = activeHeadAsset.value
+  if (!rig || !series || !head) return 0
+  const pivot = series.neckPivot
+  return Math.round(rig.neckAnchor.y - pivot.y * head.height)
 })
+
+function updateHeadOffsetX(val: string | number): void {
+  const rig = selectedRig.value
+  const series = selectedSeries.value
+  const head = activeHeadAsset.value
+  if (!rig || !series || !head) return
+  const newHeadX = numberValue(val)
+  const newNeckX = Math.round(newHeadX + series.neckPivot.x * head.width)
+  rigCatalog.updateRigGeometry(rig.id, {
+    neckAnchor: { ...rig.neckAnchor, x: newNeckX }
+  })
+  rigRuntime.syncRigLayers(rig.id)
+}
+
+function updateHeadOffsetY(val: string | number): void {
+  const rig = selectedRig.value
+  const series = selectedSeries.value
+  const head = activeHeadAsset.value
+  if (!rig || !series || !head) return
+  const newHeadY = numberValue(val)
+  const newNeckY = Math.round(newHeadY + series.neckPivot.y * head.height)
+  rigCatalog.updateRigGeometry(rig.id, {
+    neckAnchor: { ...rig.neckAnchor, y: newNeckY }
+  })
+  rigRuntime.syncRigLayers(rig.id)
+}
+
+function updateSeriesScale(raw: string | number): void {
+  const rig = selectedRig.value
+  const series = selectedSeries.value
+  if (!rig || !series) return
+  const scale = numberValue(raw, 1)
+  rigCatalog.updateSeriesDefaults(rig.id, series.id, { defaultScale: scale })
+  rigRuntime.syncRigLayers(rig.id)
+}
+
+function updateSeriesRotation(raw: string | number): void {
+  const rig = selectedRig.value
+  const series = selectedSeries.value
+  if (!rig || !series) return
+  const rotation = numberValue(raw, 0)
+  rigCatalog.updateSeriesDefaults(rig.id, series.id, { defaultRotation: rotation })
+  rigRuntime.syncRigLayers(rig.id)
+}
+
+function updateSeriesAnchor(
+  field: 'neckPivot' | 'mouthAnchor' | 'sunglass' | 'hat',
+  axis: 'x' | 'y',
+  raw: string | number
+): void {
+  const series = selectedSeries.value
+  if (!series) return
+  const source =
+    field === 'neckPivot' || field === 'mouthAnchor'
+      ? series[field]
+      : series.propAnchors[field]
+  rigCatalog.updateSeriesAnchor(series.id, field, {
+    ...source,
+    [axis]: numberValue(raw, source[axis])
+  })
+  if (selectedRig.value) {
+    rigRuntime.syncRigLayers(selectedRig.value.id)
+  }
+}
+
+function createSeries(): void {
+  if (!newSeriesId.value.trim()) return
+  rigCatalog.createHeadSeries(
+    newSeriesId.value,
+    newSeriesLabel.value || newSeriesId.value,
+    newSeriesWidth.value,
+    newSeriesHeight.value
+  )
+  newSeriesId.value = ''
+  newSeriesLabel.value = ''
+  toast.success('Série créée', 'La nouvelle série de têtes est prête à être calibrée.')
+}
+
+function setCompatible(series: HeadSeriesProfile, enabled: boolean): void {
+  if (!selectedRig.value) return
+  rigCatalog.setSeriesCompatibility(selectedRig.value.id, series.id, enabled)
+  rigRuntime.syncRigLayers(selectedRig.value.id)
+}
+
+function setDefaultHeadForRig(): void {
+  const rig = selectedRig.value
+  const series = selectedSeries.value
+  const head = activeHeadAsset.value
+  if (!rig || !series || !head) return
+  rigCatalog.updateSeriesDefaults(rig.id, series.id, {
+    defaultHeadAssetKey: rigAssetKey(head)
+  })
+  rigRuntime.syncRigLayers(rig.id)
+  toast.success('Tête par défaut mise à jour', `« ${head.name} » est maintenant utilisée par ${rig.name}.`)
+}
+
+async function handleAutoCalibration(): Promise<void> {
+  const head = activeHeadAsset.value
+  const rig = selectedRig.value
+  const series = selectedSeries.value
+  if (!head || !rig || !series) return
+
+  try {
+    const profile = {
+      canvasWidth: bodyAsset.value?.width ?? DEFAULT_RIG_CANVAS.width,
+      canvasHeight: bodyAsset.value?.height ?? DEFAULT_RIG_CANVAS.height
+    }
+    const suggested = await suggestRigCalibration(head, profile)
+    rigCatalog.updateSeriesDefaults(rig.id, series.id, {
+      defaultScale: suggested.scaleX,
+      defaultRotation: suggested.rotation ?? 0
+    })
+    rigRuntime.syncRigLayers(rig.id)
+    toast.success('Auto-calibration appliquée', 'Les valeurs suggérées ont été enregistrées pour cette série.')
+  } catch {
+    toast.error('Auto-calibration impossible', 'Le calcul automatique de la calibration a échoué.')
+  }
+}
+
+async function updateAccessoryCalibration(
+  field: 'pivotX' | 'pivotY' | 'offsetX' | 'offsetY' | 'scale' | 'rotation',
+  raw: string | number
+): Promise<void> {
+  const series = selectedSeries.value
+  const accessory = selectedAccessory.value
+  const current = accessoryCalibration.value
+  if (!series || !accessory || !current) return
+  const value = numberValue(raw)
+  const next: AnchoredAssetCalibration = {
+    ...current,
+    pivot: { ...current.pivot }
+  }
+  if (field === 'pivotX') next.pivot.x = Math.max(0, Math.min(1, value))
+  else if (field === 'pivotY') next.pivot.y = Math.max(0, Math.min(1, value))
+  else if (field === 'scale') next.scale = Math.max(0.01, value)
+  else next[field] = value
+  await assetStore.updateAsset(accessory.id, {
+    anchoredCalibrationBySeries: {
+      ...accessory.anchoredCalibrationBySeries,
+      [series.id]: next
+    }
+  })
+}
+
+function copyConfigurationFromRig(): void {
+  const targetRig = selectedRig.value
+  const sourceRig = rigCatalog.rigById(selectedSourceRigId.value)
+  if (!targetRig || !sourceRig) return
+
+  for (const config of sourceRig.headSeries) {
+    rigCatalog.setSeriesCompatibility(targetRig.id, config.seriesId, config.enabled)
+    rigCatalog.updateSeriesDefaults(targetRig.id, config.seriesId, {
+      defaultScale: config.defaultScale,
+      defaultRotation: config.defaultRotation,
+      defaultHeadAssetKey: config.defaultHeadAssetKey
+    })
+  }
+  rigRuntime.syncRigLayers(targetRig.id)
+  isCopyModalOpen.value = false
+  toast.success('Configuration copiée', `Les réglages de ${sourceRig.name} ont été appliqués à ${targetRig.name}.`)
+}
+
+function exportCatalog(): void {
+  const data = rigCatalog.exportCatalog()
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `rig-catalog-${Date.now()}.json`
+  anchor.click()
+  URL.revokeObjectURL(url)
+  toast.success('Catalogue exporté', 'Le fichier JSON a été téléchargé.')
+}
+
+function chooseCatalogFile(): void {
+  catalogInputRef.value?.click()
+}
+
+async function importCatalogFile(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  try {
+    const imported = rigCatalog.importCatalog(await file.text(), assetStore.assets)
+    const firstRig = imported.rigs[0]
+    if (firstRig) rigCatalog.openCalibration(firstRig.id)
+    if (imported.headSeries[0]) rigCatalog.selectedHeadSeriesId = imported.headSeries[0].id
+    toast.success('Catalogue importé', 'Les rigs et séries compatibles ont été chargés.')
+  } catch (error) {
+    toast.error(
+      'Catalogue refusé',
+      error instanceof Error ? error.message : 'Le fichier de catalogue est invalide.'
+    )
+  }
+}
+
+function finishCalibration(): void {
+  const rig = selectedRig.value
+  if (!rig) {
+    rigCatalog.closeCalibration()
+    return
+  }
+  if (!rig.headSeries.some((series) => series.enabled)) {
+    toast.warning('Série requise', 'Activez au moins une série de têtes compatible avant de terminer.')
+    return
+  }
+  rigCatalog.updateRigGeometry(rig.id, { calibrated: true })
+  rigCatalog.closeCalibration()
+}
 </script>
 
 <template>
-  <RigCalibrationPanel
-    :character-name="characterName"
-    :canvas-label="`${selectedRig?.canvasWidth ?? DEFAULT_RIG_CANVAS.width} × ${selectedRig?.canvasHeight ?? DEFAULT_RIG_CANVAS.height}`"
-    :rigs="rigOptions"
-    :selected-rig-id="selectedRig?.id"
-    :body-origin="selectedRig?.bodyOrigin"
-    :is-editing-origin="isEditingOrigin"
-    :categories="categoriesConfig"
-    :active-category="activeCalibrationCategory"
-    :busy="busy"
-    :can-duplicate="canDuplicate"
-    @select-rig="selectRig"
-    @set-default-rig="setDefaultRig"
-    @edit-origin="toggleOriginEditing"
-    @reset-origin="resetBodyOrigin"
-    @toggle-category-enabled="toggleCategoryEnabled"
-    @select-part="selectPart"
-    @toggle-compatible="toggleCompatibility"
-    @set-default-part="setDefaultPart"
-    @update:value="updateValue"
-    @set-common-position="setCommonPosition"
-    @set-specific-position="setSpecificPosition"
-    @save-part="savePart"
-    @reset-part="resetPart"
-    @apply-all="applyToAllParts"
-    @auto="autoCalibrate"
-    @open-duplicate="isDuplicateModalOpen = true"
-    @export="exportCatalog"
-    @import="importCatalog"
-    @close="close"
-  />
+  <aside
+    v-if="rigCatalog.isCalibrationOpen"
+    class="flex h-full min-h-0 flex-col overflow-hidden border-l border-border-default bg-bg-surface select-none"
+    aria-label="Calibrage du rig et des séries"
+  >
+    <!-- Inspector Header matching mockup -->
+    <header class="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3 bg-bg-elevated/80 backdrop-blur-md">
+      <div class="flex items-center gap-2.5">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20 text-primary border border-primary/30">
+          <Icon name="person" size="sm" />
+        </div>
+        <div>
+          <Heading as="h2" variant="sm" class="font-bold tracking-tight">
+            {{ selectedRig?.name ? `Rig ${selectedRig.name}` : 'Rig Calibration' }}
+          </Heading>
+          <Text variant="caption" color="muted" class="text-[11px]">
+            Assemblage & Calibration Multi-Catégories · {{ bodyAsset?.width ?? 840 }} × {{ bodyAsset?.height ?? 908 }}
+          </Text>
+        </div>
+      </div>
+      <Button
+        size="xs"
+        variant="ghost"
+        class="h-7 w-7 p-0 text-text-muted hover:text-text-primary"
+        title="Fermer la calibration"
+        @click="rigCatalog.closeCalibration()"
+      >
+        ✕
+      </Button>
+    </header>
 
-  <DuplicateRigModal
-    v-model:open="isDuplicateModalOpen"
-    :current-rig-name="selectedRig?.name ?? ''"
-    :available-rigs="duplicateRigs"
-    @duplicate="handleDuplicate"
-  />
+    <!-- Scrollable Inspector Content -->
+    <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">
+      <!-- 1. CORPS & ORIGINE ACCORDION SECTION -->
+      <section class="rounded-xl border border-border-default bg-bg-elevated/90 overflow-hidden shadow-xs">
+        <Button
+          variant="ghost"
+          class="flex w-full items-center justify-between px-3.5 py-2.5 text-left transition-colors hover:bg-white/5"
+          @click="isBodySectionOpen = !isBodySectionOpen"
+        >
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-text-secondary">
+              1. Corps & Origine
+            </span>
+            <Badge v-if="selectedRig?.calibrated" variant="success" size="sm">Calibré</Badge>
+          </div>
+          <Icon
+            name="chevron-down"
+            size="xs"
+            class="text-text-muted transition-transform duration-200"
+            :class="{ '-rotate-180': isBodySectionOpen }"
+          />
+        </Button>
+
+        <div v-show="isBodySectionOpen" class="space-y-3 p-3.5 pt-1 border-t border-border-subtle/50">
+          <FormGroup label="Rig sélectionné" :label-for="rigSelectId">
+            <Select
+              :id="rigSelectId"
+              v-model="rigCatalog.selectedRigId"
+              :options="rigOptions"
+              size="sm"
+            />
+          </FormGroup>
+
+          <template v-if="selectedRig">
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between text-xs">
+                <Text variant="caption" weight="semibold">Point de cou (Origine)</Text>
+                <span class="text-[10px] text-text-muted">Draggable sur le corps</span>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <Input
+                  type="number"
+                  :model-value="String(Math.round(selectedRig.neckAnchor.x))"
+                  aria-label="Point de cou X"
+                  @update:model-value="rigCatalog.updateRigGeometry(selectedRig.id, { neckAnchor: { ...selectedRig.neckAnchor, x: Math.round(numberValue($event)) } })"
+                >
+                  <template #prefix><span class="text-xs text-text-muted font-mono">X</span></template>
+                </Input>
+                <Input
+                  type="number"
+                  :model-value="String(Math.round(selectedRig.neckAnchor.y))"
+                  aria-label="Point de cou Y"
+                  @update:model-value="rigCatalog.updateRigGeometry(selectedRig.id, { neckAnchor: { ...selectedRig.neckAnchor, y: Math.round(numberValue($event)) } })"
+                >
+                  <template #prefix><span class="text-xs text-text-muted font-mono">Y</span></template>
+                </Input>
+              </div>
+            </div>
+
+            <FormGroup label="Rayon de mouvement libre">
+              <Input
+                type="number"
+                min="0"
+                :model-value="String(selectedRig.headMotionRadius)"
+                @update:model-value="rigCatalog.updateRigGeometry(selectedRig.id, { headMotionRadius: numberValue($event) })"
+              >
+                <template #suffix><span class="text-xs text-text-muted">px</span></template>
+              </Input>
+            </FormGroup>
+
+            <div class="flex items-center justify-between pt-1">
+              <Switch
+                :model-value="selectedRig.calibrated"
+                label="Rig prêt pour le studio"
+                size="sm"
+                @update:model-value="rigCatalog.updateRigGeometry(selectedRig.id, { calibrated: Boolean($event) })"
+              />
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <!-- 2. SOUS-PIÈCES DU PERSONNAGE ACCORDION SECTION -->
+      <section class="rounded-xl border border-border-default bg-bg-elevated/90 overflow-hidden shadow-xs">
+        <Button
+          variant="ghost"
+          class="flex w-full items-center justify-between px-3.5 py-2.5 text-left transition-colors hover:bg-white/5"
+          @click="isPartsSectionOpen = !isPartsSectionOpen"
+        >
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-text-secondary">
+              2. Sous-pièces du personnage
+            </span>
+            <Badge variant="neutral" size="sm">
+              {{ selectedRig?.headSeries.filter((s) => s.enabled).length ?? 0 }}/{{ rigCatalog.headSeries.length }} actives
+            </Badge>
+          </div>
+          <Icon
+            name="chevron-down"
+            size="xs"
+            class="text-text-muted transition-transform duration-200"
+            :class="{ '-rotate-180': isPartsSectionOpen }"
+          />
+        </Button>
+
+        <div v-show="isPartsSectionOpen" class="space-y-3 p-3.5 pt-1 border-t border-border-subtle/50">
+          <!-- SUB-CARD: TÊTES & VISAGES (Exact match with design capture) -->
+          <div class="rounded-xl border border-border-default bg-bg-surface/80 p-3.5 space-y-3.5 shadow-sm">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="flex h-6 w-6 items-center justify-center rounded-full bg-rose-500/20 text-rose-400">
+                  <Icon name="sentiment_satisfied" size="xs" />
+                </div>
+                <span class="text-xs font-bold text-text-primary">Têtes & Visages</span>
+              </div>
+              <Switch
+                v-if="selectedSeries"
+                :model-value="Boolean(selectedRigSeriesConfig?.enabled)"
+                size="sm"
+                @update:model-value="setCompatible(selectedSeries, Boolean($event))"
+              />
+            </div>
+
+            <!-- Series Selection -->
+            <FormGroup label="Série active" :label-for="seriesSelectId">
+              <Select
+                :id="seriesSelectId"
+                v-model="rigCatalog.selectedHeadSeriesId"
+                :options="seriesOptions"
+                size="sm"
+              />
+            </FormGroup>
+
+            <!-- Head Sprite Selector -->
+            <FormGroup label="Sprite sélectionné">
+              <Select
+                v-model="selectedHeadId"
+                :options="headOptions"
+                size="sm"
+                placeholder="Sélectionnez une tête"
+              />
+            </FormGroup>
+
+            <!-- Compatibility & Default Actions -->
+            <div class="flex items-center justify-between gap-2 pt-1 border-t border-border-subtle/40">
+              <div class="flex items-center gap-2">
+                <Switch
+                  v-if="selectedSeries"
+                  :model-value="Boolean(selectedRigSeriesConfig?.enabled)"
+                  label="Compatible"
+                  size="sm"
+                  @update:model-value="setCompatible(selectedSeries, Boolean($event))"
+                />
+              </div>
+              <Button
+                size="xs"
+                variant="secondary"
+                class="text-xs h-7 gap-1"
+                @click="setDefaultHeadForRig"
+              >
+                <Icon name="bookmark" size="xs" />
+                Définir par défaut
+              </Button>
+            </div>
+
+            <!-- POSITION RELATIVE BLOCK -->
+            <div class="rounded-lg border border-border-subtle bg-bg-elevated/70 p-3 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-text-secondary">
+                  Position Relative
+                </span>
+                <Badge variant="warning" size="sm" class="font-bold">
+                  POSITION SPÉCIFIQUE
+                </Badge>
+              </div>
+
+              <div class="flex items-center justify-between text-[11px] text-text-muted">
+                <span>Configuration : <strong class="text-text-primary">{{ activeHeadAsset?.name ?? 'Tête' }}</strong></span>
+                <Badge variant="info" size="sm">Personnalisé</Badge>
+              </div>
+
+              <!-- Numeric Inputs Grid -->
+              <div class="grid grid-cols-2 gap-2">
+                <FormGroup label="Décalage X (px)" class="space-y-1">
+                  <Input
+                    type="number"
+                    :model-value="String(currentHeadOffsetX)"
+                    @update:model-value="updateHeadOffsetX($event)"
+                  />
+                </FormGroup>
+                <FormGroup label="Décalage Y (px)" class="space-y-1">
+                  <Input
+                    type="number"
+                    :model-value="String(currentHeadOffsetY)"
+                    @update:model-value="updateHeadOffsetY($event)"
+                  />
+                </FormGroup>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2">
+                <FormGroup label="Échelle" class="space-y-1">
+                  <Input
+                    type="number"
+                    min="0.05"
+                    step="0.01"
+                    :model-value="String(selectedRigSeriesConfig?.defaultScale ?? 1)"
+                    @update:model-value="updateSeriesScale($event)"
+                  />
+                </FormGroup>
+                <FormGroup label="Rotation (°)" class="space-y-1">
+                  <Input
+                    type="number"
+                    step="1"
+                    :model-value="String(selectedRigSeriesConfig?.defaultRotation ?? 0)"
+                    @update:model-value="updateSeriesRotation($event)"
+                  />
+                </FormGroup>
+              </div>
+
+              <FormGroup label="Profondeur (Z-index)" class="space-y-1">
+                <Input
+                  type="number"
+                  :model-value="String(20)"
+                  disabled
+                />
+              </FormGroup>
+
+              <!-- Action Buttons -->
+              <div class="space-y-2 pt-1">
+                <Button
+                  size="sm"
+                  class="w-full bg-white text-black font-semibold hover:bg-white/90 shadow-md"
+                  @click="toast.success('Configuration sauvegardée', 'Les réglages courants ont été enregistrés.')"
+                >
+                  <Icon name="save" size="xs" class="mr-1.5" />
+                  Sauvegarder {{ activeHeadAsset?.name ?? 'la tête' }}
+                </Button>
+
+                <div class="grid grid-cols-2 gap-2">
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    class="w-full text-xs h-8 gap-1"
+                    @click="toast.info('Paramètres partagés', 'Toutes les têtes utilisent les paramètres de leur série.')"
+                  >
+                    <Icon name="check" size="xs" />
+                    Appliquer à toutes
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    class="w-full text-xs h-8 gap-1 bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
+                    @click="handleAutoCalibration"
+                  >
+                    <Icon name="auto_awesome" size="xs" />
+                    Auto
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SUB-CARD: POINTS D'ANCRAGE DE LA SÉRIE -->
+          <div class="rounded-xl border border-border-default bg-bg-surface/80 p-3.5 space-y-3 shadow-sm">
+            <Button
+              variant="ghost"
+              class="flex w-full items-center justify-between text-left"
+              @click="isAnchorsCardOpen = !isAnchorsCardOpen"
+            >
+              <div class="flex items-center gap-2">
+                <div class="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-400">
+                  <Icon name="adjust" size="xs" />
+                </div>
+                <span class="text-xs font-bold text-text-primary">
+                  Ancrages Série ({{ selectedSeries?.label }})
+                </span>
+              </div>
+              <Icon
+                name="chevron-down"
+                size="xs"
+                class="text-text-muted transition-transform duration-200"
+                :class="{ '-rotate-180': isAnchorsCardOpen }"
+              />
+            </Button>
+
+            <div v-show="isAnchorsCardOpen" class="space-y-3 pt-2 border-t border-border-subtle/40">
+              <template v-if="selectedSeries">
+                <!-- Dimensions -->
+                <div class="grid grid-cols-2 gap-2">
+                  <FormGroup label="Largeur (px)">
+                    <Input
+                      type="number"
+                      min="1"
+                      :model-value="String(selectedSeries.width)"
+                      @update:model-value="rigCatalog.updateHeadSeries(selectedSeries.id, { width: Math.max(1, numberValue($event, selectedSeries.width)) })"
+                    />
+                  </FormGroup>
+                  <FormGroup label="Hauteur (px)">
+                    <Input
+                      type="number"
+                      min="1"
+                      :model-value="String(selectedSeries.height)"
+                      @update:model-value="rigCatalog.updateHeadSeries(selectedSeries.id, { height: Math.max(1, numberValue($event, selectedSeries.height)) })"
+                    />
+                  </FormGroup>
+                </div>
+
+                <!-- Anchors List -->
+                <div
+                  v-for="anchor in [
+                    { id: 'neckPivot', label: 'Pivot du cou', point: selectedSeries.neckPivot, color: 'text-cyan-400' },
+                    { id: 'mouthAnchor', label: 'Ancrage bouche', point: selectedSeries.mouthAnchor, color: 'text-emerald-400' },
+                    { id: 'sunglass', label: 'Ancrage lunettes', point: selectedSeries.propAnchors.sunglass, color: 'text-amber-400' },
+                    { id: 'hat', label: 'Ancrage chapeau', point: selectedSeries.propAnchors.hat, color: 'text-purple-400' }
+                  ]"
+                  :key="anchor.id"
+                  class="space-y-1 rounded-md border border-border-subtle/50 bg-bg-elevated/40 p-2"
+                >
+                  <div class="flex items-center justify-between text-xs">
+                    <span :class="anchor.color" class="font-semibold">{{ anchor.label }}</span>
+                    <span class="text-[10px] text-text-muted font-mono">0..1 normalisé</span>
+                  </div>
+                  <div class="grid grid-cols-2 gap-2">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      :model-value="String(anchor.point.x)"
+                      :aria-label="`${anchor.label} X`"
+                      @update:model-value="updateSeriesAnchor(anchor.id as 'neckPivot' | 'mouthAnchor' | 'sunglass' | 'hat', 'x', $event)"
+                    >
+                      <template #prefix><span class="text-xs text-text-muted">X</span></template>
+                    </Input>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      :model-value="String(anchor.point.y)"
+                      :aria-label="`${anchor.label} Y`"
+                      @update:model-value="updateSeriesAnchor(anchor.id as 'neckPivot' | 'mouthAnchor' | 'sunglass' | 'hat', 'y', $event)"
+                    >
+                      <template #prefix><span class="text-xs text-text-muted">Y</span></template>
+                    </Input>
+                  </div>
+                </div>
+
+                <!-- Default Mouth -->
+                <FormGroup label="Bouche par défaut de la série">
+                  <Select
+                    v-model="selectedDefaultMouthId"
+                    :options="mouthOptions"
+                    size="sm"
+                  />
+                </FormGroup>
+
+                <!-- Create Series Form -->
+                <details class="rounded-lg border border-border-subtle p-2.5">
+                  <summary class="cursor-pointer text-xs font-semibold text-text-secondary hover:text-text-primary">
+                    + Créer une nouvelle série
+                  </summary>
+                  <div class="mt-3 grid grid-cols-2 gap-2">
+                    <Input v-model="newSeriesId" placeholder="Identifiant" aria-label="Identifiant de série" />
+                    <Input v-model="newSeriesLabel" placeholder="Libellé" aria-label="Libellé de série" />
+                    <Input v-model="newSeriesWidth" type="number" min="1" aria-label="Largeur" />
+                    <Input v-model="newSeriesHeight" type="number" min="1" aria-label="Hauteur" />
+                  </div>
+                  <Button class="mt-2.5 w-full" size="sm" :disabled="!newSeriesId.trim()" @click="createSeries">
+                    Ajouter la série
+                  </Button>
+                </details>
+              </template>
+            </div>
+          </div>
+
+          <!-- SUB-CARD: ACCESSOIRES DE PERSONNAGE -->
+          <div class="rounded-xl border border-border-default bg-bg-surface/80 p-3.5 space-y-3 shadow-sm">
+            <Button
+              variant="ghost"
+              class="flex w-full items-center justify-between text-left"
+              @click="isAccessoriesCardOpen = !isAccessoriesCardOpen"
+            >
+              <div class="flex items-center gap-2">
+                <div class="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500/20 text-amber-400">
+                  <Icon name="inventory_2" size="xs" />
+                </div>
+                <span class="text-xs font-bold text-text-primary">Accessoires de Personnage</span>
+              </div>
+              <Icon
+                name="chevron-down"
+                size="xs"
+                class="text-text-muted transition-transform duration-200"
+                :class="{ '-rotate-180': isAccessoriesCardOpen }"
+              />
+            </Button>
+
+            <div v-show="isAccessoriesCardOpen" class="space-y-3 pt-2 border-t border-border-subtle/40">
+              <div class="grid grid-cols-2 gap-2">
+                <FormGroup label="Catégorie d'accessoire">
+                  <Select v-model="selectedPropSlot" :options="propSlotOptions" size="sm" />
+                </FormGroup>
+                <FormGroup label="Asset sélectionné">
+                  <Select
+                    v-model="selectedAccessoryId"
+                    :options="accessoryOptions"
+                    size="sm"
+                    placeholder="Aucun asset"
+                  />
+                </FormGroup>
+              </div>
+
+              <div v-if="accessoryCalibration" class="space-y-2 rounded-lg border border-border-subtle bg-bg-elevated/60 p-2.5">
+                <span class="text-[11px] font-semibold text-text-secondary">Calibrage sur la série</span>
+                <div class="grid grid-cols-2 gap-2">
+                  <Input type="number" step="0.01" :model-value="String(accessoryCalibration.pivot.x)" @update:model-value="updateAccessoryCalibration('pivotX', $event)">
+                    <template #prefix><span class="text-[10px] text-text-muted">Pivot X</span></template>
+                  </Input>
+                  <Input type="number" step="0.01" :model-value="String(accessoryCalibration.pivot.y)" @update:model-value="updateAccessoryCalibration('pivotY', $event)">
+                    <template #prefix><span class="text-[10px] text-text-muted">Pivot Y</span></template>
+                  </Input>
+                  <Input type="number" step="1" :model-value="String(accessoryCalibration.offsetX)" @update:model-value="updateAccessoryCalibration('offsetX', $event)">
+                    <template #prefix><span class="text-[10px] text-text-muted">Offset X</span></template>
+                  </Input>
+                  <Input type="number" step="1" :model-value="String(accessoryCalibration.offsetY)" @update:model-value="updateAccessoryCalibration('offsetY', $event)">
+                    <template #prefix><span class="text-[10px] text-text-muted">Offset Y</span></template>
+                  </Input>
+                  <Input type="number" min="0.01" step="0.01" :model-value="String(accessoryCalibration.scale)" @update:model-value="updateAccessoryCalibration('scale', $event)">
+                    <template #prefix><span class="text-[10px] text-text-muted">Échelle</span></template>
+                  </Input>
+                  <Input type="number" step="1" :model-value="String(accessoryCalibration.rotation)" @update:model-value="updateAccessoryCalibration('rotation', $event)">
+                    <template #prefix><span class="text-[10px] text-text-muted">Rot (°)</span></template>
+                  </Input>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Inspector Bottom Actions Footer matching mockup -->
+    <footer class="border-t border-border-default p-3 bg-bg-elevated/90 space-y-2.5 shadow-lg">
+      <!-- Copy Config Action -->
+      <Button
+        size="xs"
+        variant="ghost"
+        class="w-full justify-center text-xs h-8 border border-white/10 hover:bg-white/5"
+        @click="isCopyModalOpen = !isCopyModalOpen"
+      >
+        <Icon name="content_copy" size="xs" class="mr-1.5" />
+        Copier la configuration depuis un rig...
+      </Button>
+
+      <!-- Inline Copy Popover if open -->
+      <div v-if="isCopyModalOpen" class="rounded-lg border border-border-default bg-bg-surface p-2.5 space-y-2">
+        <Text variant="caption" weight="semibold">Sélectionnez le rig source :</Text>
+        <Select
+          v-model="selectedSourceRigId"
+          :options="rigOptions.filter((r) => r.value !== selectedRig?.id)"
+          size="sm"
+          placeholder="Choisir un rig source"
+        />
+        <div class="flex gap-2">
+          <Button size="xs" variant="ghost" class="flex-1" @click="isCopyModalOpen = false">Annuler</Button>
+          <Button size="xs" variant="primary" class="flex-1" :disabled="!selectedSourceRigId" @click="copyConfigurationFromRig">
+            Copier
+          </Button>
+        </div>
+      </div>
+
+      <!-- Final Actions (Export/Import + Terminer) -->
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex gap-1.5">
+          <!-- eslint-disable-next-line vue/no-restricted-html-elements -- sélecteur de catalogue natif caché -->
+          <input
+            ref="catalogInputRef"
+            class="sr-only"
+            type="file"
+            accept="application/json,.json"
+            @change="importCatalogFile"
+          />
+          <Button
+            size="xs"
+            variant="secondary"
+            class="h-8 px-2.5 text-xs"
+            title="Exporter le catalogue JSON"
+            @click="exportCatalog"
+          >
+            <Icon name="download" size="xs" />
+          </Button>
+          <Button
+            size="xs"
+            variant="secondary"
+            class="h-8 px-2.5 text-xs"
+            title="Importer un catalogue JSON v7"
+            @click="chooseCatalogFile"
+          >
+            <Icon name="upload" size="xs" />
+          </Button>
+        </div>
+
+        <Button
+          size="sm"
+          variant="primary"
+          class="flex-1 h-8 font-semibold bg-white text-black hover:bg-white/90 shadow-md gap-1.5"
+          @click="finishCalibration"
+        >
+          <Icon name="check" size="xs" />
+          Terminer
+        </Button>
+      </div>
+    </footer>
+  </aside>
 </template>

@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { useAssetStore } from '../stores/useAssetStore'
+import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import AssetCategoryDrawer from './AssetCategoryDrawer.vue'
 import AssetCard from './AssetCard.vue'
 
@@ -95,5 +96,25 @@ describe('AssetCategoryDrawer', () => {
 
     expect(wrapper.findAll('.asset-card-skeleton')).toHaveLength(0)
     expect(wrapper.text()).toContain('Aucun sprite dans cette catégorie')
+  })
+
+  it('ouvre la calibration avant la première utilisation d’un nouveau corps', async () => {
+    const assetStore = useAssetStore()
+    const rigCatalog = useRigCatalogStore()
+    const body = mockAsset('body-1', 'Corps Berlu', 'body')
+    assetStore.assets = [body]
+    rigCatalog.initialize(assetStore.assets)
+
+    const wrapper = mount(AssetCategoryDrawer, {
+      props: {
+        open: true,
+        selection: { type: 'character', characterKey: 'berlu', categoryId: 'body' }
+      }
+    })
+    wrapper.getComponent(AssetCard).vm.$emit('select', body)
+    await wrapper.vm.$nextTick()
+
+    expect(rigCatalog.isCalibrationOpen).toBe(true)
+    expect(rigCatalog.selectedRigId).toBe(rigCatalog.rigs[0]?.id)
   })
 })

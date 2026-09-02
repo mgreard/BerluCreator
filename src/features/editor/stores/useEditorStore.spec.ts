@@ -33,7 +33,7 @@ function characterAsset(id: string, name: string, key: string, category: Asset['
     character: {
       key,
       name: key === 'berlu' ? 'Berlu' : 'Pedro',
-      form: category === 'character_full' ? 'full' : 'rig'
+      form: category === 'perso' ? 'full' : 'rig'
     },
     isMovable: false,
     createdAt: 1,
@@ -60,11 +60,11 @@ describe('useEditorStore', () => {
     const store = useEditorStore()
     const assets = useAssetStore()
     assets.assets = [
-      characterAsset('full', 'Berlu complet', 'berlu', 'character_full'),
+      characterAsset('full', 'Berlu complet', 'berlu', 'perso'),
       characterAsset('head', 'Tête Berlu', 'berlu', 'head')
     ]
 
-    const full = store.assignAssetToGroup('full', 'character_full')
+    const full = store.assignAssetToGroup('full', 'perso')
     const head = store.assignAssetToGroup('head', 'head')
     const berlu = store.currentDocument.groups.find(
       (group): group is CharacterGroup => group.id === full.groupId && group.kind === 'character'
@@ -95,41 +95,43 @@ describe('useEditorStore', () => {
     )
   })
 
-  it('crée des occurrences indépendantes pour un même accessoire libre', () => {
+  it('conserve un seul accessoire actif par slot attaché au personnage', () => {
     const store = useEditorStore()
     const assets = useAssetStore()
-    const glasses = characterAsset('glasses', 'Lunettes', 'berlu', 'eyes')
-    glasses.isMovable = true
+    const glasses = characterAsset('glasses', 'Lunettes', 'berlu', 'props_character')
+    glasses.characterPropSlot = 'sunglass'
     assets.assets = [glasses]
 
     const first = store.assignAssetToGroup(glasses.id, glasses.category)
     const second = store.assignAssetToGroup(glasses.id, glasses.category)
     const group = store.currentDocument.groups.find((candidate) => candidate.id === first.groupId)
 
-    expect(first.id).not.toBe(second.id)
+    expect(first.id).toBe(second.id)
     expect(first.groupId).toBe(second.groupId)
-    expect(group).toMatchObject({ kind: 'stage', id: 'grp_accessories' })
-    expect(store.currentDocument.layers.filter((layer) => layer.assetId === glasses.id)).toHaveLength(2)
-    expect(store.selectedLayerId).toBe(second.id)
+    expect(group).toMatchObject({ kind: 'character' })
+    expect(store.currentDocument.layers.filter((layer) => layer.assetId === glasses.id)).toHaveLength(1)
+    expect(store.selectedGroupId).toBe(group?.id)
   })
 
-  it('détache les anciens accessoires du groupe personnage au chargement', async () => {
+  it('préserve les accessoires de personnage attachés au chargement', async () => {
     const store = useEditorStore()
     const assets = useAssetStore()
-    const glasses = characterAsset('legacy-glasses', 'Anciennes lunettes', 'berlu', 'eyes')
+    const glasses = characterAsset('legacy-glasses', 'Anciennes lunettes', 'berlu', 'props_character')
+    glasses.characterPropSlot = 'sunglass'
     glasses.width = 200
     glasses.height = 80
     assets.assets = [glasses]
 
     const legacyDocument = JSON.parse(JSON.stringify(store.currentDocument))
     const characterGroup = legacyDocument.groups.find((group: CharacterGroup) => group.kind === 'character')
-    characterGroup.allowedCategories.push('eyes')
+    characterGroup.allowedCategories.push('props_character')
     characterGroup.transform = { x: 30, y: -10, scaleX: 1.2, scaleY: 1.2, rotation: 20, opacity: 1 }
     legacyDocument.layers.push({
       id: 'legacy-layer',
       assetId: glasses.id,
       name: glasses.name,
-      category: 'eyes',
+      category: 'props_character',
+      characterPropSlot: 'sunglass',
       groupId: characterGroup.id,
       zIndex: 26,
       order: 0,
@@ -146,11 +148,9 @@ describe('useEditorStore', () => {
     const migratedCharacter = store.currentDocument.groups.find(
       (group): group is CharacterGroup => group.id === characterGroup.id && group.kind === 'character'
     )
-    expect(migrated).toMatchObject({ groupId: 'grp_accessories', depthRole: 'subject' })
-    expect(migrated?.transform.rotation).toBe(25)
-    expect(migrated?.transform.scaleX).toBeGreaterThan(0)
-    expect(migratedCharacter?.allowedCategories).not.toContain('eyes')
-    expect(editorDocumentRepository.save).toHaveBeenCalled()
+    expect(migrated).toMatchObject({ groupId: characterGroup.id, characterPropSlot: 'sunglass' })
+    expect(migrated?.transform.rotation).toBe(5)
+    expect(migratedCharacter?.allowedCategories).toContain('props_character')
   })
 
   it('réserve la sélection de groupe aux personnages et garde les props atomiques', () => {
@@ -345,10 +345,10 @@ describe('useEditorStore', () => {
     const store = useEditorStore()
     const assets = useAssetStore()
     assets.assets = [
-      characterAsset('full', 'Berlu complet', 'berlu', 'character_full'),
+      characterAsset('full', 'Berlu complet', 'berlu', 'perso'),
       characterAsset('head', 'Tête Berlu', 'berlu', 'head')
     ]
-    const full = store.assignAssetToGroup('full', 'character_full')
+    const full = store.assignAssetToGroup('full', 'perso')
     store.assignAssetToGroup('head', 'head')
     const group = store.currentDocument.groups.find(
       (candidate): candidate is CharacterGroup =>
@@ -423,11 +423,11 @@ describe('useEditorStore', () => {
     const store = useEditorStore()
     const assets = useAssetStore()
     assets.assets = [
-      characterAsset('full', 'Berlu complet', 'berlu', 'character_full'),
+      characterAsset('full', 'Berlu complet', 'berlu', 'perso'),
       characterAsset('head', 'Tête Berlu', 'berlu', 'head')
     ]
 
-    const full = store.toggleAssetInViewport('full', 'character_full')!
+    const full = store.toggleAssetInViewport('full', 'perso')!
     store.toggleAssetInViewport('head', 'head')
     const group = store.currentDocument.groups.find(
       (candidate): candidate is CharacterGroup =>
@@ -436,11 +436,11 @@ describe('useEditorStore', () => {
     expect(group.activeMode).toBe('rig')
     expect(store.currentDocument.layers).toHaveLength(2)
 
-    expect(store.toggleAssetInViewport('full', 'character_full')?.id).toBe(full.id)
+    expect(store.toggleAssetInViewport('full', 'perso')?.id).toBe(full.id)
     expect(group.activeMode).toBe('full')
     expect(store.currentDocument.layers).toHaveLength(2)
 
-    expect(store.toggleAssetInViewport('full', 'character_full')).toBeNull()
+    expect(store.toggleAssetInViewport('full', 'perso')).toBeNull()
     expect(store.currentDocument.layers.map((layer) => layer.assetId)).toEqual(['head'])
   })
 
@@ -459,11 +459,11 @@ describe('useEditorStore', () => {
     const store = useEditorStore()
     const assets = useAssetStore()
     assets.assets = [
-      characterAsset('full', 'Berlu complet', 'berlu', 'character_full'),
+      characterAsset('full', 'Berlu complet', 'berlu', 'perso'),
       characterAsset('body', 'Corps Berlu', 'berlu', 'body'),
       characterAsset('head', 'Tête Berlu', 'berlu', 'head')
     ]
-    const full = store.assignAssetToGroup('full', 'character_full')
+    const full = store.assignAssetToGroup('full', 'perso')
     store.assignAssetToGroup('body', 'body')
     store.assignAssetToGroup('head', 'head')
 

@@ -1,4 +1,4 @@
-import { db } from '../dexie'
+﻿import { db } from '../dexie'
 import type { Asset, AssetBlobRecord, AssetCategory } from '@core/types/asset.types'
 import type { CharacterGroup, EditorDocument } from '@core/types/editor.types'
 
@@ -146,10 +146,10 @@ function reconcileCharacterModes(document: EditorDocument, groupIds: Set<string>
     )
     if (!group || group.activeMode !== 'full') continue
     const hasFull = document.layers.some(
-      (layer) => layer.groupId === group.id && layer.category === 'character_full'
+      (layer) => layer.groupId === group.id && layer.category === 'perso'
     )
     const hasRig = document.layers.some(
-      (layer) => layer.groupId === group.id && layer.category !== 'character_full'
+      (layer) => layer.groupId === group.id && layer.category !== 'perso'
     )
     if (!hasFull && hasRig) group.activeMode = 'rig'
   }

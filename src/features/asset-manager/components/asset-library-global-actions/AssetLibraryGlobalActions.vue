@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { AssetCategory } from '@core/types/asset.types'
 import type { CharacterGroup } from '@core/types/editor.types'
@@ -27,7 +27,7 @@ const uploadInitialCategory = computed<AssetCategory | null>(() => {
   if (selection.type === 'stage') return selection.category
   if (selection.type !== 'character') return null
   const definition = CHARACTER_CATEGORIES.find((entry) => entry.id === selection.categoryId)
-  return definition?.category ?? 'character_full'
+  return definition?.category ?? 'perso'
 })
 
 const uploadInitialCharacterKey = computed<string | null>(() =>
@@ -67,7 +67,7 @@ function toggleRigCalibration(): void {
       (layer) => layer.groupId === group.id && !layer.muted && layer.category === 'body'
     ) ??
     editorStore.currentDocument.layers.find(
-      (layer) => layer.groupId === group.id && !layer.muted && layer.category !== 'character_full'
+      (layer) => layer.groupId === group.id && !layer.muted && layer.category !== 'perso'
     )
   if (!preferredLayer || group.activeMode !== 'rig') {
     preferredLayer = rigRuntime.activateRig(rig) ?? undefined

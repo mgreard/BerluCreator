@@ -5,14 +5,7 @@ import type { RigDefinition } from '@/features/studio/rig-calibration/rig-catalo
 import { useAssetStore } from '../stores/useAssetStore'
 import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import { useRigRuntime } from '@/features/studio/rig-calibration/useRigRuntime'
-import {
-  effectiveCalibration,
-  findAssetByRigIdentity,
-  identityCalibration,
-  partCalibrationToAbsolute,
-  rigAssetIdentity,
-  rigAssetKey
-} from '@/features/studio/rig-calibration/rig-catalog.service'
+import { findAssetByRigIdentity } from '@/features/studio/rig-calibration/rig-catalog.service'
 import type { CharacterRigLayerPreset } from '@/features/editor/stores/useEditorStore'
 import {
   fetchAndLoadImage,
@@ -20,6 +13,7 @@ import {
   globalImageCache
 } from '@/features/studio/composables/useCanvasRenderer'
 import type { RenderableLayer } from '@/features/studio/composables/useHierarchyResolver'
+import { findOpaqueBounds } from '../services/transparent-image-trimmer'
 
 export interface BatchExportItem {
   id: string
@@ -39,6 +33,7 @@ export interface BatchExportItem {
 export interface BatchExportOptions {
   format: 'image/png' | 'image/webp'
   scale: number
+  trimAlpha?: boolean
 }
 
 export interface ExportProgress {
@@ -91,24 +86,19 @@ export function useBatchExporter() {
 
     // 2. Rigs complets déclinés pour chaque tête compatible (ou rig de base)
     for (const rig of rigCatalog.rigs) {
-      const bodyAsset = rigCatalog.resolvePartAsset({ asset: rig.body }, assetStore.assets)
+      const bodyAsset = findAssetByRigIdentity(rig.body, assetStore.assets)
       const characterName = bodyAsset?.character?.name || rig.characterKey
       const baseRigName = `Rig ${characterName} - ${bodyAsset?.name || 'Corps'}`
 
-      const headCategoryDef = rig.categories.find((c) => c.category === 'head')
-      const isHeadEnabled = headCategoryDef ? headCategoryDef.enabled : true
-
-      // Liste des têtes candidates compatibles avec ce rig
-      const compatibleHeads = isHeadEnabled
-        ? assetStore.assets.filter((asset) => {
-            if (asset.category !== 'head') return false
-            if (asset.character?.key !== rig.characterKey) return false
-            const identity = rigAssetIdentity(asset)
-            const key = rigAssetKey(identity)
-            if (rig.excludedPartKeys?.includes(key)) return false
-            return true
-          })
-        : []
+      const enabledSeries = new Set(
+        rig.headSeries.filter((entry) => entry.enabled).map((entry) => entry.seriesId)
+      )
+      const compatibleHeads = assetStore.assets.filter(
+        (asset) =>
+          asset.category === 'head' &&
+          Boolean(asset.headSeriesId) &&
+          enabledSeries.has(asset.headSeriesId!)
+      )
 
       if (compatibleHeads.length > 0) {
         for (const head of compatibleHeads) {
@@ -148,8 +138,32 @@ export function useBatchExporter() {
   async function renderAssetBlob(asset: Asset, options: BatchExportOptions): Promise<Blob> {
     const img = await fetchAndLoadImage(asset.blobId, globalImageCache)
     const scale = options.scale || 1
-    const width = Math.round(asset.width * scale)
-    const height = Math.round(asset.height * scale)
+
+    let cropX = 0
+    let cropY = 0
+    let cropWidth = asset.width
+    let cropHeight = asset.height
+
+    if (options.trimAlpha) {
+      const tempCanvas = document.createElement('canvas')
+      tempCanvas.width = asset.width
+      tempCanvas.height = asset.height
+      const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true })
+      if (tempCtx) {
+        tempCtx.drawImage(img, 0, 0)
+        const pixels = tempCtx.getImageData(0, 0, asset.width, asset.height).data
+        const bounds = findOpaqueBounds(pixels, asset.width, asset.height)
+        if (bounds) {
+          cropX = bounds.x
+          cropY = bounds.y
+          cropWidth = bounds.width
+          cropHeight = bounds.height
+        }
+      }
+    }
+
+    const width = Math.max(1, Math.round(cropWidth * scale))
+    const height = Math.max(1, Math.round(cropHeight * scale))
 
     const canvas = document.createElement('canvas')
     canvas.width = width
@@ -160,7 +174,7 @@ export function useBatchExporter() {
     ctx.clearRect(0, 0, width, height)
     ctx.imageSmoothingEnabled = true
     ctx.imageSmoothingQuality = 'high'
-    ctx.drawImage(img, 0, 0, width, height)
+    ctx.drawImage(img, cropX, cropY, cropWidth, cropHeight, 0, 0, width, height)
 
     return await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob(
@@ -181,61 +195,12 @@ export function useBatchExporter() {
     headAsset: Asset | undefined,
     options: BatchExportOptions
   ): Promise<Blob> {
-    const presets: CharacterRigLayerPreset[] = []
-
-    // 1. Corps racine
+    const presets: CharacterRigLayerPreset[] = rigRuntime.presetsForRig(rig, headAsset)
     const bodyAsset = findAssetByRigIdentity(rig.body, assetStore.assets)
     if (!bodyAsset) {
       throw new Error(`Corps introuvable pour le rig ${rig.id}`)
     }
 
-    presets.push({
-      assetId: bodyAsset.id,
-      category: bodyAsset.category,
-      name: bodyAsset.name,
-      calibration: { ...rig.bodyCalibration }
-    })
-
-    // 2. Tête spécifique
-    if (headAsset) {
-      const relativeCal =
-        rigCatalog.effectiveCalibrationForAsset(rig, headAsset) ??
-        identityCalibration(headAsset)
-      const absCal = partCalibrationToAbsolute(rig, relativeCal)
-      presets.push({
-        assetId: headAsset.id,
-        category: headAsset.category,
-        name: headAsset.name,
-        calibration: absCal
-      })
-    }
-
-    // 3. Autres catégories configurables actives (ex: yeux, bouche, accessoires...)
-    for (const categoryDef of rig.categories) {
-      if (!categoryDef.enabled || categoryDef.category === 'head') continue
-
-      if (categoryDef.defaultPartKey) {
-        const defaultPart = rig.parts.find(
-          (part) => rigAssetKey(part.asset) === categoryDef.defaultPartKey
-        )
-        if (defaultPart) {
-          const defaultAsset = rigCatalog.resolvePartAsset(defaultPart, assetStore.assets)
-          if (defaultAsset) {
-            const relativeCalibration = effectiveCalibration(rig, defaultPart, defaultAsset)
-            if (relativeCalibration) {
-              presets.push({
-                assetId: defaultAsset.id,
-                category: defaultAsset.category,
-                name: defaultAsset.name,
-                calibration: partCalibrationToAbsolute(rig, relativeCalibration)
-              })
-            }
-          }
-        }
-      }
-    }
-
-    // 4. Charger l'ensemble des images requises pour le rig
     const loadedPresets = await Promise.all(
       presets.map(async (preset) => {
         const asset = assetStore.assets.find((a) => a.id === preset.assetId)
@@ -315,8 +280,18 @@ export function useBatchExporter() {
 
       return {
         id: `rig_layer_${preset.assetId}_${index}`,
+        layerId: `rig_layer_${preset.assetId}_${index}`,
+        name: preset.name,
         asset,
         category: preset.category,
+        groupId: `batch_${rig.id}`,
+        groupName: rig.name,
+        groupKind: 'character',
+        stagePlane: 'rear',
+        groupZIndex: 0,
+        layerZIndex: preset.calibration.zIndex ?? index,
+        sceneZIndex: preset.calibration.zIndex ?? index,
+        order: index,
         x: (cal.x - boundsX) * scale,
         y: (cal.y - boundsY) * scale,
         width: asset.width * scale,
@@ -327,7 +302,17 @@ export function useBatchExporter() {
         scaleY: cal.scaleY ?? 1,
         transformOriginX: centerX,
         transformOriginY: centerY,
-        depthRole: 'subject'
+        localX: cal.x,
+        localY: cal.y,
+        localScaleX: cal.scaleX ?? 1,
+        localScaleY: cal.scaleY ?? 1,
+        localRotation: cal.rotation ?? 0,
+        zIndex: preset.calibration.zIndex ?? index,
+        muted: false,
+        locked: false,
+        isMovable: false,
+        depthRole: 'subject',
+        opticalDepth: 0.5
       }
     })
 
@@ -350,11 +335,41 @@ export function useBatchExporter() {
 
     drawLayersOnContext(ctx, renderableLayers, globalImageCache)
 
+    let finalCanvas = canvas
+    if (options.trimAlpha) {
+      const pixels = ctx.getImageData(0, 0, exportWidth, exportHeight).data
+      const bounds = findOpaqueBounds(pixels, exportWidth, exportHeight)
+      if (bounds && (bounds.width < exportWidth || bounds.height < exportHeight)) {
+        const trimmedCanvas = document.createElement('canvas')
+        trimmedCanvas.width = bounds.width
+        trimmedCanvas.height = bounds.height
+        const trimmedCtx = trimmedCanvas.getContext('2d')
+        if (trimmedCtx) {
+          trimmedCtx.drawImage(
+            canvas,
+            bounds.x,
+            bounds.y,
+            bounds.width,
+            bounds.height,
+            0,
+            0,
+            bounds.width,
+            bounds.height
+          )
+          finalCanvas = trimmedCanvas
+        }
+      }
+    }
+
     return await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(
+      finalCanvas.toBlob(
         (blob) => {
           canvas.width = 0
           canvas.height = 0
+          if (finalCanvas !== canvas) {
+            finalCanvas.width = 0
+            finalCanvas.height = 0
+          }
           if (blob) resolve(blob)
           else reject(new Error('Erreur de rendu canvas rig'))
         },

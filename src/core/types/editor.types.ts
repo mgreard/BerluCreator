@@ -37,6 +37,7 @@ export interface DepthOfFieldSettings {
 }
 
 export type LayerDepthRole = 'auto' | 'background' | 'subject'
+export type StagePlane = 'rear' | 'front'
 
 export type EditorGroupColor = 'indigo' | 'emerald' | 'amber' | 'rose' | 'blue' | 'purple' | 'cyan'
 export type CharacterMode = 'full' | 'rig'
@@ -52,6 +53,8 @@ interface EditorGroupBase {
   collapsed: boolean
   color: EditorGroupColor
   isDefault: boolean
+  /** Plan de composition autour du bureau pour les personnages et props de plateau. */
+  stagePlane?: StagePlane
   /** Rôle optique du groupe. Absent dans les anciens documents = auto. */
   depthRole?: LayerDepthRole
   /** Distance optique du groupe : 0 = lointain, 0.5 = net, 1 = proche. */
@@ -84,6 +87,9 @@ export interface EditorLayer {
   order: number
   muted: boolean
   locked: boolean
+  stagePlane?: StagePlane
+  headSeriesId?: string
+  characterPropSlot?: string
   /** Rôle optique de cette instance. Absent dans les anciens documents = auto. */
   depthRole?: LayerDepthRole
   /** Distance optique indépendante du z-index : 0 = lointain, 0.5 = net, 1 = proche. */

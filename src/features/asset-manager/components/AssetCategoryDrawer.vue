@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref, useId } from 'vue'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
@@ -79,18 +79,19 @@ function activeRigForCharacterKey(key: string): RigDefinition | undefined {
 }
 
 function isAssetAvailableInRig(asset: Asset, rig?: RigDefinition): boolean {
-  if (!asset.character || !isRigSlotCategory(asset.category)) return true
+  if (!isRigSlotCategory(asset.category)) return true
   if (asset.category === 'body') return true
   if (!rig) return true
-
-  const categoryDef = rig.categories.find((c) => c.category === asset.category)
-  if (categoryDef && !categoryDef.enabled) return false
-
-  return Boolean(rigCatalog.partForAsset(rig, asset))
+  return rigCatalog.isAssetCompatible(rig, asset)
 }
 
 const availableCharacters = computed<CharacterSummary[]>(() => {
   const characters = new Map<string, CharacterSummary>()
+  for (const group of editorStore.currentDocument.groups) {
+    if (group.kind === 'character') {
+      characters.set(group.characterKey, { key: group.characterKey, name: group.name })
+    }
+  }
   for (const asset of assetStore.assets) {
     if (ASSET_CATEGORIES[asset.category].placementMode !== 'character-anchored') continue
     const key = characterKey(asset)
@@ -106,11 +107,21 @@ function matchesCharacterCategory(asset: Asset, definition: CharacterCategory): 
 function characterAssets(key: string): Asset[] {
   const activeRig = activeRigForCharacterKey(key)
   return assetStore.assets.filter(
-    (asset) =>
-      ASSET_CATEGORIES[asset.category].placementMode === 'character-anchored' &&
-      characterKey(asset) === key &&
-      (rigCatalog.isCalibrationOpen ? true : isAssetAvailableInRig(asset, activeRig))
+    (asset) => {
+      if (ASSET_CATEGORIES[asset.category].placementMode !== 'character-anchored') return false
+      if (asset.category === 'props_character') return true
+      if (asset.category === 'head' || asset.category === 'mouth') {
+        return activeRig ? true : characterKey(asset) === key
+      }
+      return characterKey(asset) === key
+    }
   )
+}
+
+function isAssetDisabled(asset: Asset): boolean {
+  if (selection.type !== 'character') return false
+  const rig = activeRigForCharacterKey(selection.characterKey)
+  return Boolean(rig && !isAssetAvailableInRig(asset, rig))
 }
 
 const displayedAssets = computed(() => {
@@ -184,7 +195,7 @@ const uploadInitialCategory = computed<AssetCategory | null>(() => {
   if (selection.type === 'stage') return selection.category
   if (selection.type !== 'character') return null
   const definition = CHARACTER_CATEGORIES.find((entry) => entry.id === selection.categoryId)
-  return definition?.category ?? 'character_full'
+  return definition?.category ?? 'perso'
 })
 
 const uploadInitialCharacterKey = computed<string | null>(() => {
@@ -202,7 +213,7 @@ const visibleAssetIds = computed(() => {
     const group = groups.get(layer.groupId)
     if (!group || group.muted || layer.muted) continue
     if (group.kind === 'character') {
-      const isFull = layer.category === 'character_full'
+      const isFull = layer.category === 'perso'
       if ((group.activeMode === 'full') !== isFull) continue
     }
     ids.add(layer.assetId)
@@ -211,7 +222,32 @@ const visibleAssetIds = computed(() => {
 })
 
 function onSelectAsset(asset: Asset): void {
-  if (FREE_ACCESSORY_CATEGORIES.includes(asset.category as 'eyes' | 'props_host')) {
+  if (asset.category === 'body' && !rigCatalog.isCalibrationOpen) {
+    const rig = rigCatalog.compatibleRigs(asset)[0]
+    if (rig && !rig.calibrated) {
+      assetStore.selectAsset(asset.id)
+      rigCatalog.openCalibration(rig.id)
+      toast.info(
+        'Calibration requise',
+        'Positionnez le cou, activez au moins une série compatible puis marquez ce corps comme calibré.'
+      )
+      return
+    }
+  }
+  if (isAssetDisabled(asset)) {
+    const rig = selection.type === 'character'
+      ? activeRigForCharacterKey(selection.characterKey)
+      : undefined
+    if (asset.headSeriesId) rigCatalog.selectedHeadSeriesId = asset.headSeriesId
+    rigCatalog.openCalibration(rig?.id)
+    toast.warning('Série incompatible', 'Activez cette série dans la configuration du corps.')
+    return
+  }
+  if (
+    FREE_ACCESSORY_CATEGORIES.includes(
+      asset.category as (typeof FREE_ACCESSORY_CATEGORIES)[number]
+    )
+  ) {
     const existing = editorStore.currentDocument.layers
       .filter((layer) => layer.assetId === asset.id && !layer.muted)
       .sort((left, right) => right.order - left.order)[0]
@@ -222,7 +258,7 @@ function onSelectAsset(asset: Asset): void {
     return
   }
 
-  const usesRigCatalog = Boolean(asset.character && isRigSlotCategory(asset.category))
+  const usesRigCatalog = isRigSlotCategory(asset.category)
   const layer = usesRigCatalog
     ? rigRuntime.selectCharacterAsset(asset)
     : editorStore.toggleAssetInViewport(asset.id, asset.category, asset.name)
@@ -345,8 +381,11 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
           :key="asset.id"
           :asset="asset"
           :selected="visibleAssetIds.has(asset.id)"
+          :disabled="isAssetDisabled(asset)"
           :allow-duplicate="
-            FREE_ACCESSORY_CATEGORIES.includes(asset.category as 'eyes' | 'props_host')
+            FREE_ACCESSORY_CATEGORIES.includes(
+              asset.category as (typeof FREE_ACCESSORY_CATEGORIES)[number]
+            )
           "
           @select="onSelectAsset"
           @duplicate="onDuplicateAsset"

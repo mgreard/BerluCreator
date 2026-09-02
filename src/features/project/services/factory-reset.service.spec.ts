@@ -14,6 +14,8 @@ vi.mock('@infrastructure/db/dexie', () => ({
 
 import {
   APPLICATION_STORAGE_KEYS,
+  LEGACY_RIG_CATALOG_STORAGE_KEYS,
+  removeLegacyRigCatalogs,
   resetApplicationToFactoryDefaults
 } from './factory-reset.service'
 
@@ -32,5 +34,15 @@ describe('resetApplicationToFactoryDefaults', () => {
     expect(clearTable).toHaveBeenCalledOnce()
     for (const key of APPLICATION_STORAGE_KEYS) expect(localStorage.getItem(key)).toBeNull()
     expect(localStorage.getItem('unrelated.application.preference')).toBe('keep-me')
+  })
+
+  it('retire explicitement les anciens catalogues de rigs', () => {
+    for (const key of LEGACY_RIG_CATALOG_STORAGE_KEYS) localStorage.setItem(key, 'legacy')
+    localStorage.setItem('berlu-creator:rig-catalog:v7', 'current')
+
+    removeLegacyRigCatalogs()
+
+    for (const key of LEGACY_RIG_CATALOG_STORAGE_KEYS) expect(localStorage.getItem(key)).toBeNull()
+    expect(localStorage.getItem('berlu-creator:rig-catalog:v7')).toBe('current')
   })
 })

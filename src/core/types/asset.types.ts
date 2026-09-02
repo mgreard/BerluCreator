@@ -1,10 +1,11 @@
 export const ASSET_CATEGORY_IDS = [
   'background',
-  'character_full',
+  'background_overlay',
+  'perso',
   'body',
   'head',
-  'eyes',
-  'props_host',
+  'mouth',
+  'props_character',
   'props_set',
   'desk',
   'props_desk',
@@ -13,16 +14,29 @@ export const ASSET_CATEGORY_IDS = [
 
 export type AssetCategory = (typeof ASSET_CATEGORY_IDS)[number]
 export type CharacterAssetForm = 'full' | 'rig'
+export type AssetSource = 'bundled' | 'uploaded'
+export type HeadSeriesId = string
+export const CHARACTER_PROP_SLOTS = ['sunglass', 'hat'] as const
+export type CharacterPropSlot = (typeof CHARACTER_PROP_SLOTS)[number]
+
+export interface AnchoredAssetCalibration {
+  pivot: NormalizedPoint
+  offsetX: number
+  offsetY: number
+  scale: number
+  rotation: number
+}
 
 export interface CharacterAssetMetadata {
   key: string
   name: string
-  form: CharacterAssetForm
+  form?: CharacterAssetForm
 }
 
 const IMPORT_CATEGORY_MAP: Record<string, AssetCategory> = {
   backdrop: 'background',
-  props: 'props_host',
+  character_full: 'perso',
+  props: 'props_character',
   overlay: 'foreground',
   torso: 'body'
 }
@@ -95,6 +109,11 @@ export interface Asset {
   blobId: string
   width: number
   height: number
+  source?: AssetSource
+  sourcePath?: string
+  headSeriesId?: HeadSeriesId
+  characterPropSlot?: CharacterPropSlot
+  anchoredCalibrationBySeries?: Record<HeadSeriesId, AnchoredAssetCalibration>
   character?: CharacterAssetMetadata
   calibration?: AssetCalibration
   deskSplit?: DeskSplitConfig
