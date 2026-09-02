@@ -4,6 +4,7 @@ import type { Asset } from '@core/types/asset.types'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useHierarchyResolver } from './useHierarchyResolver'
+import { resolveStagePlacementZIndexes } from '../engine/stage-layer-placement'
 
 vi.mock('@infrastructure/db/repositories/editor-document.repository', () => ({
   editorDocumentRepository: {
@@ -157,24 +158,38 @@ describe('useHierarchyResolver', () => {
     )
   })
 
-  it('place un accessoire devant ou derrière le bureau selon son plan persistant', () => {
+  it('place « Derrière » sous le bureau et tous les personnages dans l’ordre de rendu', () => {
     const editor = useEditorStore()
     const assets = useAssetStore()
-    assets.assets = [asset('desk', 'desk'), asset('prop', 'props_set')]
+    assets.assets = [
+      asset('desk', 'desk'),
+      asset('prop', 'props_set'),
+      asset('berlu-full', 'perso', 'full'),
+      asset('pedro-full', 'perso', 'full', 840, 908, 'pedro')
+    ]
     const desk = editor.assignAssetToGroup('desk', 'desk')
     const prop = editor.assignAssetToGroup('prop', 'props_set')
+    const berlu = editor.assignAssetToGroup('berlu-full', 'perso')
+    const pedro = editor.assignAssetToGroup('pedro-full', 'perso')
     const { activeLayers } = useHierarchyResolver()
 
-    expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([desk.id, prop.id])
+    expect(activeLayers.value.at(-1)?.layerId).toBe(prop.id)
 
-    editor.updateLayer(prop.id, { stagePlane: 'rear' })
-    expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([prop.id, desk.id])
+    const placement = resolveStagePlacementZIndexes(
+      desk.zIndex,
+      editor.currentDocument.groups
+    )
+    editor.updateLayer(prop.id, { stagePlane: 'rear', zIndex: placement.behind })
+    const behindOrder = activeLayers.value.map((layer) => layer.layerId)
+    expect(behindOrder.indexOf(prop.id)).toBeLessThan(behindOrder.indexOf(desk.id))
+    expect(behindOrder.indexOf(prop.id)).toBeLessThan(behindOrder.indexOf(berlu.id))
+    expect(behindOrder.indexOf(prop.id)).toBeLessThan(behindOrder.indexOf(pedro.id))
 
     editor.undo()
-    expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([desk.id, prop.id])
+    expect(activeLayers.value.at(-1)?.layerId).toBe(prop.id)
 
     editor.redo()
-    expect(activeLayers.value.map((layer) => layer.layerId)).toEqual([prop.id, desk.id])
+    expect(activeLayers.value[0]?.layerId).toBe(prop.id)
   })
 
   it('conserve toujours le foreground devant un personnage ajouté dynamiquement', () => {

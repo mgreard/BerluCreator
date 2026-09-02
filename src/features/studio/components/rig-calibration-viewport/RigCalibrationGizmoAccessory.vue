@@ -50,6 +50,19 @@ const startCalibration = ref<AnchoredAssetCalibration>({
   rotation: 0
 })
 const dragPivotClient = ref({ x: 0, y: 0 })
+const controlScale = computed(
+  () =>
+    1 /
+    Math.max(
+      0.01,
+      Math.max(0.01, zoom) * Math.max(0.01, headScale) * Math.max(0.01, calibration.scale)
+    )
+)
+const rotationHandleTop = computed(() => -44 * controlScale.value)
+const centeredControlTransform = computed(
+  () =>
+    `translate(${-50 * controlScale.value}%, ${-50 * controlScale.value}%) scale(${controlScale.value})`
+)
 
 const accessoryLeft = computed(() => {
   return anchor.x * headWidth + calibration.offsetX - calibration.pivot.x * assetWidth
@@ -180,34 +193,51 @@ function onPointerUp(e: PointerEvent): void {
 
       <!-- Pivot Point Handle -->
       <div
-        class="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-crosshair"
+        data-testid="accessory-pivot-handle"
+        class="group pointer-events-auto absolute flex h-12 w-12 touch-none cursor-crosshair items-center justify-center sm:h-11 sm:w-11"
         :style="{
           left: `${calibration.pivot.x * 100}%`,
-          top: `${calibration.pivot.y * 100}%`
+          top: `${calibration.pivot.y * 100}%`,
+          transform: centeredControlTransform,
+          transformOrigin: 'top left'
         }"
         title="Pivot de l'accessoire"
+        role="button"
+        aria-label="Déplacer le pivot de l'accessoire"
         @pointerdown="onPointerDown('pivot', $event)"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <div class="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-amber-600 shadow-md">
-          <div class="h-1.5 w-1.5 rounded-full bg-white" />
+        <div class="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-amber-600 shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-7 sm:w-7">
+          <div class="h-2.5 w-2.5 rounded-full bg-white shadow-xs" />
         </div>
       </div>
 
       <!-- Scale Corners -->
       <div
-        class="pointer-events-auto absolute -right-1.5 -bottom-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-xs border-2 border-amber-500 bg-white shadow-xs"
+        data-testid="accessory-resize-handle"
+        class="group pointer-events-auto absolute left-full top-full flex h-12 w-12 touch-none cursor-nwse-resize items-center justify-center sm:h-11 sm:w-11"
+        :style="{ transform: centeredControlTransform, transformOrigin: 'top left' }"
+        role="button"
+        aria-label="Redimensionner l'accessoire depuis le coin inférieur droit"
         @pointerdown="onPointerDown('scale', $event)"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
-      />
+      >
+        <div class="h-7 w-7 rounded-md border-2 border-amber-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6" />
+      </div>
 
       <!-- Rotation Handle -->
       <div
-        class="pointer-events-auto absolute -top-8 left-1/2 flex h-6 w-6 -translate-x-1/2 cursor-grab items-center justify-center rounded-full border-2 border-white bg-amber-600 shadow-md active:cursor-grabbing"
+        data-testid="accessory-rotation-handle"
+        class="group pointer-events-auto absolute left-1/2 flex h-12 w-12 touch-none cursor-grab items-center justify-center active:cursor-grabbing sm:h-11 sm:w-11"
+        :style="{
+          top: `${rotationHandleTop}px`,
+          transform: centeredControlTransform,
+          transformOrigin: 'top left'
+        }"
         role="button"
         aria-label="Rotation de l'accessoire"
         @pointerdown="onPointerDown('rotate', $event)"
@@ -215,15 +245,24 @@ function onPointerUp(e: PointerEvent): void {
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <div class="h-1.5 w-1.5 rounded-full bg-white" />
+        <div class="absolute top-[calc(50%+16px)] h-8 w-0.5 bg-amber-500/80" />
+        <div class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-amber-600 shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-8 sm:w-8">
+          <div class="h-2.5 w-2.5 rounded-full bg-white shadow-xs" />
+        </div>
       </div>
       <div
-        class="pointer-events-auto absolute -right-1.5 -top-1.5 h-3.5 w-3.5 cursor-nesw-resize rounded-xs border-2 border-amber-500 bg-white shadow-xs"
+        data-testid="accessory-resize-handle"
+        class="group pointer-events-auto absolute left-full top-0 flex h-12 w-12 touch-none cursor-nesw-resize items-center justify-center sm:h-11 sm:w-11"
+        :style="{ transform: centeredControlTransform, transformOrigin: 'top left' }"
+        role="button"
+        aria-label="Redimensionner l'accessoire depuis le coin supérieur droit"
         @pointerdown="onPointerDown('scale', $event)"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
-      />
+      >
+        <div class="h-7 w-7 rounded-md border-2 border-amber-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6" />
+      </div>
     </div>
   </div>
 </template>

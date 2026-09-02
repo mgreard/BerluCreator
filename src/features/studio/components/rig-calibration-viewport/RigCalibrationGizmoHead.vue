@@ -49,6 +49,14 @@ const startTransform = ref<{ x: number; y: number; scale: number; rotation: numb
 })
 const dragPivotClient = ref({ x: 0, y: 0 })
 const startPointerDistance = ref(1)
+const controlScale = computed(
+  () => 1 / Math.max(0.01, Math.abs(scale) * Math.max(0.01, zoom))
+)
+const rotationHandleTop = computed(() => -44 * controlScale.value)
+const centeredControlTransform = computed(
+  () =>
+    `translate(${-50 * controlScale.value}%, ${-50 * controlScale.value}%) scale(${controlScale.value})`
+)
 
 const boxStyle = computed(() => {
   const neckX = x + width * pivotX
@@ -183,51 +191,83 @@ function onPointerUp(e: PointerEvent): void {
         </Badge>
       </div>
 
-      <!-- Top Rotation Handle with extension stem line -->
-      <div class="pointer-events-none absolute -top-7 left-1/2 flex -translate-x-1/2 flex-col items-center">
+      <!-- Top Rotation Handle with a transform-independent touch target -->
+      <div
+        data-testid="head-rotation-handle"
+        class="group pointer-events-auto absolute left-1/2 flex h-12 w-12 touch-none items-center justify-center sm:h-11 sm:w-11"
+        :style="{
+          top: `${rotationHandleTop}px`,
+          transform: centeredControlTransform,
+          transformOrigin: 'top left'
+        }"
+        role="button"
+        aria-label="Rotation de la tête"
+        @pointerdown="onPointerDown('rotate', $event)"
+        @pointermove="onPointerMove"
+        @pointerup="onPointerUp"
+        @pointercancel="onPointerUp"
+      >
+        <div class="absolute top-[calc(50%+16px)] h-8 w-0.5 bg-rose-500/80" />
         <div
-          class="pointer-events-auto flex h-6 w-6 cursor-grab items-center justify-center rounded-full border-2 border-white bg-rose-600 shadow-md shadow-black/50 transition-transform hover:scale-125 active:cursor-grabbing"
-          role="button"
-          aria-label="Rotation de la tête"
-          @pointerdown="onPointerDown('rotate', $event)"
-          @pointermove="onPointerMove"
-          @pointerup="onPointerUp"
-          @pointercancel="onPointerUp"
+          class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-rose-600 shadow-lg shadow-black/50 transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-8 sm:w-8"
         >
-          <div class="h-1.5 w-1.5 rounded-full bg-white" />
+          <div class="h-2.5 w-2.5 rounded-full bg-white shadow-xs" />
         </div>
-        <div class="h-4 w-0.5 bg-rose-500/80" />
       </div>
 
       <!-- Corner Scale Handles -->
       <div
-        class="pointer-events-auto absolute -left-2 -top-2 h-4 w-4 cursor-nwse-resize rounded-xs border-2 border-rose-500 bg-white shadow-md transition-transform hover:scale-125"
+        data-testid="head-resize-handle"
+        class="group pointer-events-auto absolute left-0 top-0 flex h-12 w-12 touch-none cursor-nwse-resize items-center justify-center sm:h-11 sm:w-11"
+        :style="{ transform: centeredControlTransform, transformOrigin: 'top left' }"
+        role="button"
+        aria-label="Redimensionner la tête depuis le coin supérieur gauche"
         @pointerdown="onPointerDown('scale-nw', $event)"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
-      />
+      >
+        <div class="h-7 w-7 rounded-md border-2 border-rose-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6" />
+      </div>
       <div
-        class="pointer-events-auto absolute -right-2 -top-2 h-4 w-4 cursor-nesw-resize rounded-xs border-2 border-rose-500 bg-white shadow-md transition-transform hover:scale-125"
+        data-testid="head-resize-handle"
+        class="group pointer-events-auto absolute left-full top-0 flex h-12 w-12 touch-none cursor-nesw-resize items-center justify-center sm:h-11 sm:w-11"
+        :style="{ transform: centeredControlTransform, transformOrigin: 'top left' }"
+        role="button"
+        aria-label="Redimensionner la tête depuis le coin supérieur droit"
         @pointerdown="onPointerDown('scale-ne', $event)"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
-      />
+      >
+        <div class="h-7 w-7 rounded-md border-2 border-rose-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6" />
+      </div>
       <div
-        class="pointer-events-auto absolute -right-2 -bottom-2 h-4 w-4 cursor-nwse-resize rounded-xs border-2 border-rose-500 bg-white shadow-md transition-transform hover:scale-125"
+        data-testid="head-resize-handle"
+        class="group pointer-events-auto absolute left-full top-full flex h-12 w-12 touch-none cursor-nwse-resize items-center justify-center sm:h-11 sm:w-11"
+        :style="{ transform: centeredControlTransform, transformOrigin: 'top left' }"
+        role="button"
+        aria-label="Redimensionner la tête depuis le coin inférieur droit"
         @pointerdown="onPointerDown('scale-se', $event)"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
-      />
+      >
+        <div class="h-7 w-7 rounded-md border-2 border-rose-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6" />
+      </div>
       <div
-        class="pointer-events-auto absolute -left-2 -bottom-2 h-4 w-4 cursor-nesw-resize rounded-xs border-2 border-rose-500 bg-white shadow-md transition-transform hover:scale-125"
+        data-testid="head-resize-handle"
+        class="group pointer-events-auto absolute left-0 top-full flex h-12 w-12 touch-none cursor-nesw-resize items-center justify-center sm:h-11 sm:w-11"
+        :style="{ transform: centeredControlTransform, transformOrigin: 'top left' }"
+        role="button"
+        aria-label="Redimensionner la tête depuis le coin inférieur gauche"
         @pointerdown="onPointerDown('scale-sw', $event)"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
-      />
+      >
+        <div class="h-7 w-7 rounded-md border-2 border-rose-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6" />
+      </div>
 
       <!-- Edge Midpoint Handles -->
       <div class="absolute -top-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rounded-xs border border-rose-400 bg-white/95" />

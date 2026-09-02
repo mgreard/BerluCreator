@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { CharacterPropSlot, NormalizedPoint } from '@core/types/asset.types'
 import type { HeadSeriesProfile } from '../../rig-calibration/rig-catalog.types'
 import { Icon } from '@/components/ui/icon'
@@ -50,6 +50,13 @@ const draggingAnchor = ref<AnchorType | null>(null)
 const hoveredAnchor = ref<AnchorType | null>(null)
 const startPointer = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 const startNormPoint = ref<NormalizedPoint>({ x: 0, y: 0 })
+const controlScale = computed(
+  () => 1 / Math.max(0.01, Math.abs(headScale) * Math.max(0.01, zoom))
+)
+const centeredControlTransform = computed(
+  () =>
+    `translate(${-50 * controlScale.value}%, ${-50 * controlScale.value}%) scale(${controlScale.value})`
+)
 
 function getAnchors(): AnchorItem[] {
   return [
@@ -148,10 +155,13 @@ function onPointerUp(anchor: AnchorItem, e: PointerEvent): void {
     <div
       v-for="anchor in getAnchors()"
       :key="anchor.id"
-      class="pointer-events-auto absolute -translate-x-1/2 -translate-y-1/2 cursor-grab select-none touch-manipulation active:cursor-grabbing"
+      :data-testid="`anchor-handle-${anchor.id}`"
+      class="pointer-events-auto absolute flex h-12 w-12 touch-none cursor-grab items-center justify-center select-none active:cursor-grabbing sm:h-11 sm:w-11"
       :style="{
         left: `${anchor.point.x * 100}%`,
-        top: `${anchor.point.y * 100}%`
+        top: `${anchor.point.y * 100}%`,
+        transform: centeredControlTransform,
+        transformOrigin: 'top left'
       }"
       :class="{ 'z-40': draggingAnchor === anchor.id || selectedAnchor === anchor.id }"
       @pointerdown="onPointerDown(anchor, $event)"
@@ -161,7 +171,7 @@ function onPointerUp(anchor: AnchorItem, e: PointerEvent): void {
       @mouseenter="hoveredAnchor = anchor.id"
       @mouseleave="hoveredAnchor = null"
     >
-      <div class="group relative flex h-11 w-11 items-center justify-center">
+      <div class="group relative flex h-full w-full items-center justify-center">
         <!-- Ping pulse when active or dragging -->
         <div
           v-if="draggingAnchor === anchor.id || selectedAnchor === anchor.id"
@@ -171,7 +181,7 @@ function onPointerUp(anchor: AnchorItem, e: PointerEvent): void {
 
         <!-- Pin core badge with design system Icon -->
         <div
-          class="flex h-7 w-7 items-center justify-center rounded-full border-2 shadow-lg transition-all duration-150 group-hover:scale-120"
+          class="flex h-9 w-9 items-center justify-center rounded-full border-2 shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-8 sm:w-8"
           :class="[
             anchor.bgClass,
             anchor.borderClass,

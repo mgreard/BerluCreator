@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { Icon } from '@/components/ui/icon'
-import type { AnchoredAssetCalibration, CharacterPropSlot } from '@core/types/asset.types'
+import type { CharacterPropSlot } from '@core/types/asset.types'
 import type { HeadSeriesProfile } from '../rig-calibration/rig-catalog.types'
 import { rigAssetKey, DEFAULT_RIG_CANVAS } from '../rig-calibration/rig-catalog.service'
 import { suggestRigCalibration } from '../rig-calibration/rig-auto-calibration'
@@ -28,7 +28,7 @@ const rigSelectId = useId()
 // Accordion Collapsed states
 const isBodySectionOpen = ref(true)
 const isPartsSectionOpen = ref(true)
-const isAnchorsCardOpen = ref(false)
+const isSeriesSettingsOpen = ref(false)
 const isAccessoriesCardOpen = ref(false)
 const isCopyModalOpen = ref(false)
 const selectedSourceRigId = ref('')
@@ -42,7 +42,6 @@ const newSeriesHeight = ref(1305)
 
 // Accessories Slot Selection
 const selectedPropSlot = ref<CharacterPropSlot>('sunglass')
-const selectedAccessoryId = ref('')
 const propSlotOptions: SelectOption[] = [
   { value: 'sunglass', label: 'Lunettes' },
   { value: 'hat', label: 'Chapeaux' }
@@ -147,6 +146,9 @@ const selectedDefaultMouthId = computed({
     rigCatalog.updateHeadSeries(series.id, {
       defaultMouthAssetKey: mouth ? rigAssetKey(mouth) : undefined
     })
+    if (selectedRig.value) {
+      rigRuntime.syncRigLayers(selectedRig.value.id)
+    }
   }
 })
 
@@ -161,23 +163,14 @@ const accessoryOptions = computed<SelectOption[]>(() =>
     .map((asset) => ({ value: asset.id, label: asset.name }))
 )
 
-const selectedAccessory = computed(() =>
-  assetStore.assets.find((asset) => asset.id === selectedAccessoryId.value)
-)
-
-const accessoryCalibration = computed<AnchoredAssetCalibration | null>(() => {
-  const series = selectedSeries.value
-  const accessory = selectedAccessory.value
-  if (!series || !accessory) return null
-  return (
-    accessory.anchoredCalibrationBySeries?.[series.id] ?? {
-      pivot: { x: 0.5, y: 0.5 },
-      offsetX: 0,
-      offsetY: 0,
-      scale: 1,
-      rotation: 0
-    }
-  )
+const selectedAccessoryId = computed<string>({
+  get: () =>
+    assetStore.selectedAsset?.category === 'props_character'
+      ? assetStore.selectedAsset.id
+      : '',
+  set: (assetId) => {
+    assetStore.selectAsset(assetId || null)
+  }
 })
 
 watch(
@@ -201,89 +194,6 @@ watch(
 function numberValue(value: string | number | undefined, fallback = 0): number {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
-}
-
-// Relative Head Position Calculations
-const currentHeadOffsetX = computed(() => {
-  const rig = selectedRig.value
-  const series = selectedSeries.value
-  const head = activeHeadAsset.value
-  if (!rig || !series || !head) return 0
-  const pivot = series.neckPivot
-  return Math.round(rig.neckAnchor.x - pivot.x * head.width)
-})
-
-const currentHeadOffsetY = computed(() => {
-  const rig = selectedRig.value
-  const series = selectedSeries.value
-  const head = activeHeadAsset.value
-  if (!rig || !series || !head) return 0
-  const pivot = series.neckPivot
-  return Math.round(rig.neckAnchor.y - pivot.y * head.height)
-})
-
-function updateHeadOffsetX(val: string | number): void {
-  const rig = selectedRig.value
-  const series = selectedSeries.value
-  const head = activeHeadAsset.value
-  if (!rig || !series || !head) return
-  const newHeadX = numberValue(val)
-  const newNeckX = Math.round(newHeadX + series.neckPivot.x * head.width)
-  rigCatalog.updateRigGeometry(rig.id, {
-    neckAnchor: { ...rig.neckAnchor, x: newNeckX }
-  })
-  rigRuntime.syncRigLayers(rig.id)
-}
-
-function updateHeadOffsetY(val: string | number): void {
-  const rig = selectedRig.value
-  const series = selectedSeries.value
-  const head = activeHeadAsset.value
-  if (!rig || !series || !head) return
-  const newHeadY = numberValue(val)
-  const newNeckY = Math.round(newHeadY + series.neckPivot.y * head.height)
-  rigCatalog.updateRigGeometry(rig.id, {
-    neckAnchor: { ...rig.neckAnchor, y: newNeckY }
-  })
-  rigRuntime.syncRigLayers(rig.id)
-}
-
-function updateSeriesScale(raw: string | number): void {
-  const rig = selectedRig.value
-  const series = selectedSeries.value
-  if (!rig || !series) return
-  const scale = numberValue(raw, 1)
-  rigCatalog.updateSeriesDefaults(rig.id, series.id, { defaultScale: scale })
-  rigRuntime.syncRigLayers(rig.id)
-}
-
-function updateSeriesRotation(raw: string | number): void {
-  const rig = selectedRig.value
-  const series = selectedSeries.value
-  if (!rig || !series) return
-  const rotation = numberValue(raw, 0)
-  rigCatalog.updateSeriesDefaults(rig.id, series.id, { defaultRotation: rotation })
-  rigRuntime.syncRigLayers(rig.id)
-}
-
-function updateSeriesAnchor(
-  field: 'neckPivot' | 'mouthAnchor' | 'sunglass' | 'hat',
-  axis: 'x' | 'y',
-  raw: string | number
-): void {
-  const series = selectedSeries.value
-  if (!series) return
-  const source =
-    field === 'neckPivot' || field === 'mouthAnchor'
-      ? series[field]
-      : series.propAnchors[field]
-  rigCatalog.updateSeriesAnchor(series.id, field, {
-    ...source,
-    [axis]: numberValue(raw, source[axis])
-  })
-  if (selectedRig.value) {
-    rigRuntime.syncRigLayers(selectedRig.value.id)
-  }
 }
 
 function createSeries(): void {
@@ -338,31 +248,6 @@ async function handleAutoCalibration(): Promise<void> {
   } catch {
     toast.error('Auto-calibration impossible', 'Le calcul automatique de la calibration a échoué.')
   }
-}
-
-async function updateAccessoryCalibration(
-  field: 'pivotX' | 'pivotY' | 'offsetX' | 'offsetY' | 'scale' | 'rotation',
-  raw: string | number
-): Promise<void> {
-  const series = selectedSeries.value
-  const accessory = selectedAccessory.value
-  const current = accessoryCalibration.value
-  if (!series || !accessory || !current) return
-  const value = numberValue(raw)
-  const next: AnchoredAssetCalibration = {
-    ...current,
-    pivot: { ...current.pivot }
-  }
-  if (field === 'pivotX') next.pivot.x = Math.max(0, Math.min(1, value))
-  else if (field === 'pivotY') next.pivot.y = Math.max(0, Math.min(1, value))
-  else if (field === 'scale') next.scale = Math.max(0.01, value)
-  else next[field] = value
-  await assetStore.updateAsset(accessory.id, {
-    anchoredCalibrationBySeries: {
-      ...accessory.anchoredCalibrationBySeries,
-      [series.id]: next
-    }
-  })
 }
 
 function copyConfigurationFromRig(): void {
@@ -499,28 +384,13 @@ function finishCalibration(): void {
           </FormGroup>
 
           <template v-if="selectedRig">
-            <div class="space-y-1.5">
-              <div class="flex items-center justify-between text-xs">
-                <Text variant="caption" weight="semibold">Point de cou (Origine)</Text>
-                <span class="text-[10px] text-text-muted">Draggable sur le corps</span>
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                <Input
-                  type="number"
-                  :model-value="String(Math.round(selectedRig.neckAnchor.x))"
-                  aria-label="Point de cou X"
-                  @update:model-value="rigCatalog.updateRigGeometry(selectedRig.id, { neckAnchor: { ...selectedRig.neckAnchor, x: Math.round(numberValue($event)) } })"
-                >
-                  <template #prefix><span class="text-xs text-text-muted font-mono">X</span></template>
-                </Input>
-                <Input
-                  type="number"
-                  :model-value="String(Math.round(selectedRig.neckAnchor.y))"
-                  aria-label="Point de cou Y"
-                  @update:model-value="rigCatalog.updateRigGeometry(selectedRig.id, { neckAnchor: { ...selectedRig.neckAnchor, y: Math.round(numberValue($event)) } })"
-                >
-                  <template #prefix><span class="text-xs text-text-muted font-mono">Y</span></template>
-                </Input>
+            <div class="flex items-start gap-2 rounded-lg border border-border-subtle bg-bg-surface/70 p-2.5">
+              <Icon name="open_with" size="xs" class="mt-0.5 shrink-0 text-primary" />
+              <div class="space-y-0.5">
+                <Text variant="caption" weight="semibold">Placement dans le viewport</Text>
+                <Text variant="caption" color="muted">
+                  Déplacez directement le point de cou sur le corps.
+                </Text>
               </div>
             </div>
 
@@ -630,186 +500,60 @@ function finishCalibration(): void {
               </Button>
             </div>
 
-            <!-- POSITION RELATIVE BLOCK -->
-            <div class="rounded-lg border border-border-subtle bg-bg-elevated/70 p-3 space-y-2.5">
-              <div class="flex items-center justify-between">
-                <span class="text-[10px] font-bold uppercase tracking-wider text-text-secondary">
-                  Position Relative
-                </span>
-                <Badge variant="warning" size="sm" class="font-bold">
-                  POSITION SPÉCIFIQUE
-                </Badge>
-              </div>
-
-              <div class="flex items-center justify-between text-[11px] text-text-muted">
-                <span>Configuration : <strong class="text-text-primary">{{ activeHeadAsset?.name ?? 'Tête' }}</strong></span>
-                <Badge variant="info" size="sm">Personnalisé</Badge>
-              </div>
-
-              <!-- Numeric Inputs Grid -->
-              <div class="grid grid-cols-2 gap-2">
-                <FormGroup label="Décalage X (px)" class="space-y-1">
-                  <Input
-                    type="number"
-                    :model-value="String(currentHeadOffsetX)"
-                    @update:model-value="updateHeadOffsetX($event)"
-                  />
-                </FormGroup>
-                <FormGroup label="Décalage Y (px)" class="space-y-1">
-                  <Input
-                    type="number"
-                    :model-value="String(currentHeadOffsetY)"
-                    @update:model-value="updateHeadOffsetY($event)"
-                  />
-                </FormGroup>
-              </div>
-
-              <div class="grid grid-cols-2 gap-2">
-                <FormGroup label="Échelle" class="space-y-1">
-                  <Input
-                    type="number"
-                    min="0.05"
-                    step="0.01"
-                    :model-value="String(selectedRigSeriesConfig?.defaultScale ?? 1)"
-                    @update:model-value="updateSeriesScale($event)"
-                  />
-                </FormGroup>
-                <FormGroup label="Rotation (°)" class="space-y-1">
-                  <Input
-                    type="number"
-                    step="1"
-                    :model-value="String(selectedRigSeriesConfig?.defaultRotation ?? 0)"
-                    @update:model-value="updateSeriesRotation($event)"
-                  />
-                </FormGroup>
-              </div>
-
-              <FormGroup label="Profondeur (Z-index)" class="space-y-1">
-                <Input
-                  type="number"
-                  :model-value="String(20)"
-                  disabled
-                />
-              </FormGroup>
-
-              <!-- Action Buttons -->
-              <div class="space-y-2 pt-1">
-                <Button
-                  size="sm"
-                  class="w-full bg-white text-black font-semibold hover:bg-white/90 shadow-md"
-                  @click="toast.success('Configuration sauvegardée', 'Les réglages courants ont été enregistrés.')"
-                >
-                  <Icon name="save" size="xs" class="mr-1.5" />
-                  Sauvegarder {{ activeHeadAsset?.name ?? 'la tête' }}
-                </Button>
-
-                <div class="grid grid-cols-2 gap-2">
-                  <Button
-                    size="xs"
-                    variant="secondary"
-                    class="w-full text-xs h-8 gap-1"
-                    @click="toast.info('Paramètres partagés', 'Toutes les têtes utilisent les paramètres de leur série.')"
-                  >
-                    <Icon name="check" size="xs" />
-                    Appliquer à toutes
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant="secondary"
-                    class="w-full text-xs h-8 gap-1 bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
-                    @click="handleAutoCalibration"
-                  >
-                    <Icon name="auto_awesome" size="xs" />
-                    Auto
-                  </Button>
+            <div class="flex items-center justify-between gap-3 rounded-lg border border-border-subtle bg-bg-elevated/70 p-3">
+              <div class="flex min-w-0 items-start gap-2">
+                <Icon name="open_with" size="xs" class="mt-0.5 shrink-0 text-rose-400" />
+                <div class="min-w-0 space-y-0.5">
+                  <Text variant="caption" weight="semibold">Ajustement visuel</Text>
+                  <Text variant="caption" color="muted">
+                    Déplacez, redimensionnez et tournez la tête dans le viewport. Les changements sont enregistrés automatiquement.
+                  </Text>
                 </div>
               </div>
+              <Button
+                size="xs"
+                variant="secondary"
+                class="shrink-0 gap-1"
+                @click="handleAutoCalibration"
+              >
+                <Icon name="auto_awesome" size="xs" />
+                Auto
+              </Button>
             </div>
           </div>
 
-          <!-- SUB-CARD: POINTS D'ANCRAGE DE LA SÉRIE -->
+          <!-- SUB-CARD: RÉGLAGES DE LA SÉRIE -->
           <div class="rounded-xl border border-border-default bg-bg-surface/80 p-3.5 space-y-3 shadow-sm">
             <Button
               variant="ghost"
               class="flex w-full items-center justify-between text-left"
-              @click="isAnchorsCardOpen = !isAnchorsCardOpen"
+              @click="isSeriesSettingsOpen = !isSeriesSettingsOpen"
             >
               <div class="flex items-center gap-2">
                 <div class="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-400">
                   <Icon name="adjust" size="xs" />
                 </div>
                 <span class="text-xs font-bold text-text-primary">
-                  Ancrages Série ({{ selectedSeries?.label }})
+                  Réglages Série ({{ selectedSeries?.label }})
                 </span>
               </div>
               <Icon
                 name="chevron-down"
                 size="xs"
                 class="text-text-muted transition-transform duration-200"
-                :class="{ '-rotate-180': isAnchorsCardOpen }"
+                :class="{ '-rotate-180': isSeriesSettingsOpen }"
               />
             </Button>
 
-            <div v-show="isAnchorsCardOpen" class="space-y-3 pt-2 border-t border-border-subtle/40">
+            <div v-show="isSeriesSettingsOpen" class="space-y-3 pt-2 border-t border-border-subtle/40">
               <template v-if="selectedSeries">
-                <!-- Dimensions -->
-                <div class="grid grid-cols-2 gap-2">
-                  <FormGroup label="Largeur (px)">
-                    <Input
-                      type="number"
-                      min="1"
-                      :model-value="String(selectedSeries.width)"
-                      @update:model-value="rigCatalog.updateHeadSeries(selectedSeries.id, { width: Math.max(1, numberValue($event, selectedSeries.width)) })"
-                    />
-                  </FormGroup>
-                  <FormGroup label="Hauteur (px)">
-                    <Input
-                      type="number"
-                      min="1"
-                      :model-value="String(selectedSeries.height)"
-                      @update:model-value="rigCatalog.updateHeadSeries(selectedSeries.id, { height: Math.max(1, numberValue($event, selectedSeries.height)) })"
-                    />
-                  </FormGroup>
-                </div>
-
-                <!-- Anchors List -->
-                <div
-                  v-for="anchor in [
-                    { id: 'neckPivot', label: 'Pivot du cou', point: selectedSeries.neckPivot, color: 'text-cyan-400' },
-                    { id: 'mouthAnchor', label: 'Ancrage bouche', point: selectedSeries.mouthAnchor, color: 'text-emerald-400' },
-                    { id: 'sunglass', label: 'Ancrage lunettes', point: selectedSeries.propAnchors.sunglass, color: 'text-amber-400' },
-                    { id: 'hat', label: 'Ancrage chapeau', point: selectedSeries.propAnchors.hat, color: 'text-purple-400' }
-                  ]"
-                  :key="anchor.id"
-                  class="space-y-1 rounded-md border border-border-subtle/50 bg-bg-elevated/40 p-2"
-                >
-                  <div class="flex items-center justify-between text-xs">
-                    <span :class="anchor.color" class="font-semibold">{{ anchor.label }}</span>
-                    <span class="text-[10px] text-text-muted font-mono">0..1 normalisé</span>
-                  </div>
-                  <div class="grid grid-cols-2 gap-2">
-                    <Input
-                      type="number"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      :model-value="String(anchor.point.x)"
-                      :aria-label="`${anchor.label} X`"
-                      @update:model-value="updateSeriesAnchor(anchor.id as 'neckPivot' | 'mouthAnchor' | 'sunglass' | 'hat', 'x', $event)"
-                    >
-                      <template #prefix><span class="text-xs text-text-muted">X</span></template>
-                    </Input>
-                    <Input
-                      type="number"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      :model-value="String(anchor.point.y)"
-                      :aria-label="`${anchor.label} Y`"
-                      @update:model-value="updateSeriesAnchor(anchor.id as 'neckPivot' | 'mouthAnchor' | 'sunglass' | 'hat', 'y', $event)"
-                    >
-                      <template #prefix><span class="text-xs text-text-muted">Y</span></template>
-                    </Input>
+                <div class="flex items-start gap-2 rounded-lg border border-border-subtle bg-bg-elevated/50 p-2.5">
+                  <Icon name="adjust" size="xs" class="mt-0.5 shrink-0 text-cyan-400" />
+                  <div class="space-y-0.5">
+                    <Text variant="caption" weight="semibold">Ancrages dans le viewport</Text>
+                    <Text variant="caption" color="muted">
+                      Déplacez les repères du cou, de la bouche, des lunettes et du chapeau directement sur la tête.
+                    </Text>
                   </div>
                 </div>
 
@@ -877,27 +621,16 @@ function finishCalibration(): void {
                 </FormGroup>
               </div>
 
-              <div v-if="accessoryCalibration" class="space-y-2 rounded-lg border border-border-subtle bg-bg-elevated/60 p-2.5">
-                <span class="text-[11px] font-semibold text-text-secondary">Calibrage sur la série</span>
-                <div class="grid grid-cols-2 gap-2">
-                  <Input type="number" step="0.01" :model-value="String(accessoryCalibration.pivot.x)" @update:model-value="updateAccessoryCalibration('pivotX', $event)">
-                    <template #prefix><span class="text-[10px] text-text-muted">Pivot X</span></template>
-                  </Input>
-                  <Input type="number" step="0.01" :model-value="String(accessoryCalibration.pivot.y)" @update:model-value="updateAccessoryCalibration('pivotY', $event)">
-                    <template #prefix><span class="text-[10px] text-text-muted">Pivot Y</span></template>
-                  </Input>
-                  <Input type="number" step="1" :model-value="String(accessoryCalibration.offsetX)" @update:model-value="updateAccessoryCalibration('offsetX', $event)">
-                    <template #prefix><span class="text-[10px] text-text-muted">Offset X</span></template>
-                  </Input>
-                  <Input type="number" step="1" :model-value="String(accessoryCalibration.offsetY)" @update:model-value="updateAccessoryCalibration('offsetY', $event)">
-                    <template #prefix><span class="text-[10px] text-text-muted">Offset Y</span></template>
-                  </Input>
-                  <Input type="number" min="0.01" step="0.01" :model-value="String(accessoryCalibration.scale)" @update:model-value="updateAccessoryCalibration('scale', $event)">
-                    <template #prefix><span class="text-[10px] text-text-muted">Échelle</span></template>
-                  </Input>
-                  <Input type="number" step="1" :model-value="String(accessoryCalibration.rotation)" @update:model-value="updateAccessoryCalibration('rotation', $event)">
-                    <template #prefix><span class="text-[10px] text-text-muted">Rot (°)</span></template>
-                  </Input>
+              <div
+                v-if="selectedAccessoryId"
+                class="flex items-start gap-2 rounded-lg border border-border-subtle bg-bg-elevated/60 p-2.5"
+              >
+                <Icon name="open_with" size="xs" class="mt-0.5 shrink-0 text-amber-400" />
+                <div class="space-y-0.5">
+                  <Text variant="caption" weight="semibold">Calibrage visuel de l’accessoire</Text>
+                  <Text variant="caption" color="muted">
+                    Ajustez sa position, son pivot, sa taille et sa rotation directement dans le viewport.
+                  </Text>
                 </div>
               </div>
             </div>

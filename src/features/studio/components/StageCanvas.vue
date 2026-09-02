@@ -8,6 +8,7 @@ import { getCachedAssetImage, useCanvasRenderer } from '../composables/useCanvas
 import { isLayerPointOpaque } from '../engine/alpha-hit-test'
 import { isActiveSelectionHit, shouldTargetWholeGroup } from '../engine/selection-target'
 import { clampBackgroundCover } from '../engine/background-cover.engine'
+import { resolveStagePlacementZIndexes } from '../engine/stage-layer-placement'
 import {
   computeResizeScales,
   computeTransformedBounds,
@@ -297,12 +298,22 @@ const selectedDeskPlacement = computed<DeskPlacement>({
     }
     const layer = editorStore.selectedLayer
     if (!layer) return
+    const deskZIndex =
+      editorStore.currentDocument.layers.find((candidate) => candidate.category === 'desk')
+        ?.zIndex ?? ASSET_CATEGORIES.desk.defaultZIndex
+    const placementZIndexes = resolveStagePlacementZIndexes(
+      deskZIndex,
+      editorStore.currentDocument.groups
+    )
     editorStore.updateLayer(
       layer.id,
-      { stagePlane: value === 'behind' ? 'rear' : 'front' },
+      {
+        stagePlane: value === 'behind' ? 'rear' : 'front',
+        zIndex: placementZIndexes[value]
+      },
       value === 'behind'
-        ? 'Placer l’accessoire derrière le bureau'
-        : 'Placer l’accessoire devant le bureau'
+        ? 'Placer l’accessoire derrière les personnages et le bureau'
+        : 'Placer l’accessoire devant les personnages et le bureau'
     )
   }
 })

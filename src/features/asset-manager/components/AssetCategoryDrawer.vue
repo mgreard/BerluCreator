@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, ref, useId } from 'vue'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
@@ -221,6 +221,76 @@ const visibleAssetIds = computed(() => {
   return ids
 })
 
+const isMouthCategory = computed(() => {
+  if (selection.type === 'character') {
+    return selection.categoryId === 'mouth'
+  }
+  if (selection.type === 'stage') {
+    return selection.category === 'mouth'
+  }
+  return false
+})
+
+const isMouthEmptySelected = computed(() => {
+  if (!isMouthCategory.value) return false
+
+  if (rigCatalog.isCalibrationOpen) {
+    const series = rigCatalog.seriesById(rigCatalog.selectedHeadSeriesId)
+    return !series?.defaultMouthAssetKey
+  }
+
+  if (selection.type === 'character') {
+    const group = editorStore.currentDocument.groups.find(
+      (g): g is CharacterGroup =>
+        g.kind === 'character' && g.characterKey === selection.characterKey
+    )
+    if (!group) return true
+    const mouthLayer = editorStore.currentDocument.layers.find(
+      (l) => l.groupId === group.id && l.category === 'mouth' && !l.muted
+    )
+    return !mouthLayer
+  }
+
+  const anyGroup = editorStore.currentDocument.groups.find(
+    (g): g is CharacterGroup => g.kind === 'character'
+  )
+  if (!anyGroup) return true
+  const mouthLayer = editorStore.currentDocument.layers.find(
+    (l) => l.groupId === anyGroup.id && l.category === 'mouth' && !l.muted
+  )
+  return !mouthLayer
+})
+
+function onSelectEmptyMouth(): void {
+  const groupsToUpdate = selection.type === 'character'
+    ? editorStore.currentDocument.groups.filter(
+        (g): g is CharacterGroup => g.kind === 'character' && g.characterKey === selection.characterKey
+      )
+    : editorStore.currentDocument.groups.filter(
+        (g): g is CharacterGroup => g.kind === 'character'
+      )
+
+  for (const group of groupsToUpdate) {
+    for (const layer of [...editorStore.currentDocument.layers]) {
+      if (layer.groupId === group.id && layer.category === 'mouth') {
+        editorStore.removeLayer(layer.id)
+      }
+    }
+  }
+
+  if (rigCatalog.isCalibrationOpen && rigCatalog.selectedHeadSeriesId) {
+    rigCatalog.updateHeadSeries(rigCatalog.selectedHeadSeriesId, {
+      defaultMouthAssetKey: undefined
+    })
+    if (rigCatalog.selectedRigId) {
+      rigRuntime.syncRigLayers(rigCatalog.selectedRigId)
+    }
+  }
+
+  assetStore.selectAsset(null)
+  toast.info('Bouche masquée', 'Aucune bouche n’est affichée sur le personnage.')
+}
+
 function onSelectAsset(asset: Asset): void {
   if (asset.category === 'body' && !rigCatalog.isCalibrationOpen) {
     const rig = rigCatalog.compatibleRigs(asset)[0]
@@ -348,7 +418,7 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
           size="sm"
           class="shrink-0 px-1.5 py-0 text-[9px] normal-case tracking-normal"
         >
-          {{ displayedAssets.length }}
+          {{ isMouthCategory ? displayedAssets.length + 1 : displayedAssets.length }}
         </Badge>
         <Skeleton v-else aria-hidden="true" variant="rounded" rounded="full" class="h-4 w-7" />
       </div>
@@ -361,6 +431,58 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
         :aria-label="`Sprites : ${currentTitle}`"
         :aria-busy="isInitialLoading"
       >
+        <!-- Empty mouth option card -->
+        <button
+          v-if="isMouthCategory && !isInitialLoading"
+          type="button"
+          class="group relative flex flex-col items-center justify-between rounded-xl border p-2.5 transition-all duration-200 text-left cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary select-none touch-manipulation min-h-[140px]"
+          :class="[
+            isMouthEmptySelected
+              ? 'border-primary/80 bg-primary/10 shadow-[0_0_16px_rgba(244,63,94,0.18)] ring-1 ring-primary/80'
+              : 'border-border-default/80 bg-bg-surface/60 hover:border-primary/40 hover:bg-bg-surface/90 hover:shadow-md'
+          ]"
+          aria-label="Aucune bouche"
+          :aria-selected="isMouthEmptySelected"
+          @click="onSelectEmptyMouth"
+        >
+          <!-- Card Header Badge & Check indicator -->
+          <div class="flex w-full items-center justify-between">
+            <Badge
+              :variant="isMouthEmptySelected ? 'primary' : 'neutral'"
+              size="xs"
+              class="text-[9px]"
+            >
+              {{ isMouthEmptySelected ? 'Actif' : 'Option' }}
+            </Badge>
+            <div
+              class="flex h-5 w-5 items-center justify-center rounded-full transition-colors"
+              :class="isMouthEmptySelected ? 'bg-primary text-white' : 'text-text-muted group-hover:text-text-secondary'"
+            >
+              <Icon :name="isMouthEmptySelected ? 'check' : 'visibility_off'" size="xs" />
+            </div>
+          </div>
+
+          <!-- Center Icon Illustration -->
+          <div class="my-auto flex flex-col items-center justify-center py-2">
+            <div
+              class="flex h-12 w-12 items-center justify-center rounded-full border border-dashed transition-transform duration-200 group-hover:scale-105"
+              :class="isMouthEmptySelected ? 'border-primary/60 bg-primary/20 text-primary' : 'border-border-default bg-bg-elevated/40 text-text-muted group-hover:border-text-secondary group-hover:text-text-primary'"
+            >
+              <Icon name="block" size="md" />
+            </div>
+          </div>
+
+          <!-- Card Footer Info -->
+          <div class="w-full text-center">
+            <div class="text-xs font-semibold tracking-tight text-text-primary">
+              Aucune bouche
+            </div>
+            <div class="text-[10px] text-text-muted">
+              Vide (Masquée)
+            </div>
+          </div>
+        </button>
+
         <template v-if="isInitialLoading">
           <div
             v-for="index in 6"
@@ -399,7 +521,7 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
       </span>
 
       <EmptyState
-        v-if="!isInitialLoading && displayedAssets.length === 0"
+        v-if="!isInitialLoading && displayedAssets.length === 0 && !isMouthCategory"
         icon="search_off"
         title="Aucun sprite dans cette catégorie"
         class="h-48 border-0 bg-transparent shadow-none"
