@@ -111,7 +111,12 @@ export function createRigId(characterKey: string, body: RigAssetIdentity): strin
 export function createRigDefinition(bodyAsset: Asset): RigDefinition {
   const body = rigAssetIdentity(bodyAsset)
   const characterKey = bodyAsset.character?.key ?? slugify(bodyAsset.name)
-  const geometry = initialBodyRigGeometry(body.width, body.height)
+  const geometry = bodyAsset.bodyRigPreset
+    ? {
+        neckAnchor: { ...bodyAsset.bodyRigPreset.neckAnchor },
+        headMotionRadius: bodyAsset.bodyRigPreset.headMotionRadius
+      }
+    : initialBodyRigGeometry(body.width, body.height)
   return {
     id: createRigId(characterKey, body),
     name: bodyAsset.name,

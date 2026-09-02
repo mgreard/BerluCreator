@@ -60,4 +60,16 @@ describe('rig catalog v7', () => {
       initialBodyRigGeometry(1000, 1200, { x: 200, y: 100, width: 500, height: 800 })
     ).toEqual({ neckAnchor: { x: 450, y: 196 }, headMotionRadius: 48 })
   })
+
+  it('utilise le preset alpha enregistré sur un corps', () => {
+    const rig = createRigDefinition(asset({
+      bodyRigPreset: {
+        neckAnchor: { x: 412, y: 73 },
+        headMotionRadius: 61
+      }
+    }))
+
+    expect(rig.neckAnchor).toEqual({ x: 412, y: 73 })
+    expect(rig.headMotionRadius).toBe(61)
+  })
 })

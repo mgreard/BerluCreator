@@ -207,11 +207,12 @@ function onPointerUp(e: PointerEvent): void {
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <div class="absolute top-[calc(50%+16px)] h-8 w-0.5 bg-rose-500/80" />
+        <div class="absolute top-[calc(50%+12px)] h-8 w-0.5 bg-rose-500/80" />
         <div
-          class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-rose-600 shadow-lg shadow-black/50 transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-8 sm:w-8"
+          data-testid="head-rotation-marker"
+          class="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-rose-600 shadow-lg shadow-black/50 transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6"
         >
-          <div class="h-2.5 w-2.5 rounded-full bg-white shadow-xs" />
+          <div class="h-2 w-2 rounded-full bg-white shadow-xs" />
         </div>
       </div>
 
@@ -227,7 +228,7 @@ function onPointerUp(e: PointerEvent): void {
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <div class="h-7 w-7 rounded-md border-2 border-rose-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6" />
+        <div data-testid="head-resize-marker" class="h-5 w-5 rounded-sm border-2 border-rose-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-4 sm:w-4" />
       </div>
       <div
         data-testid="head-resize-handle"
@@ -240,7 +241,7 @@ function onPointerUp(e: PointerEvent): void {
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <div class="h-7 w-7 rounded-md border-2 border-rose-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6" />
+        <div data-testid="head-resize-marker" class="h-5 w-5 rounded-sm border-2 border-rose-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-4 sm:w-4" />
       </div>
       <div
         data-testid="head-resize-handle"
@@ -253,7 +254,7 @@ function onPointerUp(e: PointerEvent): void {
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <div class="h-7 w-7 rounded-md border-2 border-rose-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6" />
+        <div data-testid="head-resize-marker" class="h-5 w-5 rounded-sm border-2 border-rose-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-4 sm:w-4" />
       </div>
       <div
         data-testid="head-resize-handle"
@@ -266,7 +267,7 @@ function onPointerUp(e: PointerEvent): void {
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <div class="h-7 w-7 rounded-md border-2 border-rose-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6" />
+        <div data-testid="head-resize-marker" class="h-5 w-5 rounded-sm border-2 border-rose-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-4 sm:w-4" />
       </div>
 
       <!-- Edge Midpoint Handles -->

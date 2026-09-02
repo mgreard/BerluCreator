@@ -104,20 +104,18 @@ export function useRigViewportNavigation() {
 
   function handleWheel(e: WheelEvent, containerRect: DOMRect): void {
     e.preventDefault()
-    if (e.ctrlKey || e.metaKey) {
-      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9
-      const newZoom = clampRigViewportZoom(zoom.value * zoomFactor)
-      
-      const mouseX = e.clientX - containerRect.left - containerRect.width / 2
-      const mouseY = e.clientY - containerRect.top - containerRect.height / 2
-      
-      panX.value = mouseX - ((mouseX - panX.value) / zoom.value) * newZoom
-      panY.value = mouseY - ((mouseY - panY.value) / zoom.value) * newZoom
-      zoom.value = newZoom
-    } else {
-      panX.value -= e.deltaX
-      panY.value -= e.deltaY
-    }
+    if (e.deltaY === 0) return
+
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9
+    const newZoom = clampRigViewportZoom(zoom.value * zoomFactor)
+    if (newZoom === zoom.value) return
+
+    const mouseX = e.clientX - containerRect.left - containerRect.width / 2
+    const mouseY = e.clientY - containerRect.top - containerRect.height / 2
+
+    panX.value = mouseX - ((mouseX - panX.value) / zoom.value) * newZoom
+    panY.value = mouseY - ((mouseY - panY.value) / zoom.value) * newZoom
+    zoom.value = newZoom
   }
 
   return {

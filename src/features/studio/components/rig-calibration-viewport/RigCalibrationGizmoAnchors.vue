@@ -175,13 +175,14 @@ function onPointerUp(anchor: AnchorItem, e: PointerEvent): void {
         <!-- Ping pulse when active or dragging -->
         <div
           v-if="draggingAnchor === anchor.id || selectedAnchor === anchor.id"
-          class="absolute h-9 w-9 animate-ping rounded-full opacity-40"
+          class="absolute h-6 w-6 animate-ping rounded-full opacity-40 sm:h-5 sm:w-5"
           :class="anchor.bgClass"
         />
 
         <!-- Pin core badge with design system Icon -->
         <div
-          class="flex h-9 w-9 items-center justify-center rounded-full border-2 shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-8 sm:w-8"
+          :data-testid="`anchor-marker-${anchor.id}`"
+          class="flex h-6 w-6 items-center justify-center rounded-full border-2 shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-5 sm:w-5"
           :class="[
             anchor.bgClass,
             anchor.borderClass,

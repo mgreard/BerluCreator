@@ -72,4 +72,34 @@ describe('RigCalibrationCanvas layout', () => {
     expect(neckGizmo.props('bodyX')).toBe(729)
     expect(neckGizmo.props('bodyY')).toBe(224)
   })
+
+  it('déplace la vue en glissant une zone vide du plateau', async () => {
+    const asset = bodyAsset()
+    const assets = useAssetStore()
+    const catalog = useRigCatalogStore()
+    const rig = createRigDefinition(asset)
+    assets.assets = [asset]
+    catalog.rigs = [rig]
+    catalog.selectedRigId = rig.id
+
+    const wrapper = shallowMount(RigCalibrationCanvas)
+    const stage = wrapper.get('[data-testid="rig-calibration-stage"]')
+
+    await stage.trigger('pointerdown', {
+      button: 0,
+      clientX: 200,
+      clientY: 150,
+      pointerId: 1
+    })
+    await wrapper.trigger('pointermove', {
+      clientX: 260,
+      clientY: 190,
+      pointerId: 1
+    })
+
+    expect(stage.attributes('style')).toContain('translate(60px, 40px)')
+
+    await wrapper.trigger('pointerup', { pointerId: 1 })
+    expect(wrapper.get('.viewport-bg').classes()).toContain('cursor-grab')
+  })
 })

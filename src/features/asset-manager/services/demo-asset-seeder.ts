@@ -8,6 +8,15 @@ import { CHARACTER_PROP_SLOTS, isAssetCategory } from '@core/types/asset.types'
 import { resolveSpriteConfig } from '@core/constants/sprites-config'
 import { assetRepository } from '@infrastructure/db/repositories/asset.repository'
 import { generateId } from '@/lib/utils'
+import { analyzeBodyRigPreset } from '../engine/alpha-content-bounds'
+
+const BUNDLED_CATEGORY_ALIASES: Readonly<Record<string, AssetCategory>> = {
+  props_perso: 'props_character'
+}
+
+const CHARACTER_PROP_SLOT_ALIASES: Readonly<Record<string, CharacterPropSlot>> = {
+  glasse: 'sunglass'
+}
 
 function getImageDimensions(blob: Blob): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
@@ -23,6 +32,16 @@ function getImageDimensions(blob: Blob): Promise<{ width: number; height: number
     }
     img.src = url
   })
+}
+
+async function getBodyRigPreset(blob: Blob, category: AssetCategory) {
+  if (category !== 'body') return undefined
+  try {
+    return await analyzeBodyRigPreset(blob)
+  } catch (error) {
+    console.warn('Analyse automatique du rig impossible, utilisation du placement de secours.', error)
+    return undefined
+  }
 }
 
 function bundledPath(filePath: string): string {
@@ -61,7 +80,8 @@ export function parseSpriteMetadata(filePath: string): BundledSpriteMetadata | n
   const sourcePath = bundledPath(filePath)
   const parts = sourcePath.split('/').filter(Boolean)
   if (parts.length < 2) return null
-  const root = parts[0]
+  const sourceRoot = parts[0]!
+  const root = BUNDLED_CATEGORY_ALIASES[sourceRoot] ?? sourceRoot
   if (!isAssetCategory(root)) return null
   const fileName = parts.at(-1)!.replace(/\.(png|jpe?g|webp|svg)$/i, '')
   const name = fileName.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim()
@@ -80,7 +100,8 @@ export function parseSpriteMetadata(filePath: string): BundledSpriteMetadata | n
   } else if (root === 'perso') {
     character = characterFamily(fileName)
   } else if (root === 'props_character') {
-    const slot = parts.length >= 3 ? parts[1] : undefined
+    const sourceSlot = parts.length >= 3 ? parts[1]?.toLowerCase() : undefined
+    const slot = sourceSlot ? CHARACTER_PROP_SLOT_ALIASES[sourceSlot] ?? sourceSlot : undefined
     if (!slot || !CHARACTER_PROP_SLOTS.includes(slot as CharacterPropSlot)) return null
     characterPropSlot = slot as CharacterPropSlot
     tags.push(characterPropSlot)
@@ -160,14 +181,31 @@ export async function syncBundledDemoAssets(): Promise<void> {
 
   const existing = await assetRepository.getAll()
   const missing = new Set(findMissingBundledSpritePaths([...metadataByPath.keys()], existing))
+  const existingBySourcePath = new Map(
+    existing.flatMap((asset) => asset.sourcePath ? [[asset.sourcePath, asset] as const] : [])
+  )
   for (const [path, url] of Object.entries(spriteModules)) {
-    if (!missing.has(path)) continue
     const metadata = metadataByPath.get(path)
     if (!metadata) continue
+    const existingAsset = existingBySourcePath.get(metadata.sourcePath)
+    if (existingAsset) {
+      if (metadata.category === 'body' && !existingAsset.bodyRigPreset) {
+        try {
+          const response = await fetch(url)
+          const preset = await getBodyRigPreset(await response.blob(), metadata.category)
+          if (preset) await assetRepository.update(existingAsset.id, { bodyRigPreset: preset })
+        } catch (error) {
+          console.warn(`Analyse du corps embarqué ${path} impossible.`, error)
+        }
+      }
+      continue
+    }
+    if (!missing.has(path)) continue
     try {
       const response = await fetch(url)
       const blob = await response.blob()
       const dimensions = await getImageDimensions(blob)
+      const bodyRigPreset = await getBodyRigPreset(blob, metadata.category)
       const spriteConfig = resolveSpriteConfig(metadata.name, metadata.category)
       const now = Date.now()
       const asset: Asset = {
@@ -183,6 +221,7 @@ export async function syncBundledDemoAssets(): Promise<void> {
         headSeriesId: metadata.headSeriesId,
         characterPropSlot: metadata.characterPropSlot,
         character: metadata.character,
+        bodyRigPreset,
         isMovable: spriteConfig.isMovable,
         createdAt: now,
         updatedAt: now

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findAlphaContentBounds } from './alpha-content-bounds'
+import { findAlphaContentBounds, inferBodyRigPreset } from './alpha-content-bounds'
 
 function rgba(width: number, height: number, opaquePixels: Array<[number, number, number?]>) {
   const pixels = new Uint8ClampedArray(width * height * 4)
@@ -62,5 +62,32 @@ describe('findAlphaContentBounds', () => {
   it('ignore les pixels sous le seuil alpha et gère une image vide', () => {
     expect(findAlphaContentBounds(rgba(4, 4, [[1, 1, 7]]), 4, 4)).toBeNull()
     expect(findAlphaContentBounds(new Uint8ClampedArray(4 * 4 * 4), 4, 4)).toBeNull()
+  })
+
+  it('place le cou sous une ouverture transparente au centre du corps', () => {
+    const pixels: Array<[number, number]> = []
+    for (let y = 10; y <= 90; y += 1) {
+      for (let x = 10; x <= 90; x += 1) {
+        const isNeckOpening = y < 24 && x >= 45 && x <= 55
+        if (!isNeckOpening) pixels.push([x, y])
+      }
+    }
+
+    expect(inferBodyRigPreset(rgba(100, 100, pixels), 100, 100)).toEqual({
+      neckAnchor: { x: 50, y: 24 },
+      headMotionRadius: 8
+    })
+  })
+
+  it('centre le cou sur le torse plutôt que sur un bras étendu', () => {
+    const pixels: Array<[number, number]> = []
+    for (let y = 10; y <= 90; y += 1) {
+      for (let x = 50; x <= 90; x += 1) pixels.push([x, y])
+    }
+    for (let y = 30; y <= 40; y += 1) {
+      for (let x = 5; x < 50; x += 1) pixels.push([x, y])
+    }
+
+    expect(inferBodyRigPreset(rgba(100, 100, pixels), 100, 100).neckAnchor.x).toBeGreaterThanOrEqual(65)
   })
 })

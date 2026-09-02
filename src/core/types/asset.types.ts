@@ -101,6 +101,11 @@ export interface DeskSplitConfig {
   smoothness?: number
 }
 
+export interface BodyRigPreset {
+  neckAnchor: { x: number; y: number }
+  headMotionRadius: number
+}
+
 export interface Asset {
   id: string
   name: string
@@ -115,6 +120,7 @@ export interface Asset {
   characterPropSlot?: CharacterPropSlot
   anchoredCalibrationBySeries?: Record<HeadSeriesId, AnchoredAssetCalibration>
   character?: CharacterAssetMetadata
+  bodyRigPreset?: BodyRigPreset
   calibration?: AssetCalibration
   deskSplit?: DeskSplitConfig
   isMovable: boolean

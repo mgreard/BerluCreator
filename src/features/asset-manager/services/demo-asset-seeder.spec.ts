@@ -15,6 +15,8 @@ describe('bundled sprite metadata v6', () => {
     ['mouth/berlu/smile.svg', 'mouth'],
     ['props_character/sunglass/classic.png', 'props_character'],
     ['props_character/hat/party.png', 'props_character'],
+    ['props_perso/glasse/Lunette_noir.png', 'props_character'],
+    ['props_perso/hat/Casque_chantier.png', 'props_character'],
     ['props_set/Item_stop.jpg', 'props_set'],
     ['desk/Desk_tiki.jpeg', 'desk'],
     ['props_desk/Item_vote.png', 'props_desk'],
@@ -34,6 +36,18 @@ describe('bundled sprite metadata v6', () => {
     expect(parseSpriteMetadata('/src/assets/sprites/props_character/hat/party.webp')).toMatchObject({
       characterPropSlot: 'hat'
     })
+    expect(parseSpriteMetadata('/src/assets/sprites/props_perso/glasse/Lunette_noir.png')).toMatchObject({
+      category: 'props_character',
+      characterPropSlot: 'sunglass',
+      sourcePath: 'props_perso/glasse/Lunette_noir.png'
+    })
+  })
+
+  it('rattache les nouveaux corps sans sous-dossier à Berlu', () => {
+    expect(parseSpriteMetadata('/src/assets/sprites/body/body9_tv.png')).toMatchObject({
+      category: 'body',
+      character: { key: 'berlu', name: 'Berlu', form: 'rig' }
+    })
   })
 
   it.each([
@@ -46,7 +60,7 @@ describe('bundled sprite metadata v6', () => {
   })
 
   it('classifies every bundled supported image', () => {
-    expect(bundledSpritePaths).toHaveLength(83)
+    expect(bundledSpritePaths).toHaveLength(116)
     for (const path of bundledSpritePaths) expect(parseSpriteMetadata(path)).not.toBeNull()
   })
 

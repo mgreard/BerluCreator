@@ -40,6 +40,14 @@ describe('poignées tactiles du calibreur', () => {
     expectTouchTargetClasses(rotationHandle.element)
     expect(rotationHandle.attributes('style')).toContain('top: -352px')
     expect(rotationHandle.attributes('style')).toContain('scale(8)')
+    expect(wrapper.get('[data-testid="head-rotation-marker"]').classes()).toEqual(
+      expect.arrayContaining(['h-7', 'w-7', 'sm:h-6', 'sm:w-6'])
+    )
+    for (const marker of wrapper.findAll('[data-testid="head-resize-marker"]')) {
+      expect(marker.classes()).toEqual(
+        expect.arrayContaining(['h-5', 'w-5', 'sm:h-4', 'sm:w-4'])
+      )
+    }
   })
 
   it('contre-redimensionne aussi les poignées de pivot, taille et rotation des accessoires', () => {
@@ -78,6 +86,17 @@ describe('poignées tactiles du calibreur', () => {
     expect(wrapper.get('[data-testid="accessory-rotation-handle"]').attributes('style')).toContain(
       'top: -704px'
     )
+    expect(wrapper.get('[data-testid="accessory-pivot-marker"]').classes()).toEqual(
+      expect.arrayContaining(['h-6', 'w-6', 'sm:h-5', 'sm:w-5'])
+    )
+    expect(wrapper.get('[data-testid="accessory-rotation-marker"]').classes()).toEqual(
+      expect.arrayContaining(['h-7', 'w-7', 'sm:h-6', 'sm:w-6'])
+    )
+    for (const marker of wrapper.findAll('[data-testid="accessory-resize-marker"]')) {
+      expect(marker.classes()).toEqual(
+        expect.arrayContaining(['h-5', 'w-5', 'sm:h-4', 'sm:w-4'])
+      )
+    }
   })
 
   it('donne la priorité au drag du point d’ancrage même sur une tête réduite', async () => {
@@ -108,6 +127,9 @@ describe('poignées tactiles du calibreur', () => {
     expectTouchTargetClasses(neckHandle.element)
     expect(neckHandle.attributes('style')).toContain('translate(-400%, -400%)')
     expect(neckHandle.attributes('style')).toContain('scale(8)')
+    expect(wrapper.get('[data-testid="anchor-marker-neckPivot"]').classes()).toEqual(
+      expect.arrayContaining(['h-6', 'w-6', 'sm:h-5', 'sm:w-5'])
+    )
 
     await neckHandle.trigger('pointerdown', { pointerId: 1, clientX: 100, clientY: 100 })
     await neckHandle.trigger('pointermove', { pointerId: 1, clientX: 110, clientY: 100 })

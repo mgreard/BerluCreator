@@ -176,6 +176,10 @@ export const useAssetStore = defineStore('asset', () => {
       headSeriesId: metadata?.headSeriesId,
       characterPropSlot: metadata?.characterPropSlot,
       character: character ? { ...character } : undefined,
+      bodyRigPreset:
+        category === 'body' && alphaBounds
+          ? initialBodyRigGeometry(dimensions.width, dimensions.height, alphaBounds)
+          : undefined,
       isMovable: ASSET_CATEGORIES[category].placementMode === 'free-transform',
       createdAt: now,
       updatedAt: now
@@ -184,15 +188,6 @@ export const useAssetStore = defineStore('asset', () => {
     await assetRepository.create(asset, file)
     assets.value.push(asset)
     rigCatalog.initialize(assets.value)
-    if (category === 'body' && alphaBounds) {
-      const rig = rigCatalog.compatibleRigs(asset)[0]
-      if (rig) {
-        rigCatalog.updateRigGeometry(
-          rig.id,
-          initialBodyRigGeometry(asset.width, asset.height, alphaBounds)
-        )
-      }
-    }
     selectedAssetId.value = asset.id
     return asset
   }

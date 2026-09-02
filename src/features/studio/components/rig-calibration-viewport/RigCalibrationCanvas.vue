@@ -563,11 +563,15 @@ onUnmounted(() => {
 })
 
 function onContainerPointerDown(e: PointerEvent): void {
-  if (e.target === containerRef.value || (e.target as HTMLElement).classList.contains('viewport-bg')) {
-    startPan(e.clientX, e.clientY)
-    const target = e.currentTarget as HTMLElement
-    if (target?.setPointerCapture) target.setPointerCapture(e.pointerId)
-  }
+  const eventTarget = e.target
+  const isPanSurface = eventTarget === containerRef.value
+    || (eventTarget instanceof HTMLElement && eventTarget.dataset.viewportPanSurface === 'true')
+  if (e.button !== 0 || !isPanSurface) return
+
+  e.preventDefault()
+  startPan(e.clientX, e.clientY)
+  const target = e.currentTarget as HTMLElement
+  if (target?.setPointerCapture) target.setPointerCapture(e.pointerId)
 }
 
 function onContainerPointerMove(e: PointerEvent): void {
@@ -600,6 +604,7 @@ function onWheel(e: WheelEvent): void {
     @pointerdown="onContainerPointerDown"
     @pointermove="onContainerPointerMove"
     @pointerup="onContainerPointerUp"
+    @pointercancel="onContainerPointerUp"
     @wheel="onWheel"
   >
     <!-- Viewport Top Toolbar with Zoom & Layer Controls -->
@@ -696,11 +701,13 @@ function onWheel(e: WheelEvent): void {
 
     <!-- Center Stage & Layout Canvas Container with Zoom & Pan Transform -->
     <div
-      class="viewport-bg absolute inset-0 flex items-center justify-center cursor-default"
-      :class="{ 'cursor-grabbing': isPanning }"
+      data-viewport-pan-surface="true"
+      class="viewport-bg absolute inset-0 flex items-center justify-center"
+      :class="isPanning ? 'cursor-grabbing' : 'cursor-grab'"
     >
       <div
         data-testid="rig-calibration-stage"
+        data-viewport-pan-surface="true"
         class="relative shrink-0 transition-transform duration-75 border border-white/10 shadow-2xl bg-black/40 rounded-sm"
         :style="{
           width: `${stageWidth}px`,

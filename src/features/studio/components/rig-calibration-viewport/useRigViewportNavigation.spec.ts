@@ -3,7 +3,8 @@ import {
   clampRigViewportZoom,
   normalizeRotation,
   pointerAngle,
-  screenDeltaToLocal
+  screenDeltaToLocal,
+  useRigViewportNavigation
 } from './useRigViewportNavigation'
 
 describe('useRigViewportNavigation geometry', () => {
@@ -29,5 +30,53 @@ describe('useRigViewportNavigation geometry', () => {
     expect(normalizeRotation(270)).toBe(-90)
     expect(normalizeRotation(-270)).toBe(90)
     expect(normalizeRotation(0.5)).toBe(0)
+  })
+
+  it('zoome avec la molette seule en conservant le point sous le pointeur', () => {
+    const navigation = useRigViewportNavigation()
+    const containerRect = {
+      left: 100,
+      top: 50,
+      width: 800,
+      height: 600
+    } as DOMRect
+    const wheelEvent = new WheelEvent('wheel', {
+      cancelable: true,
+      clientX: 700,
+      clientY: 250,
+      deltaY: -100
+    })
+    const mouseX = wheelEvent.clientX - containerRect.left - containerRect.width / 2
+    const mouseY = wheelEvent.clientY - containerRect.top - containerRect.height / 2
+    const worldXBefore = (mouseX - navigation.panX.value) / navigation.zoom.value
+    const worldYBefore = (mouseY - navigation.panY.value) / navigation.zoom.value
+
+    navigation.handleWheel(wheelEvent, containerRect)
+
+    expect(wheelEvent.defaultPrevented).toBe(true)
+    expect(navigation.zoom.value).toBe(1.1)
+    expect((mouseX - navigation.panX.value) / navigation.zoom.value).toBeCloseTo(worldXBefore)
+    expect((mouseY - navigation.panY.value) / navigation.zoom.value).toBeCloseTo(worldYBefore)
+  })
+
+  it('dézoome avec la molette vers le bas sans déplacer librement le viewport', () => {
+    const navigation = useRigViewportNavigation()
+    const containerRect = {
+      left: 0,
+      top: 0,
+      width: 800,
+      height: 600
+    } as DOMRect
+
+    navigation.handleWheel(new WheelEvent('wheel', {
+      clientX: 400,
+      clientY: 300,
+      deltaX: 80,
+      deltaY: 100
+    }), containerRect)
+
+    expect(navigation.zoom.value).toBe(0.9)
+    expect(navigation.panX.value).toBe(0)
+    expect(navigation.panY.value).toBe(0)
   })
 })

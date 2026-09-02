@@ -8,6 +8,7 @@ import {
   createRigDefinition,
   findAssetByRigIdentity,
   headCalibration,
+  initialBodyRigGeometry,
   parseRigCatalogFile,
   rigAssetKey,
   validateHeadAssetSeries
@@ -60,6 +61,59 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
     return id ? headSeries.value.find((series) => series.id === id) : undefined
   }
 
+  function preferredHeadForSeries(assets: Asset[], seriesId: HeadSeriesId): Asset | undefined {
+    return assets
+      .filter((asset) => asset.category === 'head' && asset.headSeriesId === seriesId)
+      .sort((left, right) => {
+        const leftIsNeutral = /neutre|neutral/i.test(left.name)
+        const rightIsNeutral = /neutre|neutral/i.test(right.name)
+        if (leftIsNeutral !== rightIsNeutral) return leftIsNeutral ? -1 : 1
+        return left.name.localeCompare(right.name, 'fr')
+      })[0]
+  }
+
+  function autoConfigureRigForBody(
+    rig: RigDefinition,
+    body: Asset,
+    assets: Asset[],
+    isNew: boolean
+  ): void {
+    if (!isNew && rig.calibrated) return
+    const series = seriesById(body.character?.key)
+    if (!series) return
+
+    const defaultHead = preferredHeadForSeries(assets, series.id)
+    const existingConfig = rig.headSeries.find((entry) => entry.seriesId === series.id)
+    if (existingConfig) {
+      existingConfig.enabled = true
+      if (!existingConfig.defaultHeadAssetKey && defaultHead) {
+        existingConfig.defaultHeadAssetKey = rigAssetKey(defaultHead)
+      }
+    } else {
+      rig.headSeries.push({
+        seriesId: series.id,
+        enabled: true,
+        defaultScale: Math.max(
+          0.01,
+          Number((body.height * 0.34 / Math.max(1, series.height)).toFixed(4))
+        ),
+        defaultRotation: 0,
+        defaultHeadAssetKey: defaultHead ? rigAssetKey(defaultHead) : undefined
+      })
+    }
+
+    const geometry = body.bodyRigPreset
+      ? {
+          neckAnchor: { ...body.bodyRigPreset.neckAnchor },
+          headMotionRadius: body.bodyRigPreset.headMotionRadius
+        }
+      : initialBodyRigGeometry(body.width, body.height)
+    rig.neckAnchor = geometry.neckAnchor
+    rig.headMotionRadius = geometry.headMotionRadius
+    rig.calibrated = true
+    rig.updatedAt = Date.now()
+  }
+
   function initialize(assets: Asset[]): void {
     const heads = assets.filter((asset) => asset.category === 'head' && asset.headSeriesId)
     for (const asset of heads) {
@@ -72,9 +126,13 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
     }
 
     for (const body of assets.filter((asset) => asset.category === 'body')) {
-      if (rigs.value.some((rig) => assetsShareRigIdentity(rig.body, body))) continue
-      const rig = createRigDefinition(body)
-      rigs.value.push(rig)
+      let rig = rigs.value.find((candidate) => assetsShareRigIdentity(candidate.body, body))
+      const isNew = !rig
+      if (!rig) {
+        rig = createRigDefinition(body)
+        rigs.value.push(rig)
+      }
+      autoConfigureRigForBody(rig, body, assets, isNew)
       if (!defaultRigByCharacter.value[rig.characterKey]) {
         defaultRigByCharacter.value[rig.characterKey] = rig.id
       }

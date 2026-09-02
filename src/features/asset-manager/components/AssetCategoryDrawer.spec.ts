@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { useAssetStore } from '../stores/useAssetStore'
 import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
+import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import AssetCategoryDrawer from './AssetCategoryDrawer.vue'
 import AssetCard from './AssetCard.vue'
 
@@ -98,9 +99,10 @@ describe('AssetCategoryDrawer', () => {
     expect(wrapper.text()).toContain('Aucun sprite dans cette catégorie')
   })
 
-  it('ouvre la calibration avant la première utilisation d’un nouveau corps', async () => {
+  it('utilise directement le rig généré automatiquement pour un nouveau corps', async () => {
     const assetStore = useAssetStore()
     const rigCatalog = useRigCatalogStore()
+    const editorStore = useEditorStore()
     const body = mockAsset('body-1', 'Corps Berlu', 'body')
     assetStore.assets = [body]
     rigCatalog.initialize(assetStore.assets)
@@ -114,7 +116,11 @@ describe('AssetCategoryDrawer', () => {
     wrapper.getComponent(AssetCard).vm.$emit('select', body)
     await wrapper.vm.$nextTick()
 
-    expect(rigCatalog.isCalibrationOpen).toBe(true)
-    expect(rigCatalog.selectedRigId).toBe(rigCatalog.rigs[0]?.id)
+    expect(rigCatalog.rigs[0]).toMatchObject({
+      calibrated: true,
+      headSeries: [{ seriesId: 'berlu', enabled: true }]
+    })
+    expect(rigCatalog.isCalibrationOpen).toBe(false)
+    expect(editorStore.currentDocument.layers.some((layer) => layer.assetId === body.id)).toBe(true)
   })
 })

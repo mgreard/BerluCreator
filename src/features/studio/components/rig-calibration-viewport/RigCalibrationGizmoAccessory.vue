@@ -209,8 +209,8 @@ function onPointerUp(e: PointerEvent): void {
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <div class="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-amber-600 shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-7 sm:w-7">
-          <div class="h-2.5 w-2.5 rounded-full bg-white shadow-xs" />
+        <div data-testid="accessory-pivot-marker" class="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-amber-600 shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-5 sm:w-5">
+          <div class="h-2 w-2 rounded-full bg-white shadow-xs" />
         </div>
       </div>
 
@@ -226,7 +226,7 @@ function onPointerUp(e: PointerEvent): void {
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <div class="h-7 w-7 rounded-md border-2 border-amber-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6" />
+        <div data-testid="accessory-resize-marker" class="h-5 w-5 rounded-sm border-2 border-amber-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-4 sm:w-4" />
       </div>
 
       <!-- Rotation Handle -->
@@ -245,9 +245,9 @@ function onPointerUp(e: PointerEvent): void {
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <div class="absolute top-[calc(50%+16px)] h-8 w-0.5 bg-amber-500/80" />
-        <div class="flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-amber-600 shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-8 sm:w-8">
-          <div class="h-2.5 w-2.5 rounded-full bg-white shadow-xs" />
+        <div class="absolute top-[calc(50%+12px)] h-8 w-0.5 bg-amber-500/80" />
+        <div data-testid="accessory-rotation-marker" class="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-amber-600 shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6">
+          <div class="h-2 w-2 rounded-full bg-white shadow-xs" />
         </div>
       </div>
       <div
@@ -261,7 +261,7 @@ function onPointerUp(e: PointerEvent): void {
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <div class="h-7 w-7 rounded-md border-2 border-amber-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6" />
+        <div data-testid="accessory-resize-marker" class="h-5 w-5 rounded-sm border-2 border-amber-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-4 sm:w-4" />
       </div>
     </div>
   </div>
