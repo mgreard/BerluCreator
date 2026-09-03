@@ -10,6 +10,10 @@ import type { RigCatalogFile } from './rig-catalog.types'
 
 const DEFAULT_EXPORTED_AT = new Date(0).toISOString()
 
+function clonePlain<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
 function hasAnchoredCalibrations(asset: Asset): boolean {
   return (
     (asset.category === 'mouth' || asset.category === 'props_character') &&
@@ -23,7 +27,7 @@ export function collectDefaultRigAssetCalibrations(
   return assets.filter(hasAnchoredCalibrations).map((asset) => ({
     assetKey: rigAssetKey(asset),
     ...(asset.sourcePath ? { sourcePath: asset.sourcePath } : {}),
-    calibrations: structuredClone(asset.anchoredCalibrationBySeries!)
+    calibrations: clonePlain(asset.anchoredCalibrationBySeries!)
   }))
 }
 
@@ -36,7 +40,7 @@ export function createDefaultRigConfigurationBundle(
     version: DEFAULT_RIG_CONFIGURATION_VERSION,
     exportedAt: DEFAULT_EXPORTED_AT,
     catalog: {
-      ...structuredClone(catalog),
+      ...clonePlain(catalog),
       exportedAt: DEFAULT_EXPORTED_AT
     },
     assetCalibrations: collectDefaultRigAssetCalibrations(assets)
@@ -65,8 +69,8 @@ export function applyDefaultRigAssetCalibrations(
     return {
       ...asset,
       anchoredCalibrationBySeries: {
-        ...structuredClone(defaultCalibration.calibrations),
-        ...structuredClone(asset.anchoredCalibrationBySeries ?? {})
+        ...clonePlain(defaultCalibration.calibrations),
+        ...clonePlain(asset.anchoredCalibrationBySeries ?? {})
       }
     }
   })

@@ -334,8 +334,8 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
   }
 
   function replaceCatalog(file: RigCatalogFile, assets: Asset[]): void {
-    rigs.value = structuredClone(file.rigs)
-    headSeries.value = structuredClone(file.headSeries)
+    rigs.value = JSON.parse(JSON.stringify(file.rigs))
+    headSeries.value = JSON.parse(JSON.stringify(file.headSeries))
     defaultRigByCharacter.value = { ...file.defaultRigByCharacter }
     initialize(assets)
   }

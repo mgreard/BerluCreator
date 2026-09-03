@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { reactive } from 'vue'
 import type { Asset } from '@core/types/asset.types'
 import {
   applyDefaultRigAssetCalibrations,
@@ -61,6 +62,19 @@ describe('default rig configuration', () => {
       catalog: { exportedAt: '1970-01-01T00:00:00.000Z' },
       assetCalibrations: [{ calibrations: { berlu: calibration } }]
     })
+  })
+
+  it('gère les proxies réactifs de Vue (Pinia) sans lever DataCloneError', () => {
+    const reactiveAsset = reactive(
+      asset({ anchoredCalibrationBySeries: { berlu: calibration } })
+    )
+    const catalog = reactive(createRigCatalogFile([], {}, [createBerluHeadSeries()]))
+
+    expect(() => {
+      const bundle = createDefaultRigConfigurationBundle(catalog, [reactiveAsset])
+      expect(bundle.assetCalibrations).toHaveLength(1)
+      expect(bundle.assetCalibrations[0]?.calibrations.berlu?.offsetX).toBe(12)
+    }).not.toThrow()
   })
 
   it('applique les défauts par chemin sans écraser les séries déjà modifiées', () => {
