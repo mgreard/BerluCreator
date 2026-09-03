@@ -15,11 +15,10 @@
     "story:dev": "histoire dev",
     "story:build": "histoire build",
     "test:e2e": "playwright test",
+    "deadcode:check": "knip",
     "trim:sprites": "node scripts/trim-transparent-sprites.mjs"
   },
   "dependencies": {
-    "@tanstack/vue-table": "9.1.2",
-    "@vueuse/core": "^12.7.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dexie": "^4.0.11",
@@ -35,7 +34,6 @@
     "@histoire/plugin-vue": "^0.17.17",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4.0.9",
-    "@types/jszip": "^3.4.1",
     "@types/node": "^22.13.4",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/test-utils": "^2.4.6",
@@ -44,6 +42,7 @@
     "eslint-plugin-vue": "^9.32.0",
     "histoire": "^0.17.17",
     "jsdom": "^26.0.0",
+    "knip": "^6.34.0",
     "prettier": "^3.5.1",
     "sharp": "^0.35.4",
     "tailwindcss": "^4.0.9",

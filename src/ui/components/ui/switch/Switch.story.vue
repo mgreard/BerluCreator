@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import Switch from './Switch.vue'
-import { Fieldset } from '@/components/ui/fieldset'
 import { FormGroup } from '@/components/ui/form-group'
 import type { SwitchProps } from './types'
 
@@ -25,11 +24,8 @@ const state = ref<SwitchProps>({
           <Switch id="dark-mode-switch" v-model="darkMode" />
         </FormGroup>
 
-        <Fieldset
-          legend="Avec Titre & Description"
-          variant="ghost"
-          class="pt-4 border-t border-border-default mb-0"
-        >
+        <fieldset class="pt-4 border-t border-border-default mb-0 flex flex-col gap-3">
+          <legend class="text-xs font-semibold text-text-primary mb-2">Avec Titre & Description</legend>
           <FormGroup
             label="Mode Avion"
             label-for="airplane-mode-switch"
@@ -51,13 +47,10 @@ const state = ref<SwitchProps>({
           >
             <Switch id="email-notifications-switch" v-model="emailNotifications" />
           </FormGroup>
-        </Fieldset>
+        </fieldset>
 
-        <Fieldset
-          legend="Tailles disponibles"
-          variant="ghost"
-          class="pt-4 border-t border-border-default mb-0"
-        >
+        <fieldset class="pt-4 border-t border-border-default mb-0 flex flex-col gap-3">
+          <legend class="text-xs font-semibold text-text-primary mb-2">Tailles disponibles</legend>
           <FormGroup label="Taille sm (32px)" label-for="small-switch" inline class="mb-0">
             <Switch id="small-switch" size="sm" :model-value="true" />
           </FormGroup>
@@ -67,7 +60,7 @@ const state = ref<SwitchProps>({
           <FormGroup label="Taille lg (56px)" label-for="large-switch" inline class="mb-0">
             <Switch id="large-switch" size="lg" :model-value="true" />
           </FormGroup>
-        </Fieldset>
+        </fieldset>
       </div>
     </Variant>
   </Story>

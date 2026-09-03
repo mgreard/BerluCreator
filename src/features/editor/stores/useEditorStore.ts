@@ -1,4 +1,4 @@
-﻿import { computed, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type {
   CameraFrame,
@@ -8,7 +8,6 @@ import type {
   DepthOfFieldSettings,
   EditorDocument,
   EditorGroup,
-  EditorGroupColor,
   EditorLayer,
   LayerDepthRole,
   ShaderSettings,
@@ -1001,35 +1000,6 @@ export const useEditorStore = defineStore('editor', () => {
     })
   }
 
-  function createGroup(
-    name: string,
-    _customCategory?: string,
-    color: EditorGroupColor = 'indigo'
-  ): EditorGroup {
-    return mutateStudio('Créer un groupe', () => {
-      const maxZ = currentDocument.value.groups.reduce(
-        (max, group) => Math.max(max, group.zIndex),
-        0
-      )
-      const group: EditorGroup = {
-        id: generateId('grp'),
-        name: name.trim() || 'Nouveau groupe',
-        kind: 'stage',
-        zIndex: maxZ + 5,
-        transform: { ...DEFAULT_TRANSFORM },
-        muted: false,
-        locked: false,
-        collapsed: false,
-        color,
-        allowedCategories: [],
-        isDefault: false
-      }
-      currentDocument.value.groups.push(group)
-      clearStudioSelection()
-      return group
-    })
-  }
-
   function updateGroup(
     groupId: string,
     changes: Partial<EditorGroup>,
@@ -1058,44 +1028,6 @@ export const useEditorStore = defineStore('editor', () => {
         ...group.transform,
         scaleX: -group.transform.scaleX
       }
-    })
-  }
-
-  function updateGroupSettings(
-    groupId: string,
-    transform: Partial<Transform2D>,
-    zIndex: number
-  ): void {
-    mutateStudio('Régler un groupe', () => {
-      const group = currentDocument.value.groups.find((candidate) => candidate.id === groupId)
-      if (!group) return
-      group.transform = mergeUniformTransform(group.transform, transform)
-      group.zIndex = zIndex
-    })
-  }
-
-  function updateGroupZIndex(groupId: string, zIndex: number): void {
-    updateGroup(groupId, { zIndex }, 'Changer la profondeur d’un groupe')
-  }
-
-  function deleteGroup(groupId: string, deleteLayers = true): void {
-    mutateStudio('Supprimer un groupe', () => {
-      const fallback = currentDocument.value.groups.find(
-        (group) => group.id !== groupId && group.kind === 'stage'
-      )
-      if (deleteLayers || !fallback) {
-        currentDocument.value.layers = currentDocument.value.layers.filter(
-          (layer) => layer.groupId !== groupId
-        )
-      } else {
-        for (const layer of currentDocument.value.layers) {
-          if (layer.groupId === groupId) layer.groupId = fallback.id
-        }
-      }
-      currentDocument.value.groups = currentDocument.value.groups.filter(
-        (group) => group.id !== groupId
-      )
-      if (selectedGroupId.value === groupId) clearStudioSelection()
     })
   }
 
@@ -1320,13 +1252,9 @@ export const useEditorStore = defineStore('editor', () => {
     setGroupDepthRole,
     setGroupOpticalDepth,
     moveLayer,
-    createGroup,
     updateGroup,
     updateGroupTransform,
     toggleGroupHorizontalFlip,
-    updateGroupSettings,
-    updateGroupZIndex,
-    deleteGroup,
     setGroupMuted,
     toggleGroupMuted,
     setGroupLocked,

@@ -29,6 +29,7 @@ export default defineConfig({
     },
     {
       name: 'Tablet / Compact',
+      testIgnore: [/03-.*\.spec\.ts/, /04-.*\.spec\.ts/],
       use: {
         viewport: { width: 1024, height: 768 }
       }

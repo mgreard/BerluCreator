@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import SearchInput from './SearchInput.vue'
-import { Fieldset } from '@/components/ui/fieldset'
 import { FormGroup } from '@/components/ui/form-group'
 import type { SearchInputProps } from './types'
 
@@ -31,17 +30,14 @@ const state = ref<SearchInputProps>({
           Requête active : <span class="font-bold">{{ query }}</span>
         </div>
 
-        <Fieldset
-          legend="Tailles disponibles"
-          variant="ghost"
-          class="pt-4 border-t border-border-default mb-0"
-        >
+        <fieldset class="pt-4 border-t border-border-default mb-0 flex flex-col gap-3">
+          <legend class="text-xs font-semibold text-text-primary mb-2">Tailles disponibles</legend>
           <div class="flex flex-col gap-3">
             <SearchInput placeholder="Taille sm (32px)" size="sm" />
             <SearchInput placeholder="Taille md (40px)" size="md" />
             <SearchInput placeholder="Taille lg (48px)" size="lg" />
           </div>
-        </Fieldset>
+        </fieldset>
       </div>
     </Variant>
   </Story>

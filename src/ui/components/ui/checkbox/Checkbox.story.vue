@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import Checkbox from './Checkbox.vue'
-import { Fieldset } from '@/components/ui/fieldset'
 import { FormGroup } from '@/components/ui/form-group'
 import type { CheckboxProps } from './types'
 
@@ -28,11 +27,8 @@ const state = ref<CheckboxProps>({
           <Checkbox id="terms-checkbox" v-model="termsAccepted" v-bind="state" />
         </FormGroup>
 
-        <Fieldset
-          legend="Sélection Multiple (Array)"
-          variant="ghost"
-          class="pt-4 border-t border-border-default mb-0"
-        >
+        <fieldset class="pt-4 border-t border-border-default mb-0 flex flex-col gap-3">
+          <legend class="text-xs font-semibold text-text-primary mb-2">Sélection Multiple (Array)</legend>
           <div class="flex flex-col gap-2">
             <Checkbox
               v-model="selectedFeatures"
@@ -56,7 +52,7 @@ const state = ref<CheckboxProps>({
           <div class="text-xs text-primary font-bold">
             Options sélectionnées : {{ selectedFeatures }}
           </div>
-        </Fieldset>
+        </fieldset>
 
         <FormGroup
           label="État Indéterminé"

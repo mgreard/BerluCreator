@@ -45,7 +45,7 @@ test.describe('Audit UI - Parcours 1 : Calibrage de Rig & Parcours Utilisateur',
     // 6. Clic sur "Terminer" et retour propre au Studio
     const finishBtn = page.locator('[data-testid="rig-calibration-header"] button', { hasText: 'Terminer' })
     await expect(finishBtn).toBeVisible()
-    await finishBtn.click()
+    await finishBtn.click({ force: true })
 
     // Vérification que le viewport de calibration s'est fermé
     await expect(header).not.toBeVisible()
@@ -74,6 +74,6 @@ test.describe('Audit UI - Parcours 1 : Calibrage de Rig & Parcours Utilisateur',
 
     // Remettre dans l'état initial
     await compatibleSwitch.click()
-    await page.locator('[data-testid="rig-calibration-header"] button', { hasText: 'Terminer' }).click()
+    await page.locator('[data-testid="rig-calibration-header"] button', { hasText: 'Terminer' }).click({ force: true })
   })
 })

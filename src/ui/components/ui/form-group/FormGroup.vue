@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, useSlots } from 'vue'
-import { FieldError } from '@/components/ui/field-error'
 import { Text } from '@/components/ui/text'
 import { cn } from '@/shared/utils/cn'
 import type { FormGroupProps } from './types'
@@ -59,9 +58,9 @@ const containerClasses = computed(() => {
       <slot />
     </div>
 
-    <FieldError v-if="hasError" :error="error">
-      <slot name="error" />
-    </FieldError>
+    <p v-if="hasError" class="text-xs text-danger font-medium mt-1 select-none" role="alert">
+      <slot name="error">{{ typeof error === 'string' ? error : '' }}</slot>
+    </p>
 
     <div v-else-if="hasHelperText">
       <Text variant="caption" color="muted">
