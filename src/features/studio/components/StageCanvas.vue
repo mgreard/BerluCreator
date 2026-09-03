@@ -42,7 +42,6 @@ import type { TourKey } from '@/features/project/services/tour-definitions'
 import { toast } from '@/ui/shared/services/toast.service'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
 import { useRigRuntime } from '../rig-calibration/useRigRuntime'
-import { clampHeadOffset, headCalibration } from '../rig-calibration/rig-catalog.service'
 import StudioGlobalToolbar from './StudioGlobalToolbar.vue'
 import { StudioSelectionToolbar, type DeskPlacement } from './studio-selection-toolbar'
 
@@ -874,12 +873,6 @@ function hitTestLayer(pos: { x: number; y: number }): RenderableLayer | null {
 }
 
 function activeTransformPivot(bounds: BoxBounds): { x: number; y: number } {
-  if (editorStore.editScope === 'head' && activeSelectedLayer.value) {
-    return {
-      x: activeSelectedLayer.value.rotationOriginX ?? activeSelectedLayer.value.transformOriginX,
-      y: activeSelectedLayer.value.rotationOriginY ?? activeSelectedLayer.value.transformOriginY
-    }
-  }
   return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
 }
 
@@ -1104,28 +1097,7 @@ function onCanvasPointerMove(e: PointerEvent) {
             : 1
         const newX = Math.round(dragStartLayerPos.value.x + dx / rigUnitScale)
         const newY = Math.round(dragStartLayerPos.value.y + dy / rigUnitScale)
-        if (
-          editorStore.editScope === 'head' &&
-          activeSelectedLayer.value.category === 'head' &&
-          activeSelectedGroup.value?.kind === 'character'
-        ) {
-          const rig = rigRuntime.activeRigForGroup(activeSelectedGroup.value)
-          const series = rigCatalog.seriesById(activeSelectedLayer.value.asset.headSeriesId)
-          const base =
-            rig && series ? headCalibration(rig, series, activeSelectedLayer.value.asset) : null
-          if (rig && base) {
-            const offset = clampHeadOffset(
-              { x: newX - base.x, y: newY - base.y },
-              rig.headMotionRadius
-            )
-            editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, {
-              x: Math.round(base.x + offset.x),
-              y: Math.round(base.y + offset.y)
-            })
-          }
-        } else {
-          editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, { x: newX, y: newY })
-        }
+        editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, { x: newX, y: newY })
       }
     }
     return
