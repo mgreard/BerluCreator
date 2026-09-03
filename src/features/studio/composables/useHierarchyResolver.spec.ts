@@ -5,6 +5,8 @@ import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useHierarchyResolver } from './useHierarchyResolver'
 import { resolveStagePlacementZIndexes } from '../engine/stage-layer-placement'
+import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
+import { createBerluHeadSeries } from '../rig-calibration/rig-catalog.service'
 
 vi.mock('@infrastructure/db/repositories/editor-document.repository', () => ({
   editorDocumentRepository: {
@@ -97,6 +99,63 @@ describe('useHierarchyResolver', () => {
         (resolved.y + resolved.height / 2 - resolved.transformOriginY) * resolved.scaleY
     )
     expect(resolved.rotationOriginY).not.toBe(resolved.transformOriginY)
+  })
+
+  it('convertit les offsets natifs des éléments ancrés avec le baseScale de la scène', () => {
+    const editor = useEditorStore()
+    const assets = useAssetStore()
+    const catalog = useRigCatalogStore()
+    const body = asset('body', 'body', 'rig', 840, 908)
+    const head = asset('head', 'head', 'rig', 1205, 1305)
+    const mouth = asset('mouth', 'mouth', 'rig', 200, 100)
+    head.headSeriesId = 'berlu'
+    mouth.headSeriesId = 'berlu'
+    mouth.anchoredCalibrationBySeries = {
+      berlu: {
+        pivot: { x: 0.5, y: 0.5 },
+        offsetX: 80,
+        offsetY: 40,
+        scale: 0.6,
+        rotation: 5
+      }
+    }
+    catalog.headSeries = [createBerluHeadSeries()]
+    assets.assets = [body, head, mouth]
+    editor.assignAssetToGroup(body.id, 'body')
+    editor.assignAssetToGroup(head.id, 'head', undefined, head.name, {
+      x: 420 - head.width / 2,
+      y: 120 - head.height / 2,
+      scaleX: 0.35,
+      scaleY: 0.35,
+      rotation: 0
+    })
+    const mouthLayer = editor.assignAssetToGroup(mouth.id, 'mouth')
+
+    const { activeLayers } = useHierarchyResolver()
+    const resolvedHead = activeLayers.value.find((layer) => layer.asset.id === head.id)!
+    const resolvedMouth = activeLayers.value.find((layer) => layer.layerId === mouthLayer.id)!
+    const series = catalog.headSeries[0]!
+    const baseScaleX = resolvedHead.width / head.width
+    const baseScaleY = resolvedHead.height / head.height
+    const anchorX =
+      resolvedHead.transformOriginX +
+      (resolvedHead.x + series.mouthAnchor.x * resolvedHead.width -
+        resolvedHead.transformOriginX) *
+        resolvedHead.scaleX
+    const anchorY =
+      resolvedHead.transformOriginY +
+      (resolvedHead.y + series.mouthAnchor.y * resolvedHead.height -
+        resolvedHead.transformOriginY) *
+        resolvedHead.scaleY
+
+    expect(resolvedMouth.transformOriginX).toBeCloseTo(
+      anchorX + 80 * baseScaleX * resolvedHead.scaleX
+    )
+    expect(resolvedMouth.transformOriginY).toBeCloseTo(
+      anchorY + 40 * baseScaleY * resolvedHead.scaleY
+    )
+    expect(resolvedMouth.scaleX).toBeCloseTo(resolvedHead.scaleX * 0.6)
+    expect(resolvedMouth.rotation).toBe(5)
   })
 
   it('exclut les calques et groupes masqués du rendu', () => {

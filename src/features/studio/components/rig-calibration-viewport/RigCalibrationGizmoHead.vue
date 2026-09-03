@@ -64,7 +64,7 @@ const boxStyle = computed(() => {
     top: `${y}px`,
     width: `${width}px`,
     height: `${height}px`,
-    transformOrigin: 'center center',
+    transformOrigin: `${pivotX * 100}% ${pivotY * 100}%`,
     transform: `rotate(${rotation}deg) scale(${scale})`
   }
 })
@@ -80,8 +80,8 @@ function onPointerDown(mode: DragMode, e: PointerEvent): void {
   if (stage) {
     const rect = stage.getBoundingClientRect()
     const stageScale = rect.width / Math.max(1, stage.offsetWidth)
-    const centerX = x + width / 2
-    const centerY = y + height / 2
+    const centerX = x + width * pivotX
+    const centerY = y + height * pivotY
     dragPivotClient.value = {
       x: rect.left + centerX * stageScale,
       y: rect.top + centerY * stageScale

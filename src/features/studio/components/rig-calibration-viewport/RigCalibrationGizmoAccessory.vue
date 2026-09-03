@@ -3,6 +3,7 @@ import { ref, computed, useTemplateRef } from 'vue'
 import type { AnchoredAssetCalibration, AssetCategory, CharacterPropSlot } from '@core/types/asset.types'
 import { Badge } from '@/components/ui/badge'
 import { normalizeRotation, pointerAngle, screenDeltaToLocal } from './useRigViewportNavigation'
+import { resolveAnchoredPartLocalTransform } from '../../rig-layout'
 
 const {
   anchor,
@@ -104,12 +105,14 @@ const themeClasses = computed(() => {
   }
 })
 
-const accessoryLeft = computed(() => {
-  return anchor.x * headWidth + calibration.offsetX - 0.5 * assetWidth
-})
-const accessoryTop = computed(() => {
-  return anchor.y * headHeight + calibration.offsetY - 0.5 * assetHeight
-})
+const accessoryLocalTransform = computed(() =>
+  resolveAnchoredPartLocalTransform({
+    headSize: { width: headWidth, height: headHeight },
+    assetSize: { width: assetWidth, height: assetHeight },
+    anchor,
+    calibration
+  })
+)
 
 function onPointerDown(mode: DragMode, e: PointerEvent): void {
   e.stopPropagation()
@@ -117,7 +120,7 @@ function onPointerDown(mode: DragMode, e: PointerEvent): void {
   startPointer.value = { x: e.clientX, y: e.clientY }
   startCalibration.value = {
     ...calibration,
-    pivot: { x: 0.5, y: 0.5 }
+    pivot: { ...calibration.pivot }
   }
   const headWrapper = rootRef.value?.offsetParent as HTMLElement | null
   const stage = headWrapper?.offsetParent as HTMLElement | null
@@ -163,7 +166,7 @@ function onPointerMove(e: PointerEvent): void {
     emit('update:calibration', {
       offsetX: Math.round(startCalibration.value.offsetX + headDelta.x),
       offsetY: Math.round(startCalibration.value.offsetY + headDelta.y),
-      pivot: { x: 0.5, y: 0.5 }
+      pivot: { ...startCalibration.value.pivot }
     })
   } else if (dragMode.value === 'scale') {
     const currentDistance = Math.hypot(
@@ -174,14 +177,14 @@ function onPointerMove(e: PointerEvent): void {
       0.05,
       Number((startCalibration.value.scale * currentDistance / startPointerDistance.value).toFixed(3))
     )
-    emit('update:calibration', { scale: nextScale, pivot: { x: 0.5, y: 0.5 } })
+    emit('update:calibration', { scale: nextScale, pivot: { ...startCalibration.value.pivot } })
   } else if (dragMode.value === 'rotate') {
     const currentAngle = pointerAngle({ x: e.clientX, y: e.clientY }, dragPivotClient.value)
     const startAngle = pointerAngle(startPointer.value, dragPivotClient.value)
     const nextRot = Math.round(
       normalizeRotation(startCalibration.value.rotation + currentAngle - startAngle)
     )
-    emit('update:calibration', { rotation: nextRot, pivot: { x: 0.5, y: 0.5 } })
+    emit('update:calibration', { rotation: nextRot, pivot: { ...startCalibration.value.pivot } })
   }
 }
 
@@ -206,11 +209,11 @@ function onPointerUp(e: PointerEvent): void {
     ref="rootRef"
     class="pointer-events-none absolute z-28"
     :style="{
-      left: `${accessoryLeft}px`,
-      top: `${accessoryTop}px`,
+      left: `${accessoryLocalTransform.x}px`,
+      top: `${accessoryLocalTransform.y}px`,
       width: `${assetWidth}px`,
       height: `${assetHeight}px`,
-      transformOrigin: 'center center',
+      transformOrigin: `${calibration.pivot.x * 100}% ${calibration.pivot.y * 100}%`,
       transform: `rotate(${calibration.rotation ?? 0}deg) scale(${calibration.scale ?? 1})`
     }"
   >

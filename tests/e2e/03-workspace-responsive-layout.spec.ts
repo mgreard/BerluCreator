@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test'
+import { openApp } from './app-fixture'
 
 test.describe('Audit UI - Parcours 3 : Layout Responsive & Espaces de Travail', () => {
   test('En vue Bureau (1440x900), la bibliothèque et le studio sont simultanément visibles', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('./')
-    await page.waitForLoadState('networkidle')
+    await openApp(page)
 
     // La barre de navigation compacte (<1100px) doit être masquée
     const compactNav = page.locator('[data-layout-region="compact-navigation"]')
@@ -21,8 +21,7 @@ test.describe('Audit UI - Parcours 3 : Layout Responsive & Espaces de Travail', 
 
   test('En vue Tablette / Compact (< 1100px), la barre d\'onglets permet de basculer entre panneaux', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 })
-    await page.goto('./')
-    await page.waitForLoadState('networkidle')
+    await openApp(page)
 
     // La navigation compacte doit être visible
     const compactNav = page.locator('[data-layout-region="compact-navigation"]')

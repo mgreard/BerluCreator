@@ -8,8 +8,14 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: [['html', { open: 'never' }], ['list']],
+  webServer: {
+    command: 'pnpm run dev -- --host 127.0.0.1 --strictPort',
+    url: 'http://127.0.0.1:5173/BerluCreator/',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120000
+  },
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173/BerluCreator/',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5173/BerluCreator/',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure'
   },

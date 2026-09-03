@@ -268,7 +268,7 @@ watch(
   [accessoryOptions, selectedPropSlot],
   ([options]) => {
     if (!options.some((option) => option.value === selectedAccessoryId.value)) {
-      assetStore.selectAsset(String(options[0]?.value ?? '') || null)
+      selectedAccessoryId.value = String(options[0]?.value ?? '')
     }
   },
   { immediate: true }

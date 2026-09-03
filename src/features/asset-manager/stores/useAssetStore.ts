@@ -14,6 +14,8 @@ import { generateId } from '@/lib/utils'
 import type { ActiveSelection } from '../types/asset-nav.types'
 import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import { initialBodyRigGeometry } from '@/features/studio/rig-calibration/rig-catalog.service'
+import { DEFAULT_RIG_ASSET_CALIBRATIONS } from '@/features/studio/rig-calibration/default-rig-catalog'
+import { applyDefaultRigAssetCalibrations } from '@/features/studio/rig-calibration/rig-default-configuration.service'
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'])
 
@@ -121,7 +123,10 @@ export const useAssetStore = defineStore('asset', () => {
   async function loadAssets(): Promise<void> {
     isLoading.value = true
     try {
-      assets.value = await assetRepository.getAll()
+      assets.value = applyDefaultRigAssetCalibrations(
+        await assetRepository.getAll(),
+        DEFAULT_RIG_ASSET_CALIBRATIONS
+      )
     } finally {
       isLoading.value = false
       hasLoaded.value = true

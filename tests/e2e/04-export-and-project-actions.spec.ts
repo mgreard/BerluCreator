@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test'
+import { openApp } from './app-fixture'
 
 test.describe('Audit UI - Parcours 4 : Actions Globales & Boîte de Dialogue Export HD', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto('./')
-    await page.waitForLoadState('networkidle')
+    await openApp(page)
   })
 
   test('L\'utilisateur peut ouvrir la modale d\'export HD et vérifier les résolutions', async ({ page }) => {
@@ -28,7 +28,7 @@ test.describe('Audit UI - Parcours 4 : Actions Globales & Boîte de Dialogue Exp
     // Boutons de défaire / refaire
     const undoBtn = page.locator('button[title*="Annuler"]').or(page.locator('button:has-text("undo")')).first()
     if (await undoBtn.isVisible()) {
-      await expect(undoBtn).toBeEnabled()
+      await expect(undoBtn).toBeDisabled()
     }
 
     // Bouton de projet

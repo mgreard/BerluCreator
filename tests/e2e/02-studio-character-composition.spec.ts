@@ -1,28 +1,50 @@
 import { test, expect } from '@playwright/test'
+import { openApp, openLibraryPane, selectCharacter } from './app-fixture'
+
+interface BrowserLayerState {
+  category?: string
+  transform?: { y?: number }
+}
+
+interface BrowserEditorState {
+  currentDocument?: { layers?: BrowserLayerState[] }
+}
+
+interface BrowserPiniaState {
+  _s: Map<string, BrowserEditorState>
+}
+
+interface VueAppHost extends HTMLElement {
+  __vue_app__?: {
+    config?: { globalProperties?: { $pinia?: BrowserPiniaState } }
+  }
+}
 
 test.describe('Audit UI - Parcours 2 : Composition Personnage & Alignement Tête/Corps', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('./')
-    await page.waitForLoadState('networkidle')
+    await openApp(page)
   })
 
   test('Placement d\'un personnage et vérification de l\'alignement tête-corps sans décalage vertical', async ({ page }) => {
     // 1. Filtrer par l'onglet Personnages
-    const tabPerso = page.getByRole('button', { name: /Personnages/i }).first()
+    await openLibraryPane(page)
+    const tabPerso = page.getByRole('tab', { name: /Personnages/i }).first()
     await expect(tabPerso).toBeVisible()
     await tabPerso.click()
+    await selectCharacter(page, 'Berlu')
 
     // 2. Sélectionner Body1
-    const bodyCard = page.locator('.asset-grid > div', { hasText: 'Body1' }).first()
+    const bodyCard = page.getByRole('option', { name: /Body1/i }).first()
     await expect(bodyCard).toBeVisible()
     await bodyCard.click()
 
     // 3. Inspecter les couches dans l'état Pinia pour valider le calcul géométrique
     const layerTransforms = await page.evaluate(() => {
-      const pinia = (document.querySelector('#app') as any)?.__vue_app__?.config?.globalProperties?.$pinia
+      const pinia = (document.querySelector('#app') as VueAppHost)?.__vue_app__?.config
+        ?.globalProperties?.$pinia
       const editor = pinia?._s.get('editor')
-      const bodyLayer = editor?.currentDocument?.layers?.find((l: any) => l.category === 'body')
-      const headLayer = editor?.currentDocument?.layers?.find((l: any) => l.category === 'head')
+      const bodyLayer = editor?.currentDocument?.layers?.find((layer) => layer.category === 'body')
+      const headLayer = editor?.currentDocument?.layers?.find((layer) => layer.category === 'head')
       return {
         body: bodyLayer?.transform,
         head: headLayer?.transform
@@ -38,13 +60,14 @@ test.describe('Audit UI - Parcours 2 : Composition Personnage & Alignement Tête
     expect(layerTransforms.head.y).toBeLessThan(-500)
 
     // 4. Permutation dynamique de tête
-    const cuteHeadCard = page.locator('.asset-grid > div', { hasText: 'Cute head' }).first()
+    const cuteHeadCard = page.getByRole('option', { name: /Cute head/i }).first()
     if (await cuteHeadCard.isVisible()) {
       await cuteHeadCard.click()
       const updatedHeadTransform = await page.evaluate(() => {
-        const pinia = (document.querySelector('#app') as any)?.__vue_app__?.config?.globalProperties?.$pinia
+        const pinia = (document.querySelector('#app') as VueAppHost)?.__vue_app__?.config
+          ?.globalProperties?.$pinia
         const editor = pinia?._s.get('editor')
-        return editor?.currentDocument?.layers?.find((l: any) => l.category === 'head')?.transform
+        return editor?.currentDocument?.layers?.find((layer) => layer.category === 'head')?.transform
       })
       expect(updatedHeadTransform.y).toBeGreaterThan(-800)
       expect(updatedHeadTransform.y).toBeLessThan(-500)
@@ -52,6 +75,11 @@ test.describe('Audit UI - Parcours 2 : Composition Personnage & Alignement Tête
   })
 
   test('Changement de bouche et superposition sur la tête active', async ({ page }) => {
+    await openLibraryPane(page)
+    await page.getByRole('tab', { name: /Personnages/i }).click()
+    await selectCharacter(page, 'Berlu')
+    await page.getByRole('option', { name: /Body1/i }).first().click()
+
     // 1. Ouvrir la catégorie Bouches
     const mouthFilter = page.getByRole('button', { name: /Bouches/i }).first()
     if (await mouthFilter.isVisible()) {
@@ -59,17 +87,17 @@ test.describe('Audit UI - Parcours 2 : Composition Personnage & Alignement Tête
     }
 
     // 2. Sélectionner une bouche
-    const mouthCard = page.locator('.asset-grid > div', { hasText: /mouth/i }).first()
-    if (await mouthCard.isVisible()) {
-      await mouthCard.click()
+    const mouthCard = page.getByRole('option', { name: /mouth/i }).first()
+    await expect(mouthCard).toBeVisible()
+    await mouthCard.click()
 
-      // Vérifier que la bouche est bien instanciée comme couche dans le groupe personnage
-      const hasMouthLayer = await page.evaluate(() => {
-        const pinia = (document.querySelector('#app') as any)?.__vue_app__?.config?.globalProperties?.$pinia
-        const editor = pinia?._s.get('editor')
-        return editor?.currentDocument?.layers?.some((l: any) => l.category === 'mouth')
-      })
-      expect(hasMouthLayer).toBe(true)
-    }
+    // Vérifier que la bouche est bien instanciée comme couche dans le groupe personnage
+    const hasMouthLayer = await page.evaluate(() => {
+      const pinia = (document.querySelector('#app') as VueAppHost)?.__vue_app__?.config
+        ?.globalProperties?.$pinia
+      const editor = pinia?._s.get('editor')
+      return editor?.currentDocument?.layers?.some((layer) => layer.category === 'mouth')
+    })
+    expect(hasMouthLayer).toBe(true)
   })
 })

@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test'
+import { openApp, openLibraryPane, openStudioPane } from './app-fixture'
 
 test.describe('Audit UI - Parcours 1 : Calibrage de Rig & Parcours Utilisateur', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('./')
-    await page.waitForLoadState('networkidle')
+    await openApp(page)
   })
 
   test('L\'utilisateur peut ouvrir le calibrage, changer de corps, calibrer une tête et retourner au Studio', async ({ page }) => {
@@ -19,21 +19,23 @@ test.describe('Audit UI - Parcours 1 : Calibrage de Rig & Parcours Utilisateur',
     await expect(page.locator('[data-testid="rig-body-selector"]')).toBeVisible()
 
     // 3. Changement de corps dans le carrousel horizontal inférieur (Étape 1)
-    const body2Btn = page.locator('[data-testid="rig-body-selector"] button', { hasText: 'Body2' })
+    const body2Btn = page.getByRole('button', { name: 'Body2', exact: true })
     await expect(body2Btn).toBeVisible()
     await body2Btn.click()
 
     // Le corps actif doit être mis en surbrillance
-    await expect(body2Btn).toHaveClass(/ring-2/)
+    await expect(body2Btn).toHaveAttribute('aria-pressed', 'true')
 
     // 4. Sélection d'une tête dans la bibliothèque d'assets à gauche (Étape 2)
+    await openLibraryPane(page)
     const headsFilter = page.getByRole('button', { name: /Têtes/i }).first()
     if (await headsFilter.isVisible()) {
       await headsFilter.click()
     }
-    const headCard = page.locator('.asset-grid > div', { hasText: 'Closeeyes head' }).first()
+    const headCard = page.getByRole('option', { name: /Closeeyes head/i }).first()
     await expect(headCard).toBeVisible()
     await headCard.click()
+    await openStudioPane(page)
 
     // 5. Vérification du HUD supérieur mis à jour (Étape 4)
     await expect(header).toContainText('Closeeyes head')
@@ -55,8 +57,10 @@ test.describe('Audit UI - Parcours 1 : Calibrage de Rig & Parcours Utilisateur',
     await expect(header).toBeVisible()
 
     // Sélection d'une tête
-    const headCard = page.locator('.asset-grid > div', { hasText: /head/i }).first()
+    await openLibraryPane(page)
+    const headCard = page.getByRole('option', { name: /head/i }).first()
     await headCard.click()
+    await openStudioPane(page)
 
     // Switch "Compatible"
     const compatibleSwitch = page.locator('[data-testid="rig-calibration-header"] button[role="switch"]')

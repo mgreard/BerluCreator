@@ -24,7 +24,13 @@ import {
   fetchAndLoadImage,
   globalImageCache
 } from '../../composables/useCanvasRenderer'
-import type { RenderableLayer } from '../../composables/useHierarchyResolver'
+import type { RenderableLayer } from '../../rendering'
+import {
+  createDefaultAnchoredCalibration,
+  resolveAnchoredPartGeometry,
+  resolveAnchoredPartLocalTransform,
+  resolveHeadGeometry
+} from '../../rig-layout'
 
 const rigCatalog = useRigCatalogStore()
 const assetStore = useAssetStore()
@@ -251,6 +257,20 @@ const headRotationOrigin = computed(() => ({
   y: stageNeckPoint.value.y
 }))
 
+const resolvedHeadGeometry = computed(() =>
+  resolveHeadGeometry({
+    x: headStageTopLeft.value.x,
+    y: headStageTopLeft.value.y,
+    width: headDimensions.value.width,
+    height: headDimensions.value.height,
+    scaleOrigin: stageNeckPoint.value,
+    rotationOrigin: headRotationOrigin.value,
+    scaleX: headScale.value,
+    scaleY: headScale.value,
+    rotation: headRotation.value
+  })
+)
+
 const headVisualTopLeft = computed(() => ({
   x: stageNeckPoint.value.x - headDimensions.value.width / 2,
   y: stageNeckPoint.value.y - headDimensions.value.height / 2
@@ -313,56 +333,24 @@ const activeAnchoredCalibration = computed<AnchoredAssetCalibration | null>(() =
     activeGesture.value?.assetId === asset.id && activeGesture.value.seriesId === series.id
   return (
     (activeDraft ? draftAccessoryCalibration.value : null) ??
-    asset.anchoredCalibrationBySeries?.[series.id] ?? {
-      pivot: { x: 0.5, y: 0.5 },
-      offsetX: 0,
-      offsetY: 0,
-      scale: 1,
-      rotation: 0
-    }
+    asset.anchoredCalibrationBySeries?.[series.id] ??
+    createDefaultAnchoredCalibration()
   )
 })
-
-function transformPointAround(
-  point: { x: number; y: number },
-  scaleOrigin: { x: number; y: number },
-  scaleX: number,
-  scaleY: number,
-  rotation: number,
-  rotationOrigin = scaleOrigin
-): { x: number; y: number } {
-  const radians = (rotation * Math.PI) / 180
-  const scaledX = scaleOrigin.x + (point.x - scaleOrigin.x) * scaleX
-  const scaledY = scaleOrigin.y + (point.y - scaleOrigin.y) * scaleY
-  const dx = scaledX - rotationOrigin.x
-  const dy = scaledY - rotationOrigin.y
-  return {
-    x: rotationOrigin.x + dx * Math.cos(radians) - dy * Math.sin(radians),
-    y: rotationOrigin.y + dx * Math.sin(radians) + dy * Math.cos(radians)
-  }
-}
 
 function computeStageAnchoredPivot(
   anchor: NormalizedPoint,
   calibration: AnchoredAssetCalibration
 ): { x: number; y: number } {
-  const anchorPoint = transformPointAround(
-    {
-      x: headStageTopLeft.value.x + anchor.x * headDimensions.value.width,
-      y: headStageTopLeft.value.y + anchor.y * headDimensions.value.height
-    },
-    stageNeckPoint.value,
-    headScale.value,
-    headScale.value,
-    headRotation.value,
-    headRotationOrigin.value
-  )
-  const radians = (headRotation.value * Math.PI) / 180
-  const offsetX = calibration.offsetX * headScale.value
-  const offsetY = calibration.offsetY * headScale.value
+  const geometry = resolveAnchoredPartGeometry({
+    head: resolvedHeadGeometry.value,
+    anchor,
+    calibration,
+    assetSize: { width: 0, height: 0 }
+  })
   return {
-    x: anchorPoint.x + offsetX * Math.cos(radians) - offsetY * Math.sin(radians),
-    y: anchorPoint.y + offsetX * Math.sin(radians) + offsetY * Math.cos(radians)
+    x: geometry.transformOriginX,
+    y: geometry.transformOriginY
   }
 }
 
@@ -420,11 +408,7 @@ const renderableLayers = computed<RenderableLayer[]>(() => {
 
   // 2. Head Layer
   if (headAsset.value && effectiveSeries.value) {
-    const headW = headAsset.value.width
-    const headH = headAsset.value.height
-    const headX = headStageTopLeft.value.x
-    const headY = headStageTopLeft.value.y
-
+    const headGeometry = resolvedHeadGeometry.value
     const headLayer: RenderableLayer = {
       id: 'calibration-head',
       layerId: 'calibration-head',
@@ -445,22 +429,14 @@ const renderableLayers = computed<RenderableLayer[]>(() => {
       isMovable: true,
       depthRole: 'subject',
       opticalDepth: 0.5,
-      x: Math.round(headX),
-      y: Math.round(headY),
-      width: headW,
-      height: headH,
-      transformOriginX: stageNeckPoint.value.x,
-      transformOriginY: stageNeckPoint.value.y,
-      rotationOriginX: headRotationOrigin.value.x,
-      rotationOriginY: headRotationOrigin.value.y,
-      scaleX: headScale.value,
-      scaleY: headScale.value,
+      ...headGeometry,
+      x: Math.round(headGeometry.x),
+      y: Math.round(headGeometry.y),
       localX: headLocalTopLeft.value.x,
       localY: headLocalTopLeft.value.y,
       localScaleX: headScale.value,
       localScaleY: headScale.value,
       localRotation: headRotation.value,
-      rotation: headRotation.value,
       opacity: 1
     }
     layers.push(headLayer)
@@ -470,42 +446,29 @@ const renderableLayers = computed<RenderableLayer[]>(() => {
       anchor: NormalizedPoint,
       calibration: AnchoredAssetCalibration
     ) {
-      const anchorPoint = transformPointAround(
-        {
-          x: headLayer.x + anchor.x * headDimensions.value.width,
-          y: headLayer.y + anchor.y * headDimensions.value.height
-        },
-        { x: headLayer.transformOriginX, y: headLayer.transformOriginY },
-        headLayer.scaleX,
-        headLayer.scaleY,
-        headLayer.rotation,
-        {
-          x: headLayer.rotationOriginX ?? headLayer.transformOriginX,
-          y: headLayer.rotationOriginY ?? headLayer.transformOriginY
-        }
-      )
-      const radians = (headLayer.rotation * Math.PI) / 180
-      const offsetX = calibration.offsetX * headLayer.scaleX
-      const offsetY = calibration.offsetY * headLayer.scaleY
-      const centerX = anchorPoint.x + offsetX * Math.cos(radians) - offsetY * Math.sin(radians)
-      const centerY = anchorPoint.y + offsetX * Math.sin(radians) + offsetY * Math.cos(radians)
       const w = asset.width
       const h = asset.height
+      const geometry = resolveAnchoredPartGeometry({
+        head: headGeometry,
+        anchor,
+        calibration,
+        assetSize: { width: w, height: h }
+      })
+      const localTransform = resolveAnchoredPartLocalTransform({
+        headSize: headDimensions.value,
+        assetSize: { width: w, height: h },
+        anchor,
+        calibration
+      })
       return {
-        x: Math.round(centerX - w * 0.5),
-        y: Math.round(centerY - h * 0.5),
-        width: w,
-        height: h,
-        transformOriginX: centerX,
-        transformOriginY: centerY,
-        scaleX: headLayer.scaleX * calibration.scale,
-        scaleY: headLayer.scaleY * calibration.scale,
-        localX: anchor.x * headDimensions.value.width + calibration.offsetX - w * 0.5,
-        localY: anchor.y * headDimensions.value.height + calibration.offsetY - h * 0.5,
-        localScaleX: calibration.scale,
-        localScaleY: calibration.scale,
-        localRotation: calibration.rotation,
-        rotation: headLayer.rotation + calibration.rotation
+        ...geometry,
+        x: Math.round(geometry.x),
+        y: Math.round(geometry.y),
+        localX: localTransform.x,
+        localY: localTransform.y,
+        localScaleX: localTransform.scaleX,
+        localScaleY: localTransform.scaleY,
+        localRotation: localTransform.rotation
       }
     }
 
@@ -516,13 +479,8 @@ const renderableLayers = computed<RenderableLayer[]>(() => {
       const isDraft = activeGesture.value?.assetId === mAsset.id
       const calib =
         (isDraft ? draftAccessoryCalibration.value : null) ??
-        mAsset.anchoredCalibrationBySeries?.[effectiveSeries.value.id] ?? {
-          pivot: { x: 0.5, y: 0.5 },
-          offsetX: 0,
-          offsetY: 0,
-          scale: 1,
-          rotation: 0
-        }
+        mAsset.anchoredCalibrationBySeries?.[effectiveSeries.value.id] ??
+        createDefaultAnchoredCalibration()
       const transform = resolveAnchoredLayerTransform(mAsset, anchor, calib)
 
       layers.push({
@@ -561,13 +519,8 @@ const renderableLayers = computed<RenderableLayer[]>(() => {
       const isDraft = activeGesture.value?.assetId === accAsset.id
       const calib =
         (isDraft ? draftAccessoryCalibration.value : null) ??
-        accAsset.anchoredCalibrationBySeries?.[effectiveSeries.value.id] ?? {
-          pivot: { x: 0.5, y: 0.5 },
-          offsetX: 0,
-          offsetY: 0,
-          scale: 1,
-          rotation: 0
-        }
+        accAsset.anchoredCalibrationBySeries?.[effectiveSeries.value.id] ??
+        createDefaultAnchoredCalibration()
       const transform = resolveAnchoredLayerTransform(accAsset, anchor, calib)
 
       layers.push({

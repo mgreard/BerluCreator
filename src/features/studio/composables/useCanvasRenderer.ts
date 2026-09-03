@@ -1,6 +1,6 @@
 import { ref, watchEffect, onScopeDispose, type Ref } from 'vue'
 import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
-import type { RenderableLayer } from './useHierarchyResolver'
+import type { RenderableLayer } from '../rendering'
 import type { StageSettings } from '@core/types/project.types'
 import type { BoxBounds } from '../engine/transform-matrix'
 import type {

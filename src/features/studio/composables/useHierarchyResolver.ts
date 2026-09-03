@@ -2,65 +2,31 @@ import { computed } from 'vue'
 import { useEditorStore } from '@/features/editor/stores/useEditorStore'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
-import type { Asset, AssetCategory } from '@core/types/asset.types'
+import type { Asset } from '@core/types/asset.types'
 import type {
   CharacterGroup,
   EditorGroup,
   EditorLayer,
-  LayerDepthRole,
-  StagePlane
+  LayerDepthRole
 } from '@core/types/editor.types'
 import { clampBackgroundCover } from '../engine/background-cover.engine'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
 import { DEFAULT_RIG_CANVAS } from '../rig-calibration/rig-catalog.service'
 import type { HeadSeriesProfile } from '../rig-calibration/rig-catalog.types'
 import { OPTICAL_DEPTH_PRESETS } from '@core/constants/editor'
-import type { Point2D } from '../engine/transform-matrix'
+import type { RenderableLayer } from '../rendering'
 import {
   buildSplitPolygons,
   isSplitConfigValid
 } from '@/features/desk-split/engine/desk-split.engine'
+import {
+  createDefaultAnchoredCalibration,
+  resolveAnchoredPartGeometry,
+  resolveAnchoredPartLocalTransform,
+  resolveHeadGeometry
+} from '../rig-layout'
 
-export interface RenderableLayer {
-  id: string
-  layerId: string
-  name: string
-  category: AssetCategory
-  groupId: string
-  groupName: string
-  groupKind: EditorGroup['kind']
-  stagePlane: StagePlane
-  groupZIndex: number
-  layerZIndex: number
-  sceneZIndex: number
-  order: number
-  asset: Asset
-  x: number
-  y: number
-  width: number
-  height: number
-  transformOriginX: number
-  transformOriginY: number
-  rotationOriginX?: number
-  rotationOriginY?: number
-  scaleX: number
-  scaleY: number
-  localX: number
-  localY: number
-  localScaleX: number
-  localScaleY: number
-  localRotation: number
-  rotation: number
-  zIndex: number
-  opacity: number
-  muted: boolean
-  locked: boolean
-  isMovable: boolean
-  depthRole: Exclude<LayerDepthRole, 'auto'>
-  opticalDepth: number
-  splitRole?: 'back' | 'front'
-  clipPolygon?: Point2D[]
-}
+export type { RenderableLayer } from '../rendering'
 
 interface CharacterGeometry {
   x: number
@@ -182,25 +148,6 @@ function sceneBand(layer: RenderableLayer, hasSplitDesk: boolean): number {
   return 45
 }
 
-function transformPointAround(
-  point: { x: number; y: number },
-  scaleOrigin: { x: number; y: number },
-  scaleX: number,
-  scaleY: number,
-  rotation: number,
-  rotationOrigin = scaleOrigin
-): { x: number; y: number } {
-  const radians = (rotation * Math.PI) / 180
-  const scaledX = scaleOrigin.x + (point.x - scaleOrigin.x) * scaleX
-  const scaledY = scaleOrigin.y + (point.y - scaleOrigin.y) * scaleY
-  const dx = scaledX - rotationOrigin.x
-  const dy = scaledY - rotationOrigin.y
-  return {
-    x: rotationOrigin.x + dx * Math.cos(radians) - dy * Math.sin(radians),
-    y: rotationOrigin.y + dx * Math.sin(radians) + dy * Math.cos(radians)
-  }
-}
-
 function attachHeadDependents(layers: RenderableLayer[], seriesList: HeadSeriesProfile[]): void {
   for (const dependent of layers) {
     if (dependent.category !== 'mouth' && dependent.category !== 'props_character') continue
@@ -218,36 +165,51 @@ function attachHeadDependents(layers: RenderableLayer[], seriesList: HeadSeriesP
           ? series.propAnchors[slot]
           : undefined
     if (!anchor) continue
-    const calibration = dependent.asset.anchoredCalibrationBySeries?.[series.id] ?? {
-      pivot: { x: 0.5, y: 0.5 },
-      offsetX: 0,
-      offsetY: 0,
-      scale: 1,
-      rotation: 0
-    }
-    const anchorPoint = transformPointAround(
-      { x: head.x + anchor.x * head.width, y: head.y + anchor.y * head.height },
-      { x: head.transformOriginX, y: head.transformOriginY },
-      head.scaleX,
-      head.scaleY,
-      head.rotation,
-      {
-        x: head.transformOriginX,
-        y: head.transformOriginY
-      }
-    )
-    const radians = (head.rotation * Math.PI) / 180
-    const offsetX = calibration.offsetX * head.scaleX
-    const offsetY = calibration.offsetY * head.scaleY
-    const centerX = anchorPoint.x + offsetX * Math.cos(radians) - offsetY * Math.sin(radians)
-    const centerY = anchorPoint.y + offsetX * Math.sin(radians) + offsetY * Math.cos(radians)
-    dependent.x = Math.round(centerX - dependent.width * 0.5)
-    dependent.y = Math.round(centerY - dependent.height * 0.5)
-    dependent.transformOriginX = centerX
-    dependent.transformOriginY = centerY
-    dependent.scaleX = head.scaleX * calibration.scale
-    dependent.scaleY = head.scaleY * calibration.scale
-    dependent.rotation = head.rotation + calibration.rotation
+    const calibration =
+      dependent.asset.anchoredCalibrationBySeries?.[series.id] ??
+      createDefaultAnchoredCalibration()
+    const headGeometry = resolveHeadGeometry({
+      x: head.x,
+      y: head.y,
+      width: head.width,
+      height: head.height,
+      scaleOrigin: { x: head.transformOriginX, y: head.transformOriginY },
+      rotationOrigin: {
+        x: head.rotationOriginX ?? head.transformOriginX,
+        y: head.rotationOriginY ?? head.transformOriginY
+      },
+      scaleX: head.scaleX,
+      scaleY: head.scaleY,
+      rotation: head.rotation
+    })
+    const geometry = resolveAnchoredPartGeometry({
+      head: headGeometry,
+      anchor,
+      calibration,
+      assetSize: { width: dependent.width, height: dependent.height },
+      localUnitScaleX: head.width / Math.max(1, head.asset.width),
+      localUnitScaleY: head.height / Math.max(1, head.asset.height)
+    })
+    const localTransform = resolveAnchoredPartLocalTransform({
+      headSize: head.asset,
+      assetSize: dependent.asset,
+      anchor,
+      calibration
+    })
+    dependent.x = Math.round(geometry.x)
+    dependent.y = Math.round(geometry.y)
+    dependent.transformOriginX = geometry.transformOriginX
+    dependent.transformOriginY = geometry.transformOriginY
+    dependent.rotationOriginX = geometry.rotationOriginX
+    dependent.rotationOriginY = geometry.rotationOriginY
+    dependent.scaleX = geometry.scaleX
+    dependent.scaleY = geometry.scaleY
+    dependent.localX = localTransform.x
+    dependent.localY = localTransform.y
+    dependent.localScaleX = localTransform.scaleX
+    dependent.localScaleY = localTransform.scaleY
+    dependent.localRotation = localTransform.rotation
+    dependent.rotation = geometry.rotation
     dependent.isMovable = false
   }
 }
@@ -458,10 +420,10 @@ function resolveLayer(
       y: resolvedY,
       width,
       height,
-      transformOriginX: finalCenterX,
-      transformOriginY: finalCenterY,
-      rotationOriginX: undefined,
-      rotationOriginY: undefined,
+      transformOriginX: layer.category === 'head' ? neckOriginX : finalCenterX,
+      transformOriginY: layer.category === 'head' ? neckOriginY : finalCenterY,
+      rotationOriginX: layer.category === 'head' ? rotationOriginX : undefined,
+      rotationOriginY: layer.category === 'head' ? rotationOriginY : undefined,
       scaleX,
       scaleY,
       localX: transform.x,

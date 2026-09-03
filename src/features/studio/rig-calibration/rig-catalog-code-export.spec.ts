@@ -23,6 +23,30 @@ function bodyAsset(): Asset {
   }
 }
 
+function mouthAsset(): Asset {
+  return {
+    ...bodyAsset(),
+    id: 'mouth-1',
+    name: 'Bouche principale',
+    category: 'mouth',
+    blobId: 'blob-mouth-1',
+    width: 200,
+    height: 100,
+    source: 'bundled',
+    sourcePath: 'mouth/berlu/main.png',
+    headSeriesId: 'berlu',
+    anchoredCalibrationBySeries: {
+      berlu: {
+        pivot: { x: 0.5, y: 0.5 },
+        offsetX: 12,
+        offsetY: -4,
+        scale: 0.8,
+        rotation: 2
+      }
+    }
+  }
+}
+
 function catalog() {
   const rig = createRigDefinition(bodyAsset())
   rig.headSeries = [
@@ -40,31 +64,46 @@ function catalog() {
 
 describe('export du catalogue de rigs pour le code', () => {
   it('génère un module TypeScript complet et stable', () => {
-    const source = createDefaultRigCatalogModule(catalog())
-    const serializedCatalog = source
-      .slice(source.indexOf(' = ') + 3, source.indexOf('\n\nexport function'))
+    const source = createDefaultRigCatalogModule(catalog(), [mouthAsset()])
+    const serializedBundle = source
+      .slice(
+        source.indexOf(' = ') + 3,
+        source.indexOf('\n\nexport const DEFAULT_RIG_CATALOG_FILE')
+      )
       .trim()
 
     expect(source).toContain("import type { Asset } from '@core/types/asset.types'")
     expect(source).toContain("import type { RigCatalogFile, RigDefinition } from './rig-catalog.types'")
+    expect(source).toContain('DEFAULT_RIG_ASSET_CALIBRATIONS: DefaultRigAssetCalibration[]')
     expect(source).toContain('export const DEFAULT_RIG_CATALOG_FILE: RigCatalogFile =')
     expect(source).toContain('export function getDefaultRigCatalogFile(): RigCatalogFile')
     expect(source).toContain('export function findDefaultRigDefinition(')
-    expect(JSON.parse(serializedCatalog)).toMatchObject({
+    expect(JSON.parse(serializedBundle)).toMatchObject({
+      schema: 'berlu-creator/default-rig-configuration',
+      version: 1,
       exportedAt: '1970-01-01T00:00:00.000Z',
-      defaultRigByCharacter: { berlu: expect.any(String) },
-      headSeries: [{ id: 'berlu' }],
-      rigs: [
+      catalog: {
+        exportedAt: '1970-01-01T00:00:00.000Z',
+        defaultRigByCharacter: { berlu: expect.any(String) },
+        headSeries: [{ id: 'berlu' }],
+        rigs: [
+          {
+            name: 'Corps principal',
+            headSeries: [
+              {
+                enabled: true,
+                defaultScale: 0.5,
+                defaultRotation: 8,
+                defaultHeadAssetKey: 'head:berlu:neutre'
+              }
+            ]
+          }
+        ]
+      },
+      assetCalibrations: [
         {
-          name: 'Corps principal',
-          headSeries: [
-            {
-              enabled: true,
-              defaultScale: 0.5,
-              defaultRotation: 8,
-              defaultHeadAssetKey: 'head:berlu:neutre'
-            }
-          ]
+          sourcePath: 'mouth/berlu/main.png',
+          calibrations: { berlu: { offsetX: 12, offsetY: -4, scale: 0.8, rotation: 2 } }
         }
       ]
     })

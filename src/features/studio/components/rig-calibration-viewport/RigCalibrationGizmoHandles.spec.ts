@@ -137,4 +137,32 @@ describe('poignées tactiles du calibreur', () => {
       anchor: 'neckPivot'
     })
   })
+
+  it('positionne un accessoire avec son pivot configuré', () => {
+    const calibration: AnchoredAssetCalibration = {
+      pivot: { x: 0.25, y: 0.75 },
+      offsetX: 10,
+      offsetY: -20,
+      scale: 1,
+      rotation: 15
+    }
+    const wrapper = mount(RigCalibrationGizmoAccessory, {
+      props: {
+        anchor: { x: 0.5, y: 0.4 },
+        headWidth: 400,
+        headHeight: 500,
+        calibration,
+        assetWidth: 200,
+        assetHeight: 100,
+        pivotStageX: 300,
+        pivotStageY: 240
+      }
+    })
+
+    const style = wrapper.attributes('style')
+    expect(style).toContain('left: 160px')
+    expect(style).toContain('top: 105px')
+    expect(style).toContain('transform-origin: 25% 75%')
+    expect(style).toContain('rotate(15deg) scale(1)')
+  })
 })

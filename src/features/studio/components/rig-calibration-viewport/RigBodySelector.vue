@@ -5,6 +5,7 @@ import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useRigRuntime } from '../../rig-calibration/useRigRuntime'
 import { blobCacheService } from '@infrastructure/storage/blob-cache.service'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Text } from '@/components/ui/text'
 import type { RigDefinition } from '../../rig-calibration/rig-catalog.types'
@@ -58,6 +59,14 @@ function onSelectRig(rig: RigDefinition): void {
   rigCatalog.selectedRigId = rig.id
   rigRuntime.syncRigLayers(rig.id)
 }
+
+function rigButtonClass(rig: RigDefinition): string {
+  const stateClass =
+    selectedRigId.value === rig.id
+      ? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_16px_rgba(16,185,129,0.25)] ring-1 ring-emerald-400'
+      : 'border-border-default bg-bg-elevated/70 hover:border-border-subtle hover:bg-bg-elevated'
+  return `group relative h-24 w-32 shrink-0 rounded-xl border p-2 text-left transition-all duration-200 outline-none [&>span]:flex [&>span]:size-full [&>span]:flex-col [&>span]:items-center [&>span]:justify-between ${stateClass}`
+}
 </script>
 
 <template>
@@ -84,16 +93,15 @@ function onSelectRig(rig: RigDefinition): void {
     <div
       class="flex items-center gap-3 overflow-x-auto pb-1 pt-0.5 scrollbar-thin scrollbar-thumb-border-subtle hover:scrollbar-thumb-border-default"
     >
-      <button
+      <Button
         v-for="rig in rigs"
         :key="rig.id"
-        type="button"
-        class="group relative flex h-24 w-32 shrink-0 flex-col items-center justify-between rounded-xl border p-2 text-left transition-all duration-200 outline-none"
-        :class="[
-          selectedRigId === rig.id
-            ? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_16px_rgba(16,185,129,0.25)] ring-1 ring-emerald-400'
-            : 'border-border-default bg-bg-elevated/70 hover:border-border-subtle hover:bg-bg-elevated'
-        ]"
+        variant="ghost"
+        size="xs"
+        :active="selectedRigId === rig.id"
+        :aria-pressed="selectedRigId === rig.id"
+        :aria-label="rig.name"
+        :class="rigButtonClass(rig)"
         @click="onSelectRig(rig)"
       >
         <!-- Body Thumbnail -->
@@ -119,14 +127,14 @@ function onSelectRig(rig: RigDefinition): void {
           </span>
           <Badge
             v-if="rig.calibrated"
-            size="xs"
+            size="sm"
             variant="success"
             class="h-4 px-1 text-[10px] uppercase font-bold"
           >
             ✓
           </Badge>
         </div>
-      </button>
+      </Button>
 
       <div
         v-if="rigs.length === 0"

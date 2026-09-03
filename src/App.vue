@@ -147,7 +147,7 @@ watch(isSavedSnapshotsOpen, (snapshotsOpen) => {
 
 <template>
   <div
-    class="flex min-h-0 min-w-0 flex-col overflow-hidden bg-bg-base font-sans text-text-primary select-none"
+    class="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-bg-base font-sans text-text-primary select-none"
   >
     <StudioWorkspaceLayout v-model:compact-pane="compactPane">
       <template #header>

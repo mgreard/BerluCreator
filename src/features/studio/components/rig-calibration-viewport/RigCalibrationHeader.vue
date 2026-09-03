@@ -121,7 +121,7 @@ function onFinish(): void {
 }
 
 function onExportAllRigConfigurations(): void {
-  downloadDefaultRigCatalogModule(rigCatalog.exportCatalog())
+  downloadDefaultRigCatalogModule(rigCatalog.exportCatalog(), assetStore.assets)
   toast.success(
     'Configurations exportées',
     'Le module TypeScript peut maintenant être ajouté au code comme catalogue de rigs par défaut.'

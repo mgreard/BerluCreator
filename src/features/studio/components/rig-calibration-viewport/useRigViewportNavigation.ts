@@ -1,66 +1,28 @@
 import { ref, computed } from 'vue'
+import {
+  clampViewportZoom,
+  computeBoundingBoxFit,
+  zoomViewportTo,
+  type BoundingBox,
+  type ViewportFit,
+  type ViewportPadding,
+  type ViewportPoint
+} from '../../engine/viewport-navigation'
+
+export { computeBoundingBoxFit }
+export type { BoundingBox, ViewportFit, ViewportPadding }
 
 export const MIN_RIG_VIEWPORT_ZOOM = 0.01
 export const MAX_RIG_VIEWPORT_ZOOM = 4
 
-export interface Point {
-  x: number
-  y: number
-}
-
-export interface BoundingBox {
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
-export interface ViewportPadding {
-  top?: number
-  bottom?: number
-  left?: number
-  right?: number
-}
-
-export interface ViewportFit {
-  zoom: number
-  panX: number
-  panY: number
-}
+export type Point = ViewportPoint
 
 export function clampRigViewportZoom(value: number): number {
-  return Math.max(MIN_RIG_VIEWPORT_ZOOM, Math.min(MAX_RIG_VIEWPORT_ZOOM, Number(value.toFixed(2))))
-}
-
-export function computeBoundingBoxFit(
-  containerWidth: number,
-  containerHeight: number,
-  stageWidth: number,
-  stageHeight: number,
-  box: BoundingBox,
-  padding: ViewportPadding = { top: 60, bottom: 40, left: 48, right: 48 }
-): ViewportFit | null {
-  if (containerWidth <= 0 || containerHeight <= 0 || box.width <= 0 || box.height <= 0) {
-    return null
-  }
-
-  const padTop = Math.max(0, padding.top ?? 60)
-  const padBottom = Math.max(0, padding.bottom ?? 40)
-  const padLeft = Math.max(0, padding.left ?? 48)
-  const padRight = Math.max(0, padding.right ?? 48)
-  const availableWidth = Math.max(1, containerWidth - padLeft - padRight)
-  const availableHeight = Math.max(1, containerHeight - padTop - padBottom)
-  const exactZoom = Math.min(availableWidth / box.width, availableHeight / box.height, 2)
-  // Arrondir vers le bas empêche qu'un bord soit rogné par un arrondi de zoom.
-  const zoom = Math.max(Number.EPSILON, Math.floor(exactZoom * 10000) / 10000)
-  const boxCenterX = box.x + box.width / 2
-  const boxCenterY = box.y + box.height / 2
-
-  return {
-    zoom,
-    panX: Math.round((padLeft - padRight) / 2 - (boxCenterX - stageWidth / 2) * zoom),
-    panY: Math.round((padTop - padBottom) / 2 - (boxCenterY - stageHeight / 2) * zoom)
-  }
+  return clampViewportZoom(value, {
+    minZoom: MIN_RIG_VIEWPORT_ZOOM,
+    maxZoom: MAX_RIG_VIEWPORT_ZOOM,
+    precision: 2
+  })
 }
 
 export function screenDeltaToLocal(
@@ -186,9 +148,20 @@ export function useRigViewportNavigation() {
     const mouseX = e.clientX - containerRect.left - containerRect.width / 2
     const mouseY = e.clientY - containerRect.top - containerRect.height / 2
 
-    panX.value = mouseX - ((mouseX - panX.value) / zoom.value) * newZoom
-    panY.value = mouseY - ((mouseY - panY.value) / zoom.value) * newZoom
-    zoom.value = newZoom
+    const next = zoomViewportTo(
+      { zoom: zoom.value, panX: panX.value, panY: panY.value },
+      newZoom,
+      { x: mouseX, y: mouseY },
+      { width: containerRect.width, height: containerRect.height },
+      {
+        minZoom: MIN_RIG_VIEWPORT_ZOOM,
+        maxZoom: MAX_RIG_VIEWPORT_ZOOM,
+        precision: 2
+      }
+    )
+    zoom.value = next.zoom
+    panX.value = next.panX
+    panY.value = next.panY
   }
 
   return {
