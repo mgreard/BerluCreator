@@ -232,8 +232,8 @@ function attachHeadDependents(layers: RenderableLayer[], seriesList: HeadSeriesP
       head.scaleY,
       head.rotation,
       {
-        x: head.rotationOriginX ?? head.transformOriginX,
-        y: head.rotationOriginY ?? head.transformOriginY
+        x: head.transformOriginX,
+        y: head.transformOriginY
       }
     )
     const radians = (head.rotation * Math.PI) / 180
@@ -241,8 +241,8 @@ function attachHeadDependents(layers: RenderableLayer[], seriesList: HeadSeriesP
     const offsetY = calibration.offsetY * head.scaleY
     const centerX = anchorPoint.x + offsetX * Math.cos(radians) - offsetY * Math.sin(radians)
     const centerY = anchorPoint.y + offsetX * Math.sin(radians) + offsetY * Math.cos(radians)
-    dependent.x = centerX - dependent.width * calibration.pivot.x
-    dependent.y = centerY - dependent.height * calibration.pivot.y
+    dependent.x = Math.round(centerX - dependent.width * 0.5)
+    dependent.y = Math.round(centerY - dependent.height * 0.5)
     dependent.transformOriginX = centerX
     dependent.transformOriginY = centerY
     dependent.scaleX = head.scaleX * calibration.scale
@@ -458,10 +458,10 @@ function resolveLayer(
       y: resolvedY,
       width,
       height,
-      transformOriginX: layer.category === 'head' ? neckOriginX : finalCenterX,
-      transformOriginY: layer.category === 'head' ? neckOriginY : finalCenterY,
-      rotationOriginX: layer.category === 'head' ? rotationOriginX : undefined,
-      rotationOriginY: layer.category === 'head' ? rotationOriginY : undefined,
+      transformOriginX: finalCenterX,
+      transformOriginY: finalCenterY,
+      rotationOriginX: undefined,
+      rotationOriginY: undefined,
       scaleX,
       scaleY,
       localX: transform.x,

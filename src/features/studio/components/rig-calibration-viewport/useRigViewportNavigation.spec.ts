@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   clampRigViewportZoom,
+  computeBoundingBoxFit,
   normalizeRotation,
   pointerAngle,
   screenDeltaToLocal,
@@ -8,10 +9,43 @@ import {
 } from './useRigViewportNavigation'
 
 describe('useRigViewportNavigation geometry', () => {
-  it('limite le zoom entre 25 % et 400 %', () => {
-    expect(clampRigViewportZoom(0.1)).toBe(0.25)
+  it('limite le zoom entre 1 % et 400 %', () => {
+    expect(clampRigViewportZoom(0.001)).toBe(0.01)
     expect(clampRigViewportZoom(1.234)).toBe(1.23)
     expect(clampRigViewportZoom(8)).toBe(4)
+  })
+
+  it.each([
+    {
+      label: 'portrait très haut',
+      box: { x: 900, y: 100, width: 600, height: 3200 },
+      container: { width: 720, height: 480 }
+    },
+    {
+      label: 'corps très large',
+      box: { x: 100, y: 900, width: 3600, height: 700 },
+      container: { width: 640, height: 720 }
+    }
+  ])('garde un $label entier dans la marge de sécurité', ({ box, container }) => {
+    const padding = { top: 72, bottom: 40, left: 56, right: 56 }
+    const stage = { width: 4000, height: 3600 }
+    const fit = computeBoundingBoxFit(
+      container.width,
+      container.height,
+      stage.width,
+      stage.height,
+      box,
+      padding
+    )!
+    const left = container.width / 2 + (box.x - stage.width / 2) * fit.zoom + fit.panX
+    const top = container.height / 2 + (box.y - stage.height / 2) * fit.zoom + fit.panY
+    const right = left + box.width * fit.zoom
+    const bottom = top + box.height * fit.zoom
+
+    expect(left).toBeGreaterThanOrEqual(padding.left - 1)
+    expect(top).toBeGreaterThanOrEqual(padding.top - 1)
+    expect(right).toBeLessThanOrEqual(container.width - padding.right + 1)
+    expect(bottom).toBeLessThanOrEqual(container.height - padding.bottom + 1)
   })
 
   it('convertit un déplacement écran dans le repère local zoomé et tourné', () => {

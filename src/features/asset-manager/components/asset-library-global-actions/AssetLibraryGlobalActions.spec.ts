@@ -45,7 +45,7 @@ describe('AssetLibraryGlobalActions', () => {
     setActivePinia(createPinia())
   })
 
-  it('affiche Projet, Importer et Rigs dans cet ordre', () => {
+  it('affiche Projet, Importer et Calibrer un personnage dans cet ordre', () => {
     const wrapper = mount(AssetLibraryGlobalActions, {
       global: {
         stubs: {
@@ -58,7 +58,7 @@ describe('AssetLibraryGlobalActions', () => {
     const buttons = wrapper.findAll('button')
     expect(buttons[0]?.text()).toBe('Projet')
     expect(buttons[1]?.text()).toContain('Importer')
-    expect(buttons[2]?.text()).toContain('Rigs')
+    expect(buttons[2]?.text()).toContain('Calibrer un personnage')
   })
 
   it('ouvre la modale avec la sous-catégorie active', async () => {
@@ -107,6 +107,6 @@ describe('AssetLibraryGlobalActions', () => {
     await wrapper.get('[data-library-action="rigs"]').trigger('click')
 
     expect(rigCatalog.isCalibrationOpen).toBe(true)
-    expect(wrapper.get('button[aria-pressed="true"]').text()).toContain('Rigs')
+    expect(wrapper.get('button[aria-pressed="true"]').text()).toContain('Calibrer un personnage')
   })
 })

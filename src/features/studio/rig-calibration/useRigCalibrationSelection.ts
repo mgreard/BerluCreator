@@ -30,6 +30,10 @@ export function useRigCalibrationSelection() {
     if (rigCatalog.calibrationTargetId !== asset.id) {
       rigCatalog.calibrationTargetId = asset.id
     }
+    rigCatalog.calibrationTool =
+      asset.category === 'props_character' || asset.category === 'mouth'
+        ? 'accessory'
+        : 'head'
     if (assetStore.selectedAssetId !== asset.id) {
       assetStore.selectAsset(asset.id)
     }

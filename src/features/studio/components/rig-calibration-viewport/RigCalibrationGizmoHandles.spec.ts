@@ -50,7 +50,7 @@ describe('poignées tactiles du calibreur', () => {
     }
   })
 
-  it('contre-redimensionne aussi les poignées de pivot, taille et rotation des accessoires', () => {
+  it('contre-redimensionne aussi les poignées de taille et rotation des accessoires', () => {
     const calibration: AnchoredAssetCalibration = {
       pivot: { x: 0.5, y: 0.5 },
       offsetX: 0,
@@ -74,9 +74,9 @@ describe('poignées tactiles du calibreur', () => {
     })
 
     const handles = wrapper.findAll(
-      '[data-testid="accessory-pivot-handle"], [data-testid="accessory-resize-handle"], [data-testid="accessory-rotation-handle"]'
+      '[data-testid="accessory-resize-handle"], [data-testid="accessory-rotation-handle"]'
     )
-    expect(handles).toHaveLength(4)
+    expect(handles).toHaveLength(3)
     for (const handle of handles) {
       expectTouchTargetClasses(handle.element)
       expect(handle.attributes('style')).toContain('translate(-800%, -800%)')
@@ -85,9 +85,6 @@ describe('poignées tactiles du calibreur', () => {
     }
     expect(wrapper.get('[data-testid="accessory-rotation-handle"]').attributes('style')).toContain(
       'top: -704px'
-    )
-    expect(wrapper.get('[data-testid="accessory-pivot-marker"]').classes()).toEqual(
-      expect.arrayContaining(['h-6', 'w-6', 'sm:h-5', 'sm:w-5'])
     )
     expect(wrapper.get('[data-testid="accessory-rotation-marker"]').classes()).toEqual(
       expect.arrayContaining(['h-7', 'w-7', 'sm:h-6', 'sm:w-6'])

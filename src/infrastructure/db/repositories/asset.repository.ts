@@ -105,6 +105,9 @@ export class AssetRepository {
   async deleteCascade(id: string): Promise<number> {
     const asset = await db.assets.get(id)
     if (!asset) return 0
+    if (asset.source === 'bundled') {
+      throw new Error('Les assets de base ne peuvent pas être supprimés.')
+    }
 
     return await db.transaction(
       'rw',

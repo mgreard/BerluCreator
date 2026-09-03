@@ -10,6 +10,11 @@ import { isActiveSelectionHit, shouldTargetWholeGroup } from '../engine/selectio
 import { clampBackgroundCover } from '../engine/background-cover.engine'
 import { resolveStagePlacementZIndexes } from '../engine/stage-layer-placement'
 import {
+  panViewport,
+  zoomViewportAt,
+  type ViewportNavigation
+} from '../engine/viewport-navigation'
+import {
   computeResizeScales,
   computeTransformedBounds,
   type BoxBounds,
@@ -58,6 +63,7 @@ const rigRuntime = useRigRuntime()
 
 const stage = computed(() => projectStore.currentProject.stage)
 const canvasRef = useTemplateRef<HTMLCanvasElement>('canvas')
+const stageViewportRef = useTemplateRef<HTMLDivElement>('stageViewport')
 const { activeLayers } = useHierarchyResolver()
 const isRigCalibrationOpen = computed(() => rigCatalog.isCalibrationOpen)
 
@@ -116,6 +122,25 @@ const activeSelectedGroup = computed(() => {
 const isGroupTarget = computed(() => {
   return editScope.value === 'group' && Boolean(activeSelectedGroup.value)
 })
+
+function focusRigInAssetLibrary(group: CharacterGroup): void {
+  assetStore.focusCharacterInLibrary(group.characterKey)
+}
+
+function focusPropInAssetLibrary(layer: RenderableLayer, group?: CharacterGroup): void {
+  if (layer.category === 'props_character' && group) {
+    assetStore.focusCharacterInLibrary(group.characterKey, {
+      assetId: layer.asset.id,
+      categoryId: 'props-character'
+    })
+    return
+  }
+  assetStore.focusStageAssetInLibrary(layer.asset.id, layer.category)
+}
+
+function isPropLayer(layer: RenderableLayer): boolean {
+  return ['props_character', 'props_desk', 'props_set'].includes(layer.category)
+}
 
 function closeRigCalibration(): void {
   rigCatalog.closeCalibration()
@@ -371,10 +396,6 @@ function toggleCameraFrame() {
   )
 }
 
-function commitCameraFrame(camera: CameraFrame) {
-  editorStore.updateCamera(camera)
-}
-
 function beginDepthOfFieldInteraction(label: string) {
   if (hasDepthOfFieldGesture) return
   hasDepthOfFieldGesture = true
@@ -519,6 +540,89 @@ const isRotating = ref(false)
 const activeHandle = ref<ResizeHandle | null>(null)
 const hoveredHandle = ref<ResizeHandle | null>(null)
 const hoveredLayer = ref<RenderableLayer | null>(null)
+const viewportNavigation = ref<ViewportNavigation>({ zoom: 1, panX: 0, panY: 0 })
+const viewportPanGesture = ref<{
+  pointerId: number
+  startX: number
+  startY: number
+  navigation: ViewportNavigation
+} | null>(null)
+
+const viewportTransformStyle = computed(() => ({
+  transform: `translate3d(${viewportNavigation.value.panX}px, ${viewportNavigation.value.panY}px, 0) scale(${viewportNavigation.value.zoom})`,
+  transformOrigin: 'center center'
+}))
+
+function viewportSize(): { width: number; height: number } | null {
+  const viewport = stageViewportRef.value
+  if (!viewport?.offsetWidth || !viewport.offsetHeight) return null
+  return { width: viewport.offsetWidth, height: viewport.offsetHeight }
+}
+
+function onViewportWheel(event: WheelEvent): void {
+  if (!activeCamera.value.enabled || event.deltaY === 0) return
+  const viewport = stageViewportRef.value
+  const size = viewportSize()
+  if (!viewport || !size) return
+  const rect = viewport.getBoundingClientRect()
+  event.preventDefault()
+  viewportNavigation.value = zoomViewportAt(
+    viewportNavigation.value,
+    event.deltaY,
+    {
+      x: event.clientX - (rect.left + rect.width / 2),
+      y: event.clientY - (rect.top + rect.height / 2)
+    },
+    size
+  )
+}
+
+function beginViewportPan(event: PointerEvent): boolean {
+  if (!activeCamera.value.enabled || viewportNavigation.value.zoom <= 1 || event.button !== 1) {
+    return false
+  }
+  event.preventDefault()
+  event.stopPropagation()
+  stageViewportRef.value?.setPointerCapture(event.pointerId)
+  viewportPanGesture.value = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    navigation: { ...viewportNavigation.value }
+  }
+  return true
+}
+
+function updateViewportPan(event: PointerEvent): boolean {
+  const gesture = viewportPanGesture.value
+  const size = viewportSize()
+  if (!gesture || gesture.pointerId !== event.pointerId || !size) return false
+  event.preventDefault()
+  viewportNavigation.value = panViewport(
+    gesture.navigation,
+    event.clientX - gesture.startX,
+    event.clientY - gesture.startY,
+    size
+  )
+  return true
+}
+
+function endViewportPan(event: PointerEvent): boolean {
+  const gesture = viewportPanGesture.value
+  if (!gesture || gesture.pointerId !== event.pointerId) return false
+  viewportPanGesture.value = null
+  if (stageViewportRef.value?.hasPointerCapture(event.pointerId)) {
+    stageViewportRef.value.releasePointerCapture(event.pointerId)
+  }
+  return true
+}
+
+watch(
+  () => activeCamera.value.enabled,
+  (enabled) => {
+    if (!enabled) viewportNavigation.value = { zoom: 1, panX: 0, panY: 0 }
+  }
+)
 
 const dragStartPointer = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 const dragStartBounds = ref<BoxBounds>({ x: 0, y: 0, width: 0, height: 0 })
@@ -834,6 +938,14 @@ function onCanvasPointerDown(e: PointerEvent) {
     })()
 
     if (isOpaqueOnActiveSelection) {
+      if (isGroupTarget.value && activeSelectedGroup.value?.kind === 'character') {
+        focusRigInAssetLibrary(activeSelectedGroup.value)
+      } else if (activeSelectedLayer.value && isPropLayer(activeSelectedLayer.value)) {
+        focusPropInAssetLibrary(
+          activeSelectedLayer.value,
+          activeSelectedGroup.value?.kind === 'character' ? activeSelectedGroup.value : undefined
+        )
+      }
       editorStore.beginGesture('Déplacer la sélection')
       isDragging.value = true
       dragStartPointer.value = { ...pos }
@@ -870,8 +982,12 @@ function onCanvasPointerDown(e: PointerEvent) {
     } else {
       editorStore.selectLayerForEditing(hit.layerId)
     }
+    if (hitGroup?.kind === 'character' && selectWholeGroup) focusRigInAssetLibrary(hitGroup)
+    else if (isPropLayer(hit)) {
+      focusPropInAssetLibrary(hit, hitGroup?.kind === 'character' ? hitGroup : undefined)
+    }
     editorStore.beginGesture('Déplacer la sélection')
-    assetStore.selectAsset(hit.asset.id)
+    assetStore.selectAsset(selectWholeGroup ? null : hit.asset.id)
 
     if (hit.locked) return
 
@@ -898,6 +1014,18 @@ function onCanvasPointerDown(e: PointerEvent) {
       }
     }
   }
+}
+
+function onStagePointerDown(event: PointerEvent): void {
+  if (!beginViewportPan(event)) onCanvasPointerDown(event)
+}
+
+function onStagePointerMove(event: PointerEvent): void {
+  if (!updateViewportPan(event)) onCanvasPointerMove(event)
+}
+
+function onStagePointerUp(event: PointerEvent): void {
+  if (!endViewportPan(event)) onCanvasPointerUp(event)
 }
 
 function onCanvasPointerMove(e: PointerEvent) {
@@ -982,9 +1110,8 @@ function onCanvasPointerMove(e: PointerEvent) {
         ) {
           const rig = rigRuntime.activeRigForGroup(activeSelectedGroup.value)
           const series = rigCatalog.seriesById(activeSelectedLayer.value.asset.headSeriesId)
-          const base = rig && series
-            ? headCalibration(rig, series, activeSelectedLayer.value.asset)
-            : null
+          const base =
+            rig && series ? headCalibration(rig, series, activeSelectedLayer.value.asset) : null
           if (rig && base) {
             const offset = clampHeadOffset(
               { x: newX - base.x, y: newY - base.y },
@@ -1037,7 +1164,8 @@ function onCanvasDoubleClick(e: MouseEvent) {
     hit &&
     ['head', 'mouth', 'props_character'].includes(hit.category) &&
     editorStore.currentDocument.groups.some(
-      (group) => group.id === hit.groupId && group.kind === 'character' && group.activeMode === 'rig'
+      (group) =>
+        group.id === hit.groupId && group.kind === 'character' && group.activeMode === 'rig'
     )
   ) {
     const head = activeLayers.value.find(
@@ -1076,7 +1204,12 @@ function onCanvasDoubleClick(e: MouseEvent) {
     } else {
       editorStore.selectLayerForEditing(hit.layerId)
     }
-    assetStore.selectAsset(hit.asset.id)
+    if (hitGroup?.kind === 'character' && editorStore.editScope === 'group') {
+      focusRigInAssetLibrary(hitGroup)
+    } else if (isPropLayer(hit)) {
+      focusPropInAssetLibrary(hit, hitGroup?.kind === 'character' ? hitGroup : undefined)
+    }
+    assetStore.selectAsset(editorStore.editScope === 'group' ? null : hit.asset.id)
   } else if (!hit && !editorStore.hasActiveGesture) {
     if (editorStore.editScope === 'head' && editorStore.selectedGroupId) {
       editorStore.selectGroupForEditing(editorStore.selectedGroupId)
@@ -1101,13 +1234,16 @@ function onCanvasDoubleClick(e: MouseEvent) {
       :style="{
         aspectRatio: `${stage.width} / ${stage.height}`,
         maxHeight: '100%',
-        maxWidth: '100%'
+        maxWidth: '100%',
+        ...viewportTransformStyle
       }"
-      @pointerdown="onCanvasPointerDown"
-      @pointermove="onCanvasPointerMove"
-      @pointerup="onCanvasPointerUp"
-      @pointercancel="onCanvasPointerUp"
-      @pointerleave="onCanvasPointerUp"
+      :data-viewport-zoom="viewportNavigation.zoom.toFixed(3)"
+      @wheel="onViewportWheel"
+      @pointerdown="onStagePointerDown"
+      @pointermove="onStagePointerMove"
+      @pointerup="onStagePointerUp"
+      @pointercancel="onStagePointerUp"
+      @pointerleave="onStagePointerUp"
       @dblclick="onCanvasDoubleClick"
     >
       <canvas
@@ -1122,7 +1258,6 @@ function onCanvasDoubleClick(e: MouseEvent) {
         v-model="activeCamera"
         :stage-width="stage.width"
         :stage-height="stage.height"
-        @commit="commitCameraFrame"
       />
 
       <DepthOfFieldOverlay

@@ -5,6 +5,8 @@ import type {
   NormalizedPoint
 } from '@core/types/asset.types'
 
+export type RigCalibrationTool = 'body' | 'head' | 'anchors' | 'accessory'
+
 export const RIG_CATALOG_SCHEMA = 'berlu-creator/rig-catalog' as const
 export const RIG_CATALOG_VERSION = 7 as const
 export const RIG_CATALOG_STORAGE_KEY = 'berlu-creator:rig-catalog:v7' as const

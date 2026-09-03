@@ -3,4 +3,6 @@ export { default as RigCalibrationGizmoNeck } from './RigCalibrationGizmoNeck.vu
 export { default as RigCalibrationGizmoHead } from './RigCalibrationGizmoHead.vue'
 export { default as RigCalibrationGizmoAnchors } from './RigCalibrationGizmoAnchors.vue'
 export { default as RigCalibrationGizmoAccessory } from './RigCalibrationGizmoAccessory.vue'
+export { default as RigBodySelector } from './RigBodySelector.vue'
+export { default as RigCalibrationHeader } from './RigCalibrationHeader.vue'
 export * from './useRigViewportNavigation'

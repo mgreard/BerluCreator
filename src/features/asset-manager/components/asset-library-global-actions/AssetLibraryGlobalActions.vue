@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { AssetCategory } from '@core/types/asset.types'
 import type { CharacterGroup } from '@core/types/editor.types'
@@ -54,30 +54,39 @@ function toggleRigCalibration(): void {
       (candidate): candidate is CharacterGroup =>
         candidate.kind === 'character' && candidate.activeMode === 'rig'
     )
-  if (!group) return
 
-  const rig = rigRuntime.activeRigForGroup(group) ?? rigCatalog.defaultRig(group.characterKey)
+  const rig =
+    (group ? (rigRuntime.activeRigForGroup(group) ?? rigCatalog.defaultRig(group.characterKey)) : undefined) ??
+    rigCatalog.rigById(rigCatalog.selectedRigId) ??
+    rigCatalog.rigs[0]
+
   if (!rig) {
     toast.warning('Rig indisponible', 'Aucune configuration de corps n’est disponible.')
     return
   }
 
-  let preferredLayer =
-    editorStore.currentDocument.layers.find(
-      (layer) => layer.groupId === group.id && !layer.muted && layer.category === 'body'
-    ) ??
-    editorStore.currentDocument.layers.find(
-      (layer) => layer.groupId === group.id && !layer.muted && layer.category !== 'perso'
-    )
-  if (!preferredLayer || group.activeMode !== 'rig') {
+  let preferredLayer = group
+    ? (editorStore.currentDocument.layers.find(
+        (layer) => layer.groupId === group.id && !layer.muted && layer.category === 'body'
+      ) ??
+      editorStore.currentDocument.layers.find(
+        (layer) => layer.groupId === group.id && !layer.muted && layer.category !== 'perso'
+      ))
+    : undefined
+
+  if (group && (!preferredLayer || group.activeMode !== 'rig')) {
     preferredLayer = rigRuntime.activateRig(rig) ?? undefined
   }
-  if (!preferredLayer) return
 
   rigCatalog.selectedRigId = rig.id
   rigCatalog.openCalibration(rig.id)
-  editorStore.selectRigLayerForCalibration(preferredLayer.id)
-  assetStore.selectAsset(preferredLayer.assetId)
+  if (preferredLayer) {
+    editorStore.selectRigLayerForCalibration(preferredLayer.id)
+    assetStore.selectAsset(preferredLayer.assetId)
+  } else {
+    const body = rigCatalog.resolveBodyAsset(rig, assetStore.assets)
+    if (body) assetStore.selectAsset(body.id)
+  }
 }
 </script>
 
@@ -178,7 +187,7 @@ function toggleRigCalibration(): void {
       @click="toggleRigCalibration"
     >
       <Icon name="construction" size="xs" class="text-primary" />
-      <span>Rigs</span>
+      <span>Calibrer un personnage</span>
     </Button>
 
     <Button

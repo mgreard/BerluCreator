@@ -19,10 +19,21 @@ import { Heading } from '@/components/ui/heading'
 import { SelectableSurface } from '@/components/ui/selectable-surface'
 import { Skeleton } from '@/components/ui/skeleton'
 
-const { asset, selected = false, allowDuplicate = false, disabled = false } = defineProps<{
+const {
+  asset,
+  selected = false,
+  focused = false,
+  allowDuplicate = false,
+  canDelete = false,
+  canRemoveFromViewport = false,
+  disabled = false
+} = defineProps<{
   asset: Asset
   selected?: boolean
+  focused?: boolean
   allowDuplicate?: boolean
+  canDelete?: boolean
+  canRemoveFromViewport?: boolean
   disabled?: boolean
 }>()
 
@@ -30,6 +41,7 @@ const emit = defineEmits<{
   (e: 'select', asset: Asset): void
   (e: 'duplicate', asset: Asset): void
   (e: 'delete', asset: Asset): void
+  (e: 'remove-from-viewport', asset: Asset): void
   (e: 'split', asset: Asset): void
 }>()
 
@@ -125,6 +137,8 @@ function onPreviewError(): void {
     role="option"
     :selected="selected"
     :data-selected="selected"
+    :data-focused="focused"
+    :aria-current="focused ? 'true' : undefined"
     :data-disabled="disabled"
     :style="accentStyle"
     @click="emit('select', asset)"
@@ -132,7 +146,8 @@ function onPreviewError(): void {
     <span
       v-if="disabled"
       class="absolute inset-0 z-20 flex items-end justify-center rounded-xl bg-black/35 p-2 text-center text-[10px] font-semibold text-white backdrop-blur-[1px]"
-    >Configurer la série</span>
+      >Configurer la série</span
+    >
     <div
       ref="previewContainer"
       class="asset-preview relative w-full aspect-square rounded-lg flex items-center justify-center overflow-hidden border"
@@ -169,6 +184,7 @@ function onPreviewError(): void {
       </div>
 
       <IconButton
+        v-if="canDelete"
         icon="delete"
         size="xs"
         variant="ghost"
@@ -176,6 +192,16 @@ function onPreviewError(): void {
         title="Supprimer l’asset"
         class="asset-delete absolute right-1.5 top-1.5 z-10 size-7 border border-border-default bg-bg-elevated/90 p-0 text-text-muted shadow-sm hover:border-danger/40 hover:text-danger"
         @click.stop="emit('delete', asset)"
+      />
+      <IconButton
+        v-if="canRemoveFromViewport"
+        icon="visibility_off"
+        size="xs"
+        variant="ghost"
+        :aria-label="`Retirer ${asset.name} du viewport`"
+        title="Retirer du viewport"
+        class="asset-remove absolute left-1.5 top-1.5 z-10 size-7 border border-primary/40 bg-bg-elevated/95 p-0 text-primary shadow-sm hover:border-primary hover:bg-primary/15"
+        @click.stop="emit('remove-from-viewport', asset)"
       />
       <IconButton
         v-if="allowDuplicate"
@@ -242,19 +268,32 @@ function onPreviewError(): void {
   border-color: rgb(255 255 255 / 8%);
   background: rgb(20 20 28 / 32%);
   box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 8%);
-  transition: border-color 300ms ease-out, background-color 300ms ease-out, box-shadow 300ms ease-out;
+  transition:
+    border-color 300ms ease-out,
+    background-color 300ms ease-out,
+    box-shadow 300ms ease-out;
 }
 
 .asset-card:hover {
   border-color: color-mix(in srgb, var(--asset-accent) 42%, transparent);
   background: color-mix(in srgb, var(--asset-accent) 4%, rgb(20 20 28 / 32%));
-  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 15%), 0 10px 24px rgb(0 0 0 / 16%);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 15%),
+    0 10px 24px rgb(0 0 0 / 16%);
 }
 
 .asset-card[data-selected='true'] {
   border-color: color-mix(in srgb, var(--asset-accent) 80%, white 10%);
   background: color-mix(in srgb, var(--asset-accent) 7%, rgb(20 20 28 / 34%));
-  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 18%), 0 0 0 1px color-mix(in srgb, var(--asset-accent) 48%, transparent), 0 0 18px color-mix(in srgb, var(--asset-accent) 12%, transparent);
+  box-shadow:
+    inset 0 1px 0 0 rgb(255 255 255 / 18%),
+    0 0 0 1px color-mix(in srgb, var(--asset-accent) 48%, transparent),
+    0 0 18px color-mix(in srgb, var(--asset-accent) 12%, transparent);
+}
+
+.asset-card[data-focused='true'] {
+  outline: 2px solid color-mix(in srgb, var(--asset-accent) 78%, white 12%);
+  outline-offset: 2px;
 }
 
 .asset-preview {
@@ -265,7 +304,11 @@ function onPreviewError(): void {
     linear-gradient(-45deg, rgb(255 255 255 / 3.5%) 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, rgb(255 255 255 / 3.5%) 75%),
     linear-gradient(-45deg, transparent 75%, rgb(255 255 255 / 3.5%) 75%);
-  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
   background-size: 16px 16px;
 }
 
@@ -288,19 +331,31 @@ function onPreviewError(): void {
 .asset-delete {
   opacity: 0;
   transform: translateY(-2px);
-  transition: opacity 200ms ease-out, transform 200ms ease-out, color 200ms ease-out, border-color 200ms ease-out;
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out,
+    color 200ms ease-out,
+    border-color 200ms ease-out;
 }
 
 .asset-duplicate {
   opacity: 0;
   transform: translateY(-2px);
-  transition: opacity 200ms ease-out, transform 200ms ease-out, color 200ms ease-out, border-color 200ms ease-out;
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out,
+    color 200ms ease-out,
+    border-color 200ms ease-out;
 }
 
 .asset-split {
   opacity: 0;
   transform: translateY(-2px);
-  transition: opacity 200ms ease-out, transform 200ms ease-out, color 200ms ease-out, border-color 200ms ease-out;
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out,
+    color 200ms ease-out,
+    border-color 200ms ease-out;
 }
 
 .asset-card:hover .asset-delete,
@@ -329,7 +384,6 @@ function onPreviewError(): void {
     opacity: 0.82;
     transform: none;
   }
-
 
   .asset-duplicate {
     opacity: 0.82;

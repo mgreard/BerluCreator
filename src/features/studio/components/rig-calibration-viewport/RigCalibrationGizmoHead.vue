@@ -59,13 +59,9 @@ const centeredControlTransform = computed(
 )
 
 const boxStyle = computed(() => {
-  const neckX = x + width * pivotX
-  const neckY = y + height * pivotY
-  const visualCenterX = neckX + (x + width / 2 - neckX) * scale
-  const visualCenterY = neckY + (y + height / 2 - neckY) * scale
   return {
-    left: `${visualCenterX - width / 2}px`,
-    top: `${visualCenterY - height / 2}px`,
+    left: `${x}px`,
+    top: `${y}px`,
     width: `${width}px`,
     height: `${height}px`,
     transformOrigin: 'center center',
@@ -84,17 +80,11 @@ function onPointerDown(mode: DragMode, e: PointerEvent): void {
   if (stage) {
     const rect = stage.getBoundingClientRect()
     const stageScale = rect.width / Math.max(1, stage.offsetWidth)
-    const neckX = x + width * pivotX
-    const neckY = y + height * pivotY
-    const pivot = mode === 'rotate'
-      ? {
-          x: neckX + (x + width / 2 - neckX) * scale,
-          y: neckY + (y + height / 2 - neckY) * scale
-        }
-      : { x: neckX, y: neckY }
+    const centerX = x + width / 2
+    const centerY = y + height / 2
     dragPivotClient.value = {
-      x: rect.left + pivot.x * stageScale,
-      y: rect.top + pivot.y * stageScale
+      x: rect.left + centerX * stageScale,
+      y: rect.top + centerY * stageScale
     }
   } else {
     dragPivotClient.value = { x: e.clientX, y: e.clientY }

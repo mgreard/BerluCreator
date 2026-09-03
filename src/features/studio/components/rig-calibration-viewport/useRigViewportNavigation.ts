@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 
-export const MIN_RIG_VIEWPORT_ZOOM = 0.25
+export const MIN_RIG_VIEWPORT_ZOOM = 0.01
 export const MAX_RIG_VIEWPORT_ZOOM = 4
 
 export interface Point {
@@ -8,8 +8,59 @@ export interface Point {
   y: number
 }
 
+export interface BoundingBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface ViewportPadding {
+  top?: number
+  bottom?: number
+  left?: number
+  right?: number
+}
+
+export interface ViewportFit {
+  zoom: number
+  panX: number
+  panY: number
+}
+
 export function clampRigViewportZoom(value: number): number {
   return Math.max(MIN_RIG_VIEWPORT_ZOOM, Math.min(MAX_RIG_VIEWPORT_ZOOM, Number(value.toFixed(2))))
+}
+
+export function computeBoundingBoxFit(
+  containerWidth: number,
+  containerHeight: number,
+  stageWidth: number,
+  stageHeight: number,
+  box: BoundingBox,
+  padding: ViewportPadding = { top: 60, bottom: 40, left: 48, right: 48 }
+): ViewportFit | null {
+  if (containerWidth <= 0 || containerHeight <= 0 || box.width <= 0 || box.height <= 0) {
+    return null
+  }
+
+  const padTop = Math.max(0, padding.top ?? 60)
+  const padBottom = Math.max(0, padding.bottom ?? 40)
+  const padLeft = Math.max(0, padding.left ?? 48)
+  const padRight = Math.max(0, padding.right ?? 48)
+  const availableWidth = Math.max(1, containerWidth - padLeft - padRight)
+  const availableHeight = Math.max(1, containerHeight - padTop - padBottom)
+  const exactZoom = Math.min(availableWidth / box.width, availableHeight / box.height, 2)
+  // Arrondir vers le bas empêche qu'un bord soit rogné par un arrondi de zoom.
+  const zoom = Math.max(Number.EPSILON, Math.floor(exactZoom * 10000) / 10000)
+  const boxCenterX = box.x + box.width / 2
+  const boxCenterY = box.y + box.height / 2
+
+  return {
+    zoom,
+    panX: Math.round((padLeft - padRight) / 2 - (boxCenterX - stageWidth / 2) * zoom),
+    panY: Math.round((padTop - padBottom) / 2 - (boxCenterY - stageHeight / 2) * zoom)
+  }
 }
 
 export function screenDeltaToLocal(
@@ -66,6 +117,28 @@ export function useRigViewportNavigation() {
     zoom.value = 1
     panX.value = 0
     panY.value = 0
+  }
+
+  function fitBoundingBoxToViewport(
+    containerWidth: number,
+    containerHeight: number,
+    stageWidth: number,
+    stageHeight: number,
+    box: BoundingBox,
+    padding: ViewportPadding = { top: 60, bottom: 40, left: 48, right: 48 }
+  ): void {
+    const fit = computeBoundingBoxFit(
+      containerWidth,
+      containerHeight,
+      stageWidth,
+      stageHeight,
+      box,
+      padding
+    )
+    if (!fit) return
+    zoom.value = fit.zoom
+    panX.value = fit.panX
+    panY.value = fit.panY
   }
 
   function fitToViewport(
@@ -129,6 +202,7 @@ export function useRigViewportNavigation() {
     zoomOut,
     resetView,
     fitToViewport,
+    fitBoundingBoxToViewport,
     startPan,
     updatePan,
     endPan,

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { Asset } from '@core/types/asset.types'
 import { useRigCatalogStore } from './rig-catalog.store'
@@ -112,5 +112,27 @@ describe('rig catalog store v7', () => {
       seriesId: 'berlu', enabled: true, defaultScale: 0.4, defaultRotation: -5
     })
     expect(store.isAssetCompatible(rig, asset('head', 'head', 1205, 1305, 'berlu'))).toBe(true)
+  })
+
+  it('regroupe les changements d’un geste de calibration en une seule persistance', () => {
+    const store = useRigCatalogStore()
+    const body = asset('body', 'body', 700, 950)
+    store.initialize([body])
+    const rig = store.rigs[0]!
+    const persist = vi.spyOn(Storage.prototype, 'setItem')
+    persist.mockClear()
+
+    store.commitRigCalibration(rig.id, {
+      neckAnchor: { x: 320, y: 80 },
+      seriesId: 'berlu',
+      defaultScale: 0.31,
+      defaultRotation: 4,
+      anchor: { id: 'mouthAnchor', point: { x: 0.52, y: 0.68 } }
+    })
+
+    expect(rig.neckAnchor).toEqual({ x: 320, y: 80 })
+    expect(rig.headSeries[0]).toMatchObject({ defaultScale: 0.31, defaultRotation: 4 })
+    expect(store.seriesById('berlu')?.mouthAnchor).toEqual({ x: 0.52, y: 0.68 })
+    expect(persist).toHaveBeenCalledTimes(1)
   })
 })

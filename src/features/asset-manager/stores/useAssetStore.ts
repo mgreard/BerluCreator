@@ -109,6 +109,7 @@ export const useAssetStore = defineStore('asset', () => {
   const selectedAssetId = ref<string | null>(null)
   const selectedCategory = ref<AssetCategory | 'all'>('all')
   const librarySelection = ref<ActiveSelection>({ type: 'all' })
+  const libraryFocusVersion = ref(0)
   const searchQuery = ref('')
   const isLoading = ref(false)
   const hasLoaded = ref(false)
@@ -206,6 +207,10 @@ export const useAssetStore = defineStore('asset', () => {
   }
 
   async function deleteAssetCascade(id: string): Promise<number> {
+    const asset = assets.value.find((candidate) => candidate.id === id)
+    if (asset?.source === 'bundled') {
+      throw new Error('Les assets de base ne peuvent pas être supprimés.')
+    }
     const removed = await assetRepository.deleteCascade(id)
     assets.value = assets.value.filter((asset) => asset.id !== id)
     if (selectedAssetId.value === id) selectedAssetId.value = null
@@ -224,11 +229,32 @@ export const useAssetStore = defineStore('asset', () => {
     selectedAssetId.value = id
   }
 
+  function focusCharacterInLibrary(
+    characterKey: string,
+    options: { assetId?: string | null; categoryId?: string | null } = {}
+  ): void {
+    const categoryId = options.categoryId ?? null
+    librarySelection.value = { type: 'character', characterKey, categoryId }
+    selectedCategory.value = categoryId === 'props-character' ? 'props_character' : 'all'
+    selectedAssetId.value = options.assetId ?? null
+    searchQuery.value = ''
+    libraryFocusVersion.value += 1
+  }
+
+  function focusStageAssetInLibrary(assetId: string, category: AssetCategory): void {
+    librarySelection.value = { type: 'stage', category }
+    selectedCategory.value = category
+    selectedAssetId.value = assetId
+    searchQuery.value = ''
+    libraryFocusVersion.value += 1
+  }
+
   return {
     assets,
     selectedAssetId,
     selectedCategory,
     librarySelection,
+    libraryFocusVersion,
     searchQuery,
     isLoading,
     hasLoaded,
@@ -239,6 +265,8 @@ export const useAssetStore = defineStore('asset', () => {
     inspectAssetDeletion,
     deleteAssetCascade,
     discardImportedAsset,
-    selectAsset
+    selectAsset,
+    focusCharacterInLibrary,
+    focusStageAssetInLibrary
   }
 })

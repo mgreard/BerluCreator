@@ -51,8 +51,36 @@ export function useRigRuntime() {
     return undefined
   }
 
-  function presetsForRig(rig: RigDefinition, selectedAsset?: Asset): CharacterRigLayerPreset[] {
+  function activeGroupLayers(group?: CharacterGroup): Array<{ layer: EditorLayer; asset: Asset }> {
+    if (!group) return []
+    return editorStore.currentDocument.layers.flatMap((layer) => {
+      if (layer.groupId !== group.id || layer.muted) return []
+      const asset = assetStore.assets.find((candidate) => candidate.id === layer.assetId)
+      return asset ? [{ layer, asset }] : []
+    })
+  }
+
+  function retainedHeadForRig(
+    rig: RigDefinition,
+    selectedAsset: Asset | undefined,
+    currentLayers: Array<{ layer: EditorLayer; asset: Asset }>
+  ): Asset | undefined {
+    if (selectedAsset?.category === 'head' && rigCatalog.isAssetCompatible(rig, selectedAsset)) {
+      return selectedAsset
+    }
+    const currentHead = currentLayers.find(
+      ({ asset }) => asset.category === 'head' && rigCatalog.isAssetCompatible(rig, asset)
+    )?.asset
+    return currentHead ?? defaultHeadForRig(rig)
+  }
+
+  function presetsForRig(
+    rig: RigDefinition,
+    selectedAsset?: Asset,
+    currentGroup?: CharacterGroup
+  ): CharacterRigLayerPreset[] {
     const presets: CharacterRigLayerPreset[] = []
+    const currentLayers = activeGroupLayers(currentGroup)
     const body = findAssetByRigIdentity(rig.body, assetStore.assets)
     if (body) {
       presets.push({
@@ -62,11 +90,23 @@ export function useRigRuntime() {
         calibration: { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, zIndex: 10 }
       })
     }
-    const head = defaultHeadForRig(rig, selectedAsset)
+    const head = retainedHeadForRig(rig, selectedAsset, currentLayers)
     const series = rigCatalog.seriesById(head?.headSeriesId)
     const placement = head && series ? headCalibration(rig, series, head) : null
     if (head && placement) {
       presets.push({ assetId: head.id, category: 'head', name: head.name, calibration: placement })
+    }
+
+    for (const { layer, asset } of currentLayers) {
+      const isDependent = asset.category === 'mouth' || asset.category === 'props_character'
+      if (!isDependent || !rigCatalog.isAssetCompatible(rig, asset)) continue
+      if (asset.category === 'mouth' && asset.headSeriesId !== head?.headSeriesId) continue
+      presets.push({
+        assetId: asset.id,
+        category: asset.category,
+        name: asset.name,
+        calibration: { ...layer.transform, zIndex: layer.zIndex }
+      })
     }
     return presets
   }
@@ -91,7 +131,12 @@ export function useRigRuntime() {
   function activateRig(rig: RigDefinition, selectedAsset?: Asset): EditorLayer | null {
     const group = ensureCharacterGroup(rig)
     if (!group) return null
-    return editorStore.applyCharacterRig(group.id, rig.id, presetsForRig(rig, selectedAsset), selectedAsset?.id)
+    return editorStore.applyCharacterRig(
+      group.id,
+      rig.id,
+      presetsForRig(rig, selectedAsset, group),
+      selectedAsset?.id
+    )
   }
 
   function targetRigForAsset(asset: Asset, currentRig?: RigDefinition): RigDefinition | undefined {

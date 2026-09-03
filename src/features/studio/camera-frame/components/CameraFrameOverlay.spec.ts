@@ -58,4 +58,42 @@ describe('CameraFrameOverlay', () => {
       aspectRatio: 'custom'
     })
   })
+
+  it('zoome autour du centre avec les boutons dédiés', async () => {
+    const wrapper = mount(CameraFrameOverlay, {
+      props: { modelValue: frame, stageWidth: 1600, stageHeight: 900 }
+    })
+
+    await wrapper.get('[data-camera-zoom-in]').trigger('click')
+
+    expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
+      x: 73,
+      y: 41,
+      width: 1455,
+      height: 818,
+      aspectRatio: '16:9'
+    })
+    expect(wrapper.get('[data-camera-zoom-value]').text()).toBe('110%')
+  })
+
+  it('laisse la molette au viewport sans modifier le cadrage', async () => {
+    const wrapper = mount(CameraFrameOverlay, {
+      props: { modelValue: frame, stageWidth: 1600, stageHeight: 900 }
+    })
+    const wheel = new WheelEvent('wheel', {
+      deltaY: -100,
+      clientX: 400,
+      clientY: 225,
+      bubbles: true,
+      cancelable: true
+    })
+
+    wrapper.element.dispatchEvent(wheel)
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(wrapper.emitted('change')).toBeUndefined()
+    expect(wrapper.emitted('commit')).toBeUndefined()
+    expect(wheel.defaultPrevented).toBe(false)
+  })
 })

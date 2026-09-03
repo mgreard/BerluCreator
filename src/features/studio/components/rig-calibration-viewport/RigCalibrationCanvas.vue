@@ -1,16 +1,21 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, useTemplateRef, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, useTemplateRef } from 'vue'
 import { useRigCatalogStore } from '../../rig-calibration/rig-catalog.store'
 import { useAssetStore } from '@/features/asset-manager/stores/useAssetStore'
 import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { useRigRuntime } from '../../rig-calibration/useRigRuntime'
 import { DEFAULT_STAGE_RESOLUTION } from '@core/constants/editor'
 import { rigAssetKey } from '../../rig-calibration/rig-catalog.service'
-import type { Asset, CharacterPropSlot, NormalizedPoint } from '@core/types/asset.types'
+import type {
+  AnchoredAssetCalibration,
+  Asset,
+  CharacterPropSlot,
+  NormalizedPoint
+} from '@core/types/asset.types'
+import type { RigCalibrationTool } from '../../rig-calibration/rig-catalog.types'
 import { useRigViewportNavigation } from './useRigViewportNavigation'
 import RigCalibrationGizmoNeck from './RigCalibrationGizmoNeck.vue'
 import RigCalibrationGizmoHead from './RigCalibrationGizmoHead.vue'
-import RigCalibrationGizmoAnchors from './RigCalibrationGizmoAnchors.vue'
 import RigCalibrationGizmoAccessory from './RigCalibrationGizmoAccessory.vue'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
@@ -37,7 +42,7 @@ const {
   zoomIn,
   zoomOut,
   resetView,
-  fitToViewport,
+  fitBoundingBoxToViewport,
   startPan,
   updatePan,
   endPan,
@@ -55,12 +60,59 @@ const stageHeight = computed(() => projectStore.currentProject?.stage?.height ??
 
 // Active selections
 const selectedRig = computed(() => rigCatalog.rigById(rigCatalog.selectedRigId))
-const selectedSeries = computed(() => rigCatalog.seriesById(rigCatalog.selectedHeadSeriesId))
-const selectedRigSeriesConfig = computed(() =>
-  selectedRig.value?.headSeries.find(
-    (entry) => entry.seriesId === rigCatalog.selectedHeadSeriesId
-  )
-)
+const selectedSeries = computed(() => {
+  const targetId = rigCatalog.calibrationTargetId
+  const targetAsset = targetId ? assetStore.assets.find((a) => a.id === targetId) : undefined
+  if (targetAsset?.headSeriesId) {
+    const series = rigCatalog.seriesById(targetAsset.headSeriesId)
+    if (series) return series
+  }
+  return rigCatalog.seriesById(rigCatalog.selectedHeadSeriesId)
+})
+const selectedRigSeriesConfig = computed(() => {
+  const seriesId = selectedSeries.value?.id ?? rigCatalog.selectedHeadSeriesId
+  return selectedRig.value?.headSeries.find((entry) => entry.seriesId === seriesId)
+})
+
+type SeriesAnchor = 'neckPivot' | 'mouthAnchor' | CharacterPropSlot
+
+interface CalibrationGesture {
+  tool: RigCalibrationTool
+  rigId: string
+  seriesId?: string
+  assetId?: string
+}
+
+const activeGesture = ref<CalibrationGesture | null>(null)
+const draftNeckAnchor = ref<{ x: number; y: number } | null>(null)
+const draftHeadScale = ref<number | null>(null)
+const draftHeadRotation = ref<number | null>(null)
+const draftSeriesAnchors = ref<Partial<Record<SeriesAnchor, NormalizedPoint>>>({})
+const draftAccessoryCalibration = ref<AnchoredAssetCalibration | null>(null)
+
+const effectiveSeries = computed(() => {
+  const series = selectedSeries.value
+  if (!series) return undefined
+  const usesDraft = activeGesture.value?.seriesId === series.id
+  return {
+    ...series,
+    neckPivot: usesDraft
+      ? draftSeriesAnchors.value.neckPivot ?? series.neckPivot
+      : series.neckPivot,
+    mouthAnchor: usesDraft
+      ? draftSeriesAnchors.value.mouthAnchor ?? series.mouthAnchor
+      : series.mouthAnchor,
+    propAnchors: {
+      ...series.propAnchors,
+      ...(usesDraft && draftSeriesAnchors.value.sunglass
+        ? { sunglass: draftSeriesAnchors.value.sunglass }
+        : {}),
+      ...(usesDraft && draftSeriesAnchors.value.hat
+        ? { hat: draftSeriesAnchors.value.hat }
+        : {})
+    }
+  }
+})
 
 // Active Body Asset
 const bodyAsset = computed<Asset | undefined>(() => {
@@ -72,8 +124,13 @@ const bodyAsset = computed<Asset | undefined>(() => {
 const bodyWidth = computed(() => bodyAsset.value?.width ?? 334)
 const bodyHeight = computed(() => bodyAsset.value?.height ?? 576)
 
-const bodyX = computed(() => Math.round((stageWidth.value - bodyWidth.value) / 2))
-const bodyY = computed(() => Math.round((stageHeight.value - bodyHeight.value) / 2))
+// Calibration Virtual Stage Dimensions:
+// Sufficiently sized to contain tall or high-res bodies and full heads without any canvas clipping
+const calibStageWidth = computed(() => Math.max(stageWidth.value, bodyWidth.value + 1600, 2400))
+const calibStageHeight = computed(() => Math.max(stageHeight.value, bodyHeight.value + 1800, 2800))
+
+const bodyX = computed(() => Math.round((calibStageWidth.value - bodyWidth.value) / 2))
+const bodyY = computed(() => Math.round((calibStageHeight.value - bodyHeight.value) / 2 + 250))
 
 // Active Head Asset (targeted or default)
 const headAsset = computed<Asset | undefined>(() => {
@@ -98,7 +155,7 @@ const headAsset = computed<Asset | undefined>(() => {
 })
 
 // Active Mouth Asset
-const mouthAsset = computed<Asset | undefined>(() => {
+const defaultMouthAsset = computed<Asset | undefined>(() => {
   const series = selectedSeries.value
   if (!series?.defaultMouthAssetKey) return undefined
   return assetStore.assets.find(
@@ -106,7 +163,26 @@ const mouthAsset = computed<Asset | undefined>(() => {
   )
 })
 
-// Active Accessory Asset
+const mouthAsset = computed<Asset | undefined>(() => {
+  if (assetStore.selectedAsset?.category === 'mouth') {
+    return assetStore.selectedAsset
+  }
+  return defaultMouthAsset.value
+})
+
+// Active Anchored Asset (either accessory or mouth)
+const activeAnchoredAsset = computed<Asset | undefined>(() => {
+  const selected = assetStore.selectedAsset
+  if (
+    selected &&
+    (selected.category === 'props_character' || selected.category === 'mouth')
+  ) {
+    return selected
+  }
+  return undefined
+})
+
+// Active Accessory Asset (for backwards compatibility)
 const activeAccessoryAsset = computed<Asset | undefined>(() => {
   if (assetStore.selectedAsset?.category === 'props_character') {
     return assetStore.selectedAsset
@@ -116,7 +192,8 @@ const activeAccessoryAsset = computed<Asset | undefined>(() => {
 
 // Neck Anchor Position (Local on body vs Global on Stage)
 const localNeckPoint = computed(() => {
-  return selectedRig.value?.neckAnchor ?? {
+  const activeDraft = activeGesture.value?.rigId === selectedRig.value?.id
+  return (activeDraft ? draftNeckAnchor.value : null) ?? selectedRig.value?.neckAnchor ?? {
     x: Math.round(bodyWidth.value / 2),
     y: Math.round(bodyHeight.value * 0.15)
   }
@@ -137,15 +214,28 @@ const headDimensions = computed(() => {
   }
 })
 
-const headScale = computed(() => selectedRigSeriesConfig.value?.defaultScale ?? 0.22)
-const headRotation = computed(() => selectedRigSeriesConfig.value?.defaultRotation ?? 0)
+const headScale = computed(
+  () =>
+    (activeGesture.value?.seriesId === selectedSeries.value?.id
+      ? draftHeadScale.value
+      : null) ??
+    selectedRigSeriesConfig.value?.defaultScale ??
+    0.22
+)
+const headRotation = computed(
+  () =>
+    (activeGesture.value?.seriesId === selectedSeries.value?.id
+      ? draftHeadRotation.value
+      : null) ??
+    selectedRigSeriesConfig.value?.defaultRotation ??
+    0
+)
 
-// Head Top-Left position (calibrated so series.neckPivot lands exactly on neckPoint)
+// Head Top-Left position (calibrated so head center lands exactly on neckPoint)
 const headLocalTopLeft = computed(() => {
-  const pivot = selectedSeries.value?.neckPivot ?? { x: 0.5, y: 0.94 }
   return {
-    x: localNeckPoint.value.x - pivot.x * headDimensions.value.width,
-    y: localNeckPoint.value.y - pivot.y * headDimensions.value.height
+    x: localNeckPoint.value.x - 0.5 * headDimensions.value.width,
+    y: localNeckPoint.value.y - 0.5 * headDimensions.value.height
   }
 })
 
@@ -157,42 +247,80 @@ const headStageTopLeft = computed(() => {
 })
 
 const headRotationOrigin = computed(() => ({
-  x:
-    stageNeckPoint.value.x +
-    (headStageTopLeft.value.x + headDimensions.value.width / 2 - stageNeckPoint.value.x) *
-      headScale.value,
-  y:
-    stageNeckPoint.value.y +
-    (headStageTopLeft.value.y + headDimensions.value.height / 2 - stageNeckPoint.value.y) *
-      headScale.value
+  x: stageNeckPoint.value.x,
+  y: stageNeckPoint.value.y
 }))
 
 const headVisualTopLeft = computed(() => ({
-  x: headRotationOrigin.value.x - headDimensions.value.width / 2,
-  y: headRotationOrigin.value.y - headDimensions.value.height / 2
+  x: stageNeckPoint.value.x - headDimensions.value.width / 2,
+  y: stageNeckPoint.value.y - headDimensions.value.height / 2
 }))
 
-// Accessory Placement & Calibration
-const accessorySlot = computed<CharacterPropSlot>(() => {
-  return activeAccessoryAsset.value?.characterPropSlot ?? 'sunglass'
-})
+// Character Framing Bounding Box (Entire body + ample headroom for head & accessories)
+const characterFramingBounds = computed(() => {
+  const bX = bodyX.value
+  const bY = bodyY.value
+  const bW = bodyWidth.value
+  const bH = bodyHeight.value
 
-const accessoryAnchorNormalized = computed(() => {
-  if (!selectedSeries.value) return { x: 0.5, y: 0.43 }
-  return selectedSeries.value.propAnchors[accessorySlot.value] ?? { x: 0.5, y: 0.43 }
-})
+  const neckX = stageNeckPoint.value.x
+  const neckY = stageNeckPoint.value.y
 
-const accessoryCalibration = computed(() => {
-  const series = selectedSeries.value
-  const asset = activeAccessoryAsset.value
-  if (!series || !asset) return null
-  return asset.anchoredCalibrationBySeries?.[series.id] ?? {
-    pivot: { x: 0.5, y: 0.5 },
-    offsetX: 0,
-    offsetY: 0,
-    scale: 1,
-    rotation: 0
+  // Projected head dimensions
+  const hW = headDimensions.value.width * headScale.value
+  const hH = headDimensions.value.height * headScale.value
+
+  // Generous safety headroom above the neck for head, hats and rotation handle
+  const topHeadroom = Math.max(hH * 0.75 + 80, 240)
+
+  const left = Math.min(bX, neckX - hW / 2 - 40)
+  const right = Math.max(bX + bW, neckX + hW / 2 + 40)
+  const top = Math.min(bY, neckY - topHeadroom)
+  const bottom = bY + bH + 40
+
+  return {
+    x: left,
+    y: top,
+    width: Math.max(100, right - left),
+    height: Math.max(100, bottom - top)
   }
+})
+
+// Anchored Element Placement & Calibration (Accessories & Mouth)
+const activeAnchoredSlot = computed<'mouth' | CharacterPropSlot>(() => {
+  if (activeAnchoredAsset.value?.category === 'mouth') return 'mouth'
+  return activeAnchoredAsset.value?.characterPropSlot ?? 'sunglass'
+})
+
+const activeAnchorNormalized = computed<NormalizedPoint>(() => {
+  if (!effectiveSeries.value) return { x: 0.5, y: 0.5 }
+  if (activeAnchoredSlot.value === 'mouth') {
+    return effectiveSeries.value.mouthAnchor ?? { x: 0.5, y: 0.66 }
+  }
+  return (
+    effectiveSeries.value.propAnchors[activeAnchoredSlot.value] ?? {
+      x: 0.5,
+      y: activeAnchoredSlot.value === 'hat' ? 0.08 : 0.43
+    }
+  )
+})
+
+const activeAnchoredCalibration = computed<AnchoredAssetCalibration | null>(() => {
+  const series = effectiveSeries.value
+  const asset = activeAnchoredAsset.value
+  if (!series || !asset) return null
+  const activeDraft =
+    activeGesture.value?.assetId === asset.id && activeGesture.value.seriesId === series.id
+  return (
+    (activeDraft ? draftAccessoryCalibration.value : null) ??
+    asset.anchoredCalibrationBySeries?.[series.id] ?? {
+      pivot: { x: 0.5, y: 0.5 },
+      offsetX: 0,
+      offsetY: 0,
+      scale: 1,
+      rotation: 0
+    }
+  )
 })
 
 function transformPointAround(
@@ -214,11 +342,10 @@ function transformPointAround(
   }
 }
 
-const accessoryPivotStage = computed(() => {
-  const series = selectedSeries.value
-  const calibration = accessoryCalibration.value
-  if (!series || !calibration) return null
-  const anchor = series.propAnchors[accessorySlot.value] ?? { x: 0.5, y: 0.43 }
+function computeStageAnchoredPivot(
+  anchor: NormalizedPoint,
+  calibration: AnchoredAssetCalibration
+): { x: number; y: number } {
   const anchorPoint = transformPointAround(
     {
       x: headStageTopLeft.value.x + anchor.x * headDimensions.value.width,
@@ -237,6 +364,14 @@ const accessoryPivotStage = computed(() => {
     x: anchorPoint.x + offsetX * Math.cos(radians) - offsetY * Math.sin(radians),
     y: anchorPoint.y + offsetX * Math.sin(radians) + offsetY * Math.cos(radians)
   }
+}
+
+const activeAnchoredPivotStage = computed(() => {
+  const series = effectiveSeries.value
+  const asset = activeAnchoredAsset.value
+  const calibration = activeAnchoredCalibration.value
+  if (!series || !asset || !calibration) return null
+  return computeStageAnchoredPivot(activeAnchorNormalized.value, calibration)
 })
 
 // Compute layers for exact Canvas 2D rendering matching Studio
@@ -284,7 +419,7 @@ const renderableLayers = computed<RenderableLayer[]>(() => {
   }
 
   // 2. Head Layer
-  if (headAsset.value && selectedSeries.value) {
+  if (headAsset.value && effectiveSeries.value) {
     const headW = headAsset.value.width
     const headH = headAsset.value.height
     const headX = headStageTopLeft.value.x
@@ -330,13 +465,16 @@ const renderableLayers = computed<RenderableLayer[]>(() => {
     }
     layers.push(headLayer)
 
-    // 3. Mouth Layer
-    if (mouthAsset.value) {
-      const anchor = selectedSeries.value.mouthAnchor
-      const mouthW = mouthAsset.value.width
-      const mouthH = mouthAsset.value.height
+    function resolveAnchoredLayerTransform(
+      asset: Asset,
+      anchor: NormalizedPoint,
+      calibration: AnchoredAssetCalibration
+    ) {
       const anchorPoint = transformPointAround(
-        { x: headLayer.x + anchor.x * headW, y: headLayer.y + anchor.y * headH },
+        {
+          x: headLayer.x + anchor.x * headDimensions.value.width,
+          y: headLayer.y + anchor.y * headDimensions.value.height
+        },
         { x: headLayer.transformOriginX, y: headLayer.transformOriginY },
         headLayer.scaleX,
         headLayer.scaleY,
@@ -346,10 +484,51 @@ const renderableLayers = computed<RenderableLayer[]>(() => {
           y: headLayer.rotationOriginY ?? headLayer.transformOriginY
         }
       )
+      const radians = (headLayer.rotation * Math.PI) / 180
+      const offsetX = calibration.offsetX * headLayer.scaleX
+      const offsetY = calibration.offsetY * headLayer.scaleY
+      const centerX = anchorPoint.x + offsetX * Math.cos(radians) - offsetY * Math.sin(radians)
+      const centerY = anchorPoint.y + offsetX * Math.sin(radians) + offsetY * Math.cos(radians)
+      const w = asset.width
+      const h = asset.height
+      return {
+        x: Math.round(centerX - w * 0.5),
+        y: Math.round(centerY - h * 0.5),
+        width: w,
+        height: h,
+        transformOriginX: centerX,
+        transformOriginY: centerY,
+        scaleX: headLayer.scaleX * calibration.scale,
+        scaleY: headLayer.scaleY * calibration.scale,
+        localX: anchor.x * headDimensions.value.width + calibration.offsetX - w * 0.5,
+        localY: anchor.y * headDimensions.value.height + calibration.offsetY - h * 0.5,
+        localScaleX: calibration.scale,
+        localScaleY: calibration.scale,
+        localRotation: calibration.rotation,
+        rotation: headLayer.rotation + calibration.rotation
+      }
+    }
+
+    // 3. Mouth Layer
+    if (mouthAsset.value) {
+      const mAsset = mouthAsset.value
+      const anchor = effectiveSeries.value.mouthAnchor
+      const isDraft = activeGesture.value?.assetId === mAsset.id
+      const calib =
+        (isDraft ? draftAccessoryCalibration.value : null) ??
+        mAsset.anchoredCalibrationBySeries?.[effectiveSeries.value.id] ?? {
+          pivot: { x: 0.5, y: 0.5 },
+          offsetX: 0,
+          offsetY: 0,
+          scale: 1,
+          rotation: 0
+        }
+      const transform = resolveAnchoredLayerTransform(mAsset, anchor, calib)
+
       layers.push({
         id: 'calibration-mouth',
         layerId: 'calibration-mouth',
-        name: mouthAsset.value.name,
+        name: mAsset.name,
         category: 'mouth',
         groupId: 'calibration-rig',
         groupName: selectedRig.value?.name ?? 'Rig',
@@ -359,45 +538,42 @@ const renderableLayers = computed<RenderableLayer[]>(() => {
         layerZIndex: 22,
         sceneZIndex: 10,
         order: 2,
-        asset: mouthAsset.value,
+        asset: mAsset,
         zIndex: 22,
         muted: false,
         locked: false,
         isMovable: false,
         depthRole: 'subject',
         opticalDepth: 0.5,
-        x: Math.round(anchorPoint.x - mouthW / 2),
-        y: Math.round(anchorPoint.y - mouthH / 2),
-        width: mouthW,
-        height: mouthH,
-        transformOriginX: anchorPoint.x,
-        transformOriginY: anchorPoint.y,
-        scaleX: headLayer.scaleX,
-        scaleY: headLayer.scaleY,
-        localX: anchor.x * headW - mouthW / 2,
-        localY: anchor.y * headH - mouthH / 2,
-        localScaleX: 1,
-        localScaleY: 1,
-        localRotation: 0,
-        rotation: headLayer.rotation,
+        ...transform,
         opacity: 1
       })
     }
 
     // 4. Accessory Layer
-    if (activeAccessoryAsset.value && accessoryCalibration.value) {
-      const slot = activeAccessoryAsset.value.characterPropSlot ?? 'sunglass'
-      const anchor = selectedSeries.value.propAnchors[slot] ?? { x: 0.5, y: 0.43 }
-      const calib = accessoryCalibration.value
-      const centerX = accessoryPivotStage.value?.x ?? stageNeckPoint.value.x
-      const centerY = accessoryPivotStage.value?.y ?? stageNeckPoint.value.y
-      const accW = activeAccessoryAsset.value.width
-      const accH = activeAccessoryAsset.value.height
+    if (activeAccessoryAsset.value) {
+      const accAsset = activeAccessoryAsset.value
+      const slot = accAsset.characterPropSlot ?? 'sunglass'
+      const anchor = effectiveSeries.value.propAnchors[slot] ?? {
+        x: 0.5,
+        y: slot === 'hat' ? 0.08 : 0.43
+      }
+      const isDraft = activeGesture.value?.assetId === accAsset.id
+      const calib =
+        (isDraft ? draftAccessoryCalibration.value : null) ??
+        accAsset.anchoredCalibrationBySeries?.[effectiveSeries.value.id] ?? {
+          pivot: { x: 0.5, y: 0.5 },
+          offsetX: 0,
+          offsetY: 0,
+          scale: 1,
+          rotation: 0
+        }
+      const transform = resolveAnchoredLayerTransform(accAsset, anchor, calib)
 
       layers.push({
         id: 'calibration-accessory',
         layerId: 'calibration-accessory',
-        name: activeAccessoryAsset.value.name,
+        name: accAsset.name,
         category: 'props_character',
         groupId: 'calibration-rig',
         groupName: selectedRig.value?.name ?? 'Rig',
@@ -407,27 +583,14 @@ const renderableLayers = computed<RenderableLayer[]>(() => {
         layerZIndex: 25,
         sceneZIndex: 10,
         order: 3,
-        asset: activeAccessoryAsset.value,
+        asset: accAsset,
         zIndex: 25,
         muted: false,
         locked: false,
         isMovable: false,
         depthRole: 'subject',
         opticalDepth: 0.5,
-        x: Math.round(centerX - accW * calib.pivot.x),
-        y: Math.round(centerY - accH * calib.pivot.y),
-        width: accW,
-        height: accH,
-        transformOriginX: centerX,
-        transformOriginY: centerY,
-        scaleX: headLayer.scaleX * calib.scale,
-        scaleY: headLayer.scaleY * calib.scale,
-        localX: anchor.x * headW + calib.offsetX - accW * calib.pivot.x,
-        localY: anchor.y * headH + calib.offsetY - accH * calib.pivot.y,
-        localScaleX: calib.scale,
-        localScaleY: calib.scale,
-        localRotation: calib.rotation,
-        rotation: headLayer.rotation + calib.rotation,
+        ...transform,
         opacity: 1
       })
     }
@@ -437,100 +600,215 @@ const renderableLayers = computed<RenderableLayer[]>(() => {
 })
 
 // Draw to Canvas 2D
-async function renderCanvas(): Promise<void> {
+let renderFrame: number | null = null
+let renderGeneration = 0
+
+async function renderCanvas(generation: number): Promise<void> {
   const canvas = canvasRef.value
   if (!canvas) return
   const ctx = canvas.getContext('2d')
   if (!ctx) return
+  const layers = renderableLayers.value
 
-  const loadPromises = renderableLayers.value.map((layer) =>
-    fetchAndLoadImage(layer.asset.blobId, globalImageCache)
+  const missingBlobIds = [
+    ...new Set(
+      layers
+        .map((layer) => layer.asset.blobId)
+        .filter((blobId) => {
+          const image = globalImageCache.get(blobId)
+          return !image?.complete || image.naturalWidth <= 0
+        })
+    )
+  ]
+  const loadPromises = missingBlobIds.map((blobId) =>
+    fetchAndLoadImage(blobId, globalImageCache)
   )
   await Promise.allSettled(loadPromises)
+  if (generation !== renderGeneration || canvas !== canvasRef.value) return
 
   ctx.clearRect(0, 0, canvas.width, canvas.height)
-  drawLayersOnContext(ctx, renderableLayers.value, globalImageCache)
+  drawLayersOnContext(ctx, layers, globalImageCache)
+}
+
+function scheduleRender(): void {
+  renderGeneration += 1
+  if (renderFrame !== null) return
+  renderFrame = requestAnimationFrame(() => {
+    renderFrame = null
+    void renderCanvas(renderGeneration)
+  })
 }
 
 watch(
-  [renderableLayers, stageWidth, stageHeight],
-  () => {
-    nextTick(() => {
-      void renderCanvas()
-    })
-  },
-  { immediate: true, deep: true }
+  [renderableLayers, calibStageWidth, calibStageHeight],
+  scheduleRender,
+  { deep: false }
 )
 
 // Update Handlers
+function clearGestureDrafts(): void {
+  draftNeckAnchor.value = null
+  draftHeadScale.value = null
+  draftHeadRotation.value = null
+  draftSeriesAnchors.value = {}
+  draftAccessoryCalibration.value = null
+}
+
+function beginCalibrationGesture(tool: RigCalibrationTool): void {
+  if (activeGesture.value) return
+  const rig = selectedRig.value
+  if (!rig) return
+  clearGestureDrafts()
+  activeGesture.value = {
+    tool,
+    rigId: rig.id,
+    seriesId: selectedSeries.value?.id,
+    assetId: tool === 'accessory' ? activeAnchoredAsset.value?.id : undefined
+  }
+
+  if (tool === 'body' || tool === 'head') {
+    draftNeckAnchor.value = { ...rig.neckAnchor }
+  }
+  if (tool === 'head') {
+    draftHeadScale.value = selectedRigSeriesConfig.value?.defaultScale ?? 0.22
+    draftHeadRotation.value = selectedRigSeriesConfig.value?.defaultRotation ?? 0
+  }
+  if (tool === 'accessory' && activeAnchoredCalibration.value) {
+    draftAccessoryCalibration.value = {
+      ...activeAnchoredCalibration.value,
+      pivot: { ...activeAnchoredCalibration.value.pivot }
+    }
+  }
+}
+
+async function commitCalibrationGesture(): Promise<void> {
+  const gesture = activeGesture.value
+  if (!gesture) return
+  activeGesture.value = null
+
+  const neckAnchor = draftNeckAnchor.value ? { ...draftNeckAnchor.value } : undefined
+  const scale = draftHeadScale.value ?? undefined
+  const rotation = draftHeadRotation.value ?? undefined
+  const anchorEntry = Object.entries(draftSeriesAnchors.value)[0] as
+    | [SeriesAnchor, NormalizedPoint]
+    | undefined
+  const accessory = draftAccessoryCalibration.value
+    ? {
+        ...draftAccessoryCalibration.value,
+        pivot: { ...draftAccessoryCalibration.value.pivot }
+      }
+    : null
+  clearGestureDrafts()
+
+  try {
+    if (gesture.tool === 'accessory' && gesture.assetId && gesture.seriesId && accessory) {
+      const asset = assetStore.assets.find((candidate) => candidate.id === gesture.assetId)
+      if (!asset) return
+      await assetStore.updateAsset(asset.id, {
+        anchoredCalibrationBySeries: {
+          ...asset.anchoredCalibrationBySeries,
+          [gesture.seriesId]: accessory
+        }
+      })
+      rigRuntime.syncRigLayers(gesture.rigId)
+    } else {
+      rigCatalog.commitRigCalibration(gesture.rigId, {
+        ...(neckAnchor ? { neckAnchor } : {}),
+        ...(gesture.seriesId ? { seriesId: gesture.seriesId } : {}),
+        ...(scale !== undefined ? { defaultScale: Number(scale.toFixed(4)) } : {}),
+        ...(rotation !== undefined ? { defaultRotation: Math.round(rotation) } : {}),
+        ...(anchorEntry
+          ? { anchor: { id: anchorEntry[0], point: anchorEntry[1] } }
+          : {})
+      })
+      rigRuntime.syncRigLayers(gesture.rigId)
+    }
+  } catch (error) {
+    console.error('Impossible d’enregistrer le geste de calibration :', error)
+  }
+}
+
+function ensureCalibrationGesture(tool: RigCalibrationTool): void {
+  if (!activeGesture.value) beginCalibrationGesture(tool)
+}
+
 function onUpdateNeckPoint(localPoint: { x: number; y: number }): void {
   if (!selectedRig.value) return
-  rigCatalog.updateRigGeometry(selectedRig.value.id, {
-    neckAnchor: { x: Math.round(localPoint.x), y: Math.round(localPoint.y) }
-  })
-  rigRuntime.syncRigLayers(selectedRig.value.id)
+  ensureCalibrationGesture('body')
+  draftNeckAnchor.value = { x: Math.round(localPoint.x), y: Math.round(localPoint.y) }
 }
 
 function onUpdateHeadTransform(patch: { x?: number; y?: number; scale?: number; rotation?: number }): void {
   const rig = selectedRig.value
-  const series = selectedSeries.value
+  const series = effectiveSeries.value
   if (!rig || !series) return
+  ensureCalibrationGesture('head')
 
   if (patch.x !== undefined || patch.y !== undefined) {
-    const pivot = series.neckPivot
     // Convert stage head top-left to body local coordinates
     const localHeadX = patch.x !== undefined ? patch.x - bodyX.value : headLocalTopLeft.value.x
     const localHeadY = patch.y !== undefined ? patch.y - bodyY.value : headLocalTopLeft.value.y
-    const newNeckX = Math.round(localHeadX + pivot.x * headDimensions.value.width)
-    const newNeckY = Math.round(localHeadY + pivot.y * headDimensions.value.height)
+    const newNeckX = Math.round(localHeadX + 0.5 * headDimensions.value.width)
+    const newNeckY = Math.round(localHeadY + 0.5 * headDimensions.value.height)
 
-    rigCatalog.updateRigGeometry(rig.id, {
-      neckAnchor: { x: newNeckX, y: newNeckY }
-    })
+    draftNeckAnchor.value = { x: newNeckX, y: newNeckY }
   }
 
-  if (patch.scale !== undefined || patch.rotation !== undefined) {
-    rigCatalog.updateSeriesDefaults(rig.id, series.id, {
-      ...(patch.scale !== undefined ? { defaultScale: Number(patch.scale.toFixed(4)) } : {}),
-      ...(patch.rotation !== undefined ? { defaultRotation: Math.round(patch.rotation) } : {})
-    })
-  }
-
-  rigRuntime.syncRigLayers(rig.id)
+  if (patch.scale !== undefined) draftHeadScale.value = Number(patch.scale.toFixed(4))
+  if (patch.rotation !== undefined) draftHeadRotation.value = Math.round(patch.rotation)
 }
 
-function onUpdateAnchor(payload: {
-  anchor: 'neckPivot' | 'mouthAnchor' | CharacterPropSlot
-  point: NormalizedPoint
-}): void {
-  if (!selectedSeries.value || !selectedRig.value) return
-  rigCatalog.updateSeriesAnchor(selectedSeries.value.id, payload.anchor, payload.point)
-  rigRuntime.syncRigLayers(selectedRig.value.id)
-}
-
-async function onUpdateAccessoryCalibration(patch: Partial<NonNullable<typeof accessoryCalibration.value>>): Promise<void> {
+function onUpdateAccessoryCalibration(
+  patch: Partial<NonNullable<typeof activeAnchoredCalibration.value>>
+): void {
   const series = selectedSeries.value
-  const asset = activeAccessoryAsset.value
-  const current = accessoryCalibration.value
+  const asset = activeAnchoredAsset.value
+  const current = activeAnchoredCalibration.value
   if (!series || !asset || !current) return
+  ensureCalibrationGesture('accessory')
 
-  const updated = {
+  draftAccessoryCalibration.value = {
     ...current,
-    ...patch
+    ...patch,
+    pivot: patch.pivot ? { ...patch.pivot } : { ...current.pivot }
   }
-
-  await assetStore.updateAsset(asset.id, {
-    anchoredCalibrationBySeries: {
-      ...asset.anchoredCalibrationBySeries,
-      [series.id]: updated
-    }
-  })
 }
+
+watch(
+  () => [
+    rigCatalog.selectedRigId,
+    rigCatalog.selectedHeadSeriesId,
+    rigCatalog.calibrationTargetId,
+    rigCatalog.calibrationTool,
+    assetStore.selectedAssetId
+  ],
+  () => {
+    if (activeGesture.value) void commitCalibrationGesture()
+  }
+)
+
+watch(showGizmos, (visible) => {
+  if (!visible && activeGesture.value) void commitCalibrationGesture()
+})
+
+watch(
+  () => [selectedRig.value?.id, bodyAsset.value?.id],
+  () => {
+    scheduleAutoFit()
+  }
+)
 
 function handleAutoFit(): void {
   if (!containerRef.value) return
   const rect = containerRef.value.getBoundingClientRect()
-  fitToViewport(rect.width, rect.height, stageWidth.value, stageHeight.value)
+  fitBoundingBoxToViewport(
+    rect.width,
+    rect.height,
+    calibStageWidth.value,
+    calibStageHeight.value,
+    characterFramingBounds.value,
+    { top: 72, bottom: 40, left: 56, right: 56 }
+  )
 }
 
 let containerResizeObserver: ResizeObserver | null = null
@@ -545,6 +823,7 @@ function scheduleAutoFit(): void {
 }
 
 onMounted(() => {
+  scheduleRender()
   scheduleAutoFit()
   if (typeof ResizeObserver !== 'undefined' && containerRef.value) {
     containerResizeObserver = new ResizeObserver(scheduleAutoFit)
@@ -555,6 +834,14 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (activeGesture.value) void commitCalibrationGesture()
+  renderGeneration += 1
+  if (renderFrame !== null) cancelAnimationFrame(renderFrame)
+  renderFrame = null
+  if (canvasRef.value) {
+    canvasRef.value.width = 0
+    canvasRef.value.height = 0
+  }
   containerResizeObserver?.disconnect()
   containerResizeObserver = null
   window.removeEventListener('resize', scheduleAutoFit)
@@ -710,8 +997,8 @@ function onWheel(e: WheelEvent): void {
         data-viewport-pan-surface="true"
         class="relative shrink-0 transition-transform duration-75 border border-white/10 shadow-2xl bg-black/40 rounded-sm"
         :style="{
-          width: `${stageWidth}px`,
-          height: `${stageHeight}px`,
+          width: `${calibStageWidth}px`,
+          height: `${calibStageHeight}px`,
           transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
           transformOrigin: 'center center'
         }"
@@ -729,8 +1016,8 @@ function onWheel(e: WheelEvent): void {
         <!-- HTML5 Canvas 2D Rendering Engine (Exact Stage Resolution) -->
         <canvas
           ref="canvasRef"
-          :width="stageWidth"
-          :height="stageHeight"
+          :width="calibStageWidth"
+          :height="calibStageHeight"
           class="pointer-events-none absolute inset-0 z-10 select-none transition-opacity"
           :class="showSprites ? 'opacity-100' : 'opacity-0'"
         />
@@ -739,37 +1026,48 @@ function onWheel(e: WheelEvent): void {
         <template v-if="showGizmos">
           <!-- 1. Body Neck Anchor Target Gizmo -->
           <RigCalibrationGizmoNeck
+            v-if="rigCatalog.calibrationTool === 'body'"
             :x="stageNeckPoint.x"
             :y="stageNeckPoint.y"
             :body-x="bodyX"
             :body-y="bodyY"
             :body-width="bodyWidth"
             :body-height="bodyHeight"
-            :stage-width="stageWidth"
-            :stage-height="stageHeight"
+            :stage-width="calibStageWidth"
+            :stage-height="calibStageHeight"
             :zoom="zoom"
             :show-guides="showGuides"
+            @drag-start="beginCalibrationGesture('body')"
+            @drag-end="commitCalibrationGesture"
             @update:point="onUpdateNeckPoint"
           />
 
           <!-- 2. Head Bounding Box & Scale/Rotation Handles Gizmo -->
           <RigCalibrationGizmoHead
+            v-if="rigCatalog.calibrationTool === 'head'"
             :x="headStageTopLeft.x"
             :y="headStageTopLeft.y"
             :width="headDimensions.width"
             :height="headDimensions.height"
             :scale="headScale"
             :rotation="headRotation"
-            :pivot-x="selectedSeries?.neckPivot.x ?? 0.5"
-            :pivot-y="selectedSeries?.neckPivot.y ?? 0.94"
-            :label="headAsset?.name ?? selectedSeries?.label ?? 'Tête'"
+            :pivot-x="0.5"
+            :pivot-y="0.5"
+            :label="headAsset?.name ?? effectiveSeries?.label ?? 'Tête'"
             :zoom="zoom"
+            @drag-start="beginCalibrationGesture('head')"
+            @drag-end="commitCalibrationGesture"
             @update:transform="onUpdateHeadTransform"
           />
 
-          <!-- 3. Head Series Anchor Pins Gizmo (Rendered Inside Head Space) -->
+          <!-- 3. Anchored Part (Accessory / Mouth) Calibration Gizmo (Rendered Inside Head Space) -->
           <div
-            v-if="selectedSeries"
+            v-if="
+              effectiveSeries &&
+              rigCatalog.calibrationTool === 'accessory' &&
+              activeAnchoredAsset &&
+              activeAnchoredCalibration
+            "
             class="pointer-events-none absolute z-25"
             :style="{
               left: `${headVisualTopLeft.x}px`,
@@ -780,31 +1078,23 @@ function onWheel(e: WheelEvent): void {
               transform: `rotate(${headRotation}deg) scale(${headScale})`
             }"
           >
-            <RigCalibrationGizmoAnchors
-              :series="selectedSeries"
-              :head-width="headDimensions.width"
-              :head-height="headDimensions.height"
-              :head-scale="headScale"
-              :head-rotation="headRotation"
-              :zoom="zoom"
-              @update:anchor="onUpdateAnchor"
-            />
-
-            <!-- 4. Accessory Calibration Gizmo (Rendered Inside Head Space) -->
             <RigCalibrationGizmoAccessory
-              v-if="activeAccessoryAsset && accessoryCalibration"
-              :anchor="accessoryAnchorNormalized"
+              :anchor="activeAnchorNormalized"
               :head-width="headDimensions.width"
               :head-height="headDimensions.height"
-              :calibration="accessoryCalibration"
-              :asset-width="activeAccessoryAsset.width"
-              :asset-height="activeAccessoryAsset.height"
+              :calibration="activeAnchoredCalibration"
+              :asset-width="activeAnchoredAsset.width"
+              :asset-height="activeAnchoredAsset.height"
               :head-scale="headScale"
               :head-rotation="headRotation"
               :zoom="zoom"
-              :pivot-stage-x="accessoryPivotStage?.x ?? stageNeckPoint.x"
-              :pivot-stage-y="accessoryPivotStage?.y ?? stageNeckPoint.y"
-              :label="activeAccessoryAsset.name"
+              :pivot-stage-x="activeAnchoredPivotStage?.x ?? stageNeckPoint.x"
+              :pivot-stage-y="activeAnchoredPivotStage?.y ?? stageNeckPoint.y"
+              :label="activeAnchoredAsset.name"
+              :category="activeAnchoredAsset.category"
+              :prop-slot="activeAnchoredAsset.characterPropSlot"
+              @drag-start="beginCalibrationGesture('accessory')"
+              @drag-end="commitCalibrationGesture"
               @update:calibration="onUpdateAccessoryCalibration"
             />
           </div>

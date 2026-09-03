@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useId, useTemplateRef } from 'vue'
+import { computed, ref, useId, useTemplateRef, watch } from 'vue'
 import { cn } from '@/shared/utils/cn'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -33,6 +33,16 @@ const emit = defineEmits<CameraFrameOverlayEmits>()
 const overlayRef = useTemplateRef<HTMLDivElement>('overlay')
 const instructionsId = useId()
 const interaction = ref<Interaction | null>(null)
+const draftFrame = ref<CameraFrameValue>({ ...model.value })
+
+watch(
+  model,
+  (value) => {
+    if (interaction.value) return
+    draftFrame.value = { ...value }
+  },
+  { deep: true }
+)
 
 const ratioValues: Record<Exclude<CameraFrameAspectRatio, 'custom'>, number> = {
   '16:9': 16 / 9,
@@ -84,17 +94,17 @@ const handles: Array<{ value: ResizeHandle; label: string; class: string }> = [
 ]
 
 const frameStyle = computed(() => ({
-  left: `${(model.value.x / stageWidth) * 100}%`,
-  top: `${(model.value.y / stageHeight) * 100}%`,
-  width: `${(model.value.width / stageWidth) * 100}%`,
-  height: `${(model.value.height / stageHeight) * 100}%`
+  left: `${(draftFrame.value.x / stageWidth) * 100}%`,
+  top: `${(draftFrame.value.y / stageHeight) * 100}%`,
+  width: `${(draftFrame.value.width / stageWidth) * 100}%`,
+  height: `${(draftFrame.value.height / stageHeight) * 100}%`
 }))
 
 const maskStyles = computed(() => {
-  const left = (model.value.x / stageWidth) * 100
-  const top = (model.value.y / stageHeight) * 100
-  const width = (model.value.width / stageWidth) * 100
-  const height = (model.value.height / stageHeight) * 100
+  const left = (draftFrame.value.x / stageWidth) * 100
+  const top = (draftFrame.value.y / stageHeight) * 100
+  const width = (draftFrame.value.width / stageWidth) * 100
+  const height = (draftFrame.value.height / stageHeight) * 100
   return {
     top: { left: '0%', top: '0%', width: '100%', height: `${top}%` },
     right: {
@@ -117,7 +127,7 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(Math.max(value, minimum), maximum)
 }
 
-function pointerPosition(event: PointerEvent) {
+function pointerPosition(event: Pick<MouseEvent, 'clientX' | 'clientY'>) {
   const rect = overlayRef.value?.getBoundingClientRect()
   if (!rect?.width || !rect.height) return null
   return {
@@ -136,9 +146,54 @@ function setFrame(frame: CameraFrameValue, commit = false) {
   }
   normalized.x = Math.min(normalized.x, stageWidth - normalized.width)
   normalized.y = Math.min(normalized.y, stageHeight - normalized.height)
-  model.value = normalized
+  draftFrame.value = normalized
   emit('change', normalized)
-  if (commit) emit('commit', normalized)
+  if (commit) {
+    model.value = normalized
+    emit('commit', normalized)
+  }
+}
+
+function currentFrameRatio(): number {
+  const preset = draftFrame.value.aspectRatio
+  if (preset !== 'custom') return ratioValues[preset]
+  return draftFrame.value.width / Math.max(1, draftFrame.value.height)
+}
+
+function maximumFrameWidth(ratio: number): number {
+  return Math.min(stageWidth, stageHeight * ratio)
+}
+
+const zoomPercentage = computed(() => {
+  const ratio = currentFrameRatio()
+  return Math.round((maximumFrameWidth(ratio) / Math.max(1, draftFrame.value.width)) * 100)
+})
+
+function zoomFrame(factor: number, focus?: { x: number; y: number }, commit = true): void {
+  if (disabled || !Number.isFinite(factor) || factor <= 0) return
+  const frame = draftFrame.value
+  const ratio = currentFrameRatio()
+  const maxWidth = maximumFrameWidth(ratio)
+  const minWidth = Math.min(maxWidth, Math.max(64, 64 * ratio))
+  const width = clamp(frame.width / factor, minWidth, maxWidth)
+  const height = width / ratio
+  const focalPoint = focus ?? {
+    x: frame.x + frame.width / 2,
+    y: frame.y + frame.height / 2
+  }
+  const relativeX = clamp((focalPoint.x - frame.x) / Math.max(1, frame.width), 0, 1)
+  const relativeY = clamp((focalPoint.y - frame.y) / Math.max(1, frame.height), 0, 1)
+
+  setFrame(
+    {
+      ...frame,
+      x: focalPoint.x - width * relativeX,
+      y: focalPoint.y - height * relativeY,
+      width,
+      height
+    },
+    commit
+  )
 }
 
 function beginInteraction(event: PointerEvent, kind: Interaction['kind'], handle?: ResizeHandle) {
@@ -153,7 +208,7 @@ function beginInteraction(event: PointerEvent, kind: Interaction['kind'], handle
     pointerId: event.pointerId,
     startX: point.x,
     startY: point.y,
-    frame: { ...model.value }
+    frame: { ...draftFrame.value }
   }
 }
 
@@ -173,7 +228,10 @@ function resizeFrame(start: CameraFrameValue, handle: ResizeHandle, dx: number, 
   top = clamp(top, 0, bottom - 64)
   bottom = clamp(bottom, top + 64, stageHeight)
 
-  const ratio = model.value.aspectRatio === 'custom' ? null : ratioValues[model.value.aspectRatio]
+  const ratio =
+    draftFrame.value.aspectRatio === 'custom'
+      ? null
+      : ratioValues[draftFrame.value.aspectRatio]
   if (ratio) {
     let width = right - left
     let height = bottom - top
@@ -248,12 +306,12 @@ function finishInteraction(event: PointerEvent) {
   if (overlayRef.value?.hasPointerCapture(event.pointerId)) {
     overlayRef.value.releasePointerCapture(event.pointerId)
   }
-  emit('commit', { ...model.value })
+  setFrame(draftFrame.value, true)
 }
 
 function applyRatio(aspectRatio: CameraFrameAspectRatio) {
   if (aspectRatio === 'custom') {
-    setFrame({ ...model.value, aspectRatio }, true)
+    setFrame({ ...draftFrame.value, aspectRatio }, true)
     return
   }
   const ratio = ratioValues[aspectRatio]
@@ -265,7 +323,7 @@ function applyRatio(aspectRatio: CameraFrameAspectRatio) {
   }
   setFrame(
     {
-      ...model.value,
+      ...draftFrame.value,
       x: (stageWidth - width) / 2,
       y: (stageHeight - height) / 2,
       width,
@@ -289,6 +347,7 @@ function resetFrame() {
     true
   )
 }
+
 </script>
 
 <template>
@@ -361,7 +420,7 @@ function resetFrame() {
           size="xs"
           class="min-h-[36px] rounded-lg px-2.5 text-[11px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-primary"
           :class="
-            model.aspectRatio === ratio
+            draftFrame.aspectRatio === ratio
               ? 'bg-primary text-text-inverse hover:bg-primary hover:text-text-inverse'
               : ''
           "
@@ -370,6 +429,33 @@ function resetFrame() {
         >
           {{ ratio === 'custom' ? 'Libre' : ratio }}
         </Button>
+        <div class="mx-0.5 h-5 w-px bg-border-default" />
+        <IconButton
+          icon="remove"
+          size="xs"
+          variant="ghost"
+          class="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg"
+          aria-label="Zoom arrière du cadrage"
+          title="Zoom arrière du cadrage"
+          data-camera-zoom-out
+          @click="zoomFrame(1 / 1.1)"
+        />
+        <span
+          class="min-w-10 text-center font-mono text-[10px] font-semibold text-text-secondary"
+          data-camera-zoom-value
+        >
+          {{ zoomPercentage }}%
+        </span>
+        <IconButton
+          icon="add"
+          size="xs"
+          variant="ghost"
+          class="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg"
+          aria-label="Zoom avant du cadrage"
+          title="Zoom avant du cadrage"
+          data-camera-zoom-in
+          @click="zoomFrame(1.1)"
+        />
         <IconButton
           icon="restart_alt"
           size="xs"
@@ -384,7 +470,7 @@ function resetFrame() {
       <div
         class="absolute bottom-2 left-2 rounded-md bg-black/65 px-2 py-1 font-mono text-[10px] text-white pointer-events-none"
       >
-        {{ Math.round(model.width) }} × {{ Math.round(model.height) }} px
+        {{ Math.round(draftFrame.width) }} × {{ Math.round(draftFrame.height) }} px
       </div>
     </div>
   </div>

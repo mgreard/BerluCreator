@@ -106,19 +106,18 @@ function matchesCharacterCategory(asset: Asset, definition: CharacterCategory): 
 
 function characterAssets(key: string): Asset[] {
   const activeRig = activeRigForCharacterKey(key)
-  return assetStore.assets.filter(
-    (asset) => {
-      if (ASSET_CATEGORIES[asset.category].placementMode !== 'character-anchored') return false
-      if (asset.category === 'props_character') return true
-      if (asset.category === 'head' || asset.category === 'mouth') {
-        return activeRig ? true : characterKey(asset) === key
-      }
-      return characterKey(asset) === key
+  return assetStore.assets.filter((asset) => {
+    if (ASSET_CATEGORIES[asset.category].placementMode !== 'character-anchored') return false
+    if (asset.category === 'props_character') return true
+    if (asset.category === 'head' || asset.category === 'mouth') {
+      return activeRig ? true : characterKey(asset) === key
     }
-  )
+    return characterKey(asset) === key
+  })
 }
 
 function isAssetDisabled(asset: Asset): boolean {
+  if (rigCatalog.isCalibrationOpen) return false
   if (selection.type !== 'character') return false
   const rig = activeRigForCharacterKey(selection.characterKey)
   return Boolean(rig && !isAssetAvailableInRig(asset, rig))
@@ -221,6 +220,34 @@ const visibleAssetIds = computed(() => {
   return ids
 })
 
+const activeRigGroup = computed<CharacterGroup | null>(() => {
+  const selected = editorStore.selectedGroup
+  if (
+    selected?.kind === 'character' &&
+    selected.activeMode === 'rig' &&
+    (selection.type !== 'character' || selected.characterKey === selection.characterKey)
+  ) {
+    return selected
+  }
+
+  return (
+    editorStore.currentDocument.groups.find(
+      (group): group is CharacterGroup =>
+        group.kind === 'character' &&
+        group.activeMode === 'rig' &&
+        (selection.type !== 'character' || group.characterKey === selection.characterKey)
+    ) ?? null
+  )
+})
+
+function canRemovePropFromViewport(asset: Asset): boolean {
+  const group = activeRigGroup.value
+  if (!group || group.muted || asset.category !== 'props_character') return false
+  return editorStore.currentDocument.layers.some(
+    (layer) => layer.groupId === group.id && layer.assetId === asset.id && !layer.muted
+  )
+}
+
 const isMouthCategory = computed(() => {
   if (selection.type === 'character') {
     return selection.categoryId === 'mouth'
@@ -262,13 +289,15 @@ const isMouthEmptySelected = computed(() => {
 })
 
 function onSelectEmptyMouth(): void {
-  const groupsToUpdate = selection.type === 'character'
-    ? editorStore.currentDocument.groups.filter(
-        (g): g is CharacterGroup => g.kind === 'character' && g.characterKey === selection.characterKey
-      )
-    : editorStore.currentDocument.groups.filter(
-        (g): g is CharacterGroup => g.kind === 'character'
-      )
+  const groupsToUpdate =
+    selection.type === 'character'
+      ? editorStore.currentDocument.groups.filter(
+          (g): g is CharacterGroup =>
+            g.kind === 'character' && g.characterKey === selection.characterKey
+        )
+      : editorStore.currentDocument.groups.filter(
+          (g): g is CharacterGroup => g.kind === 'character'
+        )
 
   for (const group of groupsToUpdate) {
     for (const layer of [...editorStore.currentDocument.layers]) {
@@ -292,10 +321,31 @@ function onSelectEmptyMouth(): void {
 }
 
 function onSelectAsset(asset: Asset): void {
+  if (rigCatalog.isCalibrationOpen) {
+    if (asset.category === 'body') {
+      const rig = rigCatalog.compatibleRigs(asset)[0]
+      if (rig) {
+        rigCatalog.selectedRigId = rig.id
+        rigRuntime.syncRigLayers(rig.id)
+      }
+      assetStore.selectAsset(asset.id)
+      return
+    }
+
+    assetStore.selectAsset(asset.id)
+    rigCatalog.calibrationTargetId = asset.id
+    if (asset.headSeriesId) {
+      rigCatalog.selectedHeadSeriesId = asset.headSeriesId
+    }
+    rigCatalog.calibrationTool = asset.category === 'head' ? 'head' : 'accessory'
+    return
+  }
+
   if (asset.category === 'body' && !rigCatalog.isCalibrationOpen) {
     const rig = rigCatalog.compatibleRigs(asset)[0]
     if (rig && !rig.calibrated) {
       assetStore.selectAsset(asset.id)
+      rigCatalog.calibrationTool = 'body'
       rigCatalog.openCalibration(rig.id)
       toast.info(
         'Calibration requise',
@@ -305,18 +355,17 @@ function onSelectAsset(asset: Asset): void {
     }
   }
   if (isAssetDisabled(asset)) {
-    const rig = selection.type === 'character'
-      ? activeRigForCharacterKey(selection.characterKey)
-      : undefined
+    const rig =
+      selection.type === 'character' ? activeRigForCharacterKey(selection.characterKey) : undefined
     if (asset.headSeriesId) rigCatalog.selectedHeadSeriesId = asset.headSeriesId
     rigCatalog.openCalibration(rig?.id)
+    rigCatalog.calibrationTool =
+      asset.category === 'props_character' || asset.category === 'mouth' ? 'accessory' : 'head'
     toast.warning('Série incompatible', 'Activez cette série dans la configuration du corps.')
     return
   }
   if (
-    FREE_ACCESSORY_CATEGORIES.includes(
-      asset.category as (typeof FREE_ACCESSORY_CATEGORIES)[number]
-    )
+    FREE_ACCESSORY_CATEGORIES.includes(asset.category as (typeof FREE_ACCESSORY_CATEGORIES)[number])
   ) {
     const existing = editorStore.currentDocument.layers
       .filter((layer) => layer.assetId === asset.id && !layer.muted)
@@ -362,7 +411,29 @@ function onDuplicateAsset(asset: Asset): void {
   assetStore.selectAsset(asset.id)
 }
 
+function onRemoveAssetFromViewport(asset: Asset): void {
+  const group = activeRigGroup.value
+  if (!group || asset.category !== 'props_character') return
+  const layer = editorStore.currentDocument.layers.find(
+    (candidate) =>
+      candidate.groupId === group.id &&
+      candidate.assetId === asset.id &&
+      candidate.category === 'props_character' &&
+      !candidate.muted
+  )
+  if (!layer) return
+
+  editorStore.removeLayer(layer.id)
+  if (rigCatalog.calibrationTargetId === asset.id) rigCatalog.calibrationTargetId = null
+  if (assetStore.selectedAssetId === asset.id) assetStore.selectAsset(null)
+  toast.info('Prop retiré', `« ${asset.name} » reste disponible dans la bibliothèque.`)
+}
+
 async function onDeleteAsset(asset: Asset): Promise<void> {
+  if (asset.source === 'bundled') {
+    toast.info('Asset protégé', 'Les assets de base ne peuvent pas être supprimés.')
+    return
+  }
   try {
     const impact = await assetStore.inspectAssetDeletion(asset.id)
     if (impact.snapshotNames.length > 0) {
@@ -432,15 +503,15 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
         :aria-busy="isInitialLoading"
       >
         <!-- Empty mouth option card -->
-        <button
+        <Button
           v-if="isMouthCategory && !isInitialLoading"
-          type="button"
+          variant="ghost"
           class="group relative flex flex-col items-center justify-between rounded-xl border p-2.5 transition-all duration-200 text-left cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-primary select-none touch-manipulation min-h-[140px]"
-          :class="[
+          :class="
             isMouthEmptySelected
               ? 'border-primary/80 bg-primary/10 shadow-[0_0_16px_rgba(244,63,94,0.18)] ring-1 ring-primary/80'
               : 'border-border-default/80 bg-bg-surface/60 hover:border-primary/40 hover:bg-bg-surface/90 hover:shadow-md'
-          ]"
+          "
           aria-label="Aucune bouche"
           :aria-selected="isMouthEmptySelected"
           @click="onSelectEmptyMouth"
@@ -448,15 +519,19 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
           <!-- Card Header Badge & Check indicator -->
           <div class="flex w-full items-center justify-between">
             <Badge
-              :variant="isMouthEmptySelected ? 'primary' : 'neutral'"
-              size="xs"
+              :variant="isMouthEmptySelected ? 'accent' : 'neutral'"
+              size="sm"
               class="text-[9px]"
             >
               {{ isMouthEmptySelected ? 'Actif' : 'Option' }}
             </Badge>
             <div
               class="flex h-5 w-5 items-center justify-center rounded-full transition-colors"
-              :class="isMouthEmptySelected ? 'bg-primary text-white' : 'text-text-muted group-hover:text-text-secondary'"
+              :class="
+                isMouthEmptySelected
+                  ? 'bg-primary text-white'
+                  : 'text-text-muted group-hover:text-text-secondary'
+              "
             >
               <Icon :name="isMouthEmptySelected ? 'check' : 'visibility_off'" size="xs" />
             </div>
@@ -466,7 +541,11 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
           <div class="my-auto flex flex-col items-center justify-center py-2">
             <div
               class="flex h-12 w-12 items-center justify-center rounded-full border border-dashed transition-transform duration-200 group-hover:scale-105"
-              :class="isMouthEmptySelected ? 'border-primary/60 bg-primary/20 text-primary' : 'border-border-default bg-bg-elevated/40 text-text-muted group-hover:border-text-secondary group-hover:text-text-primary'"
+              :class="
+                isMouthEmptySelected
+                  ? 'border-primary/60 bg-primary/20 text-primary'
+                  : 'border-border-default bg-bg-elevated/40 text-text-muted group-hover:border-text-secondary group-hover:text-text-primary'
+              "
             >
               <Icon name="block" size="md" />
             </div>
@@ -474,14 +553,10 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
 
           <!-- Card Footer Info -->
           <div class="w-full text-center">
-            <div class="text-xs font-semibold tracking-tight text-text-primary">
-              Aucune bouche
-            </div>
-            <div class="text-[10px] text-text-muted">
-              Vide (Masquée)
-            </div>
+            <div class="text-xs font-semibold tracking-tight text-text-primary">Aucune bouche</div>
+            <div class="text-[10px] text-text-muted">Vide (Masquée)</div>
           </div>
-        </button>
+        </Button>
 
         <template v-if="isInitialLoading">
           <div
@@ -503,7 +578,10 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
           :key="asset.id"
           :asset="asset"
           :selected="visibleAssetIds.has(asset.id)"
+          :focused="assetStore.selectedAssetId === asset.id"
           :disabled="isAssetDisabled(asset)"
+          :can-delete="asset.source === 'uploaded'"
+          :can-remove-from-viewport="canRemovePropFromViewport(asset)"
           :allow-duplicate="
             FREE_ACCESSORY_CATEGORIES.includes(
               asset.category as (typeof FREE_ACCESSORY_CATEGORIES)[number]
@@ -511,6 +589,7 @@ async function onDeleteAsset(asset: Asset): Promise<void> {
           "
           @select="onSelectAsset"
           @duplicate="onDuplicateAsset"
+          @remove-from-viewport="onRemoveAssetFromViewport"
           @delete="onDeleteAsset"
           @split="onSplitAsset"
         />

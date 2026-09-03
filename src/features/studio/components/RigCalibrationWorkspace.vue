@@ -40,11 +40,14 @@ const newSeriesLabel = ref('')
 const newSeriesWidth = ref(1205)
 const newSeriesHeight = ref(1305)
 
-// Accessories Slot Selection
-const selectedPropSlot = ref<CharacterPropSlot>('sunglass')
+// Accessories & Mouth Slot Selection
+export type AnchoredPartSlot = CharacterPropSlot | 'mouth'
+
+const selectedPropSlot = ref<AnchoredPartSlot>('sunglass')
 const propSlotOptions: SelectOption[] = [
   { value: 'sunglass', label: 'Lunettes' },
-  { value: 'hat', label: 'Chapeaux' }
+  { value: 'hat', label: 'Chapeaux' },
+  { value: 'mouth', label: 'Bouche' }
 ]
 
 // Computed Options
@@ -98,6 +101,7 @@ const selectedHeadId = computed({
   set: (id: string | number | boolean | null) => {
     if (!id) return
     rigCatalog.calibrationTargetId = String(id)
+    rigCatalog.calibrationTool = 'head'
     assetStore.selectAsset(String(id))
   }
 })
@@ -146,32 +150,111 @@ const selectedDefaultMouthId = computed({
     rigCatalog.updateHeadSeries(series.id, {
       defaultMouthAssetKey: mouth ? rigAssetKey(mouth) : undefined
     })
+    if (mouth) {
+      assetStore.selectAsset(mouth.id)
+      selectedPropSlot.value = 'mouth'
+      rigCatalog.calibrationTool = 'accessory'
+    } else {
+      rigCatalog.calibrationTool = 'head'
+    }
     if (selectedRig.value) {
       rigRuntime.syncRigLayers(selectedRig.value.id)
     }
   }
 })
 
-// Accessories Options
-const accessoryOptions = computed<SelectOption[]>(() =>
-  assetStore.assets
+// Accessories & Mouth Options
+const accessoryOptions = computed<SelectOption[]>(() => {
+  if (selectedPropSlot.value === 'mouth') {
+    return assetStore.assets
+      .filter(
+        (asset) =>
+          asset.category === 'mouth' &&
+          (!asset.headSeriesId || asset.headSeriesId === selectedSeries.value?.id)
+      )
+      .map((asset) => {
+        const isDefault =
+          selectedSeries.value?.defaultMouthAssetKey === rigAssetKey(asset)
+        const hasCalib = Boolean(
+          selectedSeries.value && asset.anchoredCalibrationBySeries?.[selectedSeries.value.id]
+        )
+        return {
+          value: asset.id,
+          label: `${isDefault ? '✓ ' : ''}${asset.name}${hasCalib ? ' (calibré)' : ''}`
+        }
+      })
+  }
+
+  return assetStore.assets
     .filter(
       (asset) =>
         asset.category === 'props_character' &&
         asset.characterPropSlot === selectedPropSlot.value
     )
-    .map((asset) => ({ value: asset.id, label: asset.name }))
-)
+    .map((asset) => {
+      const hasCalib = Boolean(
+        selectedSeries.value && asset.anchoredCalibrationBySeries?.[selectedSeries.value.id]
+      )
+      return {
+        value: asset.id,
+        label: `${asset.name}${hasCalib ? ' (calibré)' : ''}`
+      }
+    })
+})
 
 const selectedAccessoryId = computed<string>({
-  get: () =>
-    assetStore.selectedAsset?.category === 'props_character'
-      ? assetStore.selectedAsset.id
-      : '',
+  get: () => {
+    const sel = assetStore.selectedAsset
+    if (!sel) return ''
+    if (selectedPropSlot.value === 'mouth') {
+      return sel.category === 'mouth' ? sel.id : ''
+    }
+    return sel.category === 'props_character' && sel.characterPropSlot === selectedPropSlot.value
+      ? sel.id
+      : ''
+  },
   set: (assetId) => {
     assetStore.selectAsset(assetId || null)
+    if (assetId) rigCatalog.calibrationTool = 'accessory'
   }
 })
+
+const isCurrentMouthDefault = computed(() => {
+  const sel = assetStore.selectedAsset
+  return Boolean(
+    sel &&
+      sel.category === 'mouth' &&
+      selectedSeries.value?.defaultMouthAssetKey === rigAssetKey(sel)
+  )
+})
+
+function setDefaultMouthForSeries(): void {
+  const series = selectedSeries.value
+  const mouth = assetStore.selectedAsset
+  if (!series || !mouth || mouth.category !== 'mouth') return
+  rigCatalog.updateHeadSeries(series.id, {
+    defaultMouthAssetKey: rigAssetKey(mouth)
+  })
+  if (selectedRig.value) {
+    rigRuntime.syncRigLayers(selectedRig.value.id)
+  }
+  toast.success('Bouche par défaut mise à jour', `« ${mouth.name} » est maintenant la bouche par défaut.`)
+}
+
+async function resetCurrentAnchoredCalibration(): Promise<void> {
+  const series = selectedSeries.value
+  const asset = assetStore.selectedAsset
+  if (!series || !asset) return
+  const currentCalibs = { ...(asset.anchoredCalibrationBySeries ?? {}) }
+  delete currentCalibs[series.id]
+  await assetStore.updateAsset(asset.id, {
+    anchoredCalibrationBySeries: currentCalibs
+  })
+  if (selectedRig.value) {
+    rigRuntime.syncRigLayers(selectedRig.value.id)
+  }
+  toast.info('Calibration réinitialisée', `Les réglages de « ${asset.name} » ont été remis par défaut.`)
+}
 
 watch(
   () => rigCatalog.rigs,
@@ -182,10 +265,10 @@ watch(
 )
 
 watch(
-  accessoryOptions,
-  (options) => {
+  [accessoryOptions, selectedPropSlot],
+  ([options]) => {
     if (!options.some((option) => option.value === selectedAccessoryId.value)) {
-      selectedAccessoryId.value = String(options[0]?.value ?? '')
+      assetStore.selectAsset(String(options[0]?.value ?? '') || null)
     }
   },
   { immediate: true }
@@ -194,6 +277,23 @@ watch(
 function numberValue(value: string | number | undefined, fallback = 0): number {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function toggleBodySection(): void {
+  isBodySectionOpen.value = !isBodySectionOpen.value
+  if (isBodySectionOpen.value) rigCatalog.calibrationTool = 'body'
+}
+
+function toggleSeriesSettings(): void {
+  isSeriesSettingsOpen.value = !isSeriesSettingsOpen.value
+  if (isSeriesSettingsOpen.value) rigCatalog.calibrationTool = 'head'
+}
+
+function toggleAccessoriesCard(): void {
+  isAccessoriesCardOpen.value = !isAccessoriesCardOpen.value
+  if (isAccessoriesCardOpen.value && selectedAccessoryId.value) {
+    rigCatalog.calibrationTool = 'accessory'
+  }
 }
 
 function createSeries(): void {
@@ -357,7 +457,7 @@ function finishCalibration(): void {
         <Button
           variant="ghost"
           class="flex w-full items-center justify-between px-3.5 py-2.5 text-left transition-colors hover:bg-white/5"
-          @click="isBodySectionOpen = !isBodySectionOpen"
+          @click="toggleBodySection"
         >
           <div class="flex items-center gap-2">
             <span class="text-xs font-bold uppercase tracking-wider text-text-secondary">
@@ -380,6 +480,7 @@ function finishCalibration(): void {
               v-model="rigCatalog.selectedRigId"
               :options="rigOptions"
               size="sm"
+              @update:model-value="rigCatalog.calibrationTool = 'body'"
             />
           </FormGroup>
 
@@ -527,7 +628,7 @@ function finishCalibration(): void {
             <Button
               variant="ghost"
               class="flex w-full items-center justify-between text-left"
-              @click="isSeriesSettingsOpen = !isSeriesSettingsOpen"
+              @click="toggleSeriesSettings"
             >
               <div class="flex items-center gap-2">
                 <div class="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-400">
@@ -547,16 +648,6 @@ function finishCalibration(): void {
 
             <div v-show="isSeriesSettingsOpen" class="space-y-3 pt-2 border-t border-border-subtle/40">
               <template v-if="selectedSeries">
-                <div class="flex items-start gap-2 rounded-lg border border-border-subtle bg-bg-elevated/50 p-2.5">
-                  <Icon name="adjust" size="xs" class="mt-0.5 shrink-0 text-cyan-400" />
-                  <div class="space-y-0.5">
-                    <Text variant="caption" weight="semibold">Ancrages dans le viewport</Text>
-                    <Text variant="caption" color="muted">
-                      Déplacez les repères du cou, de la bouche, des lunettes et du chapeau directement sur la tête.
-                    </Text>
-                  </div>
-                </div>
-
                 <!-- Default Mouth -->
                 <FormGroup label="Bouche par défaut de la série">
                   <Select
@@ -585,18 +676,18 @@ function finishCalibration(): void {
             </div>
           </div>
 
-          <!-- SUB-CARD: ACCESSOIRES DE PERSONNAGE -->
+          <!-- SUB-CARD: ACCESSOIRES DE PERSONNAGE & BOUCHE -->
           <div class="rounded-xl border border-border-default bg-bg-surface/80 p-3.5 space-y-3 shadow-sm">
             <Button
               variant="ghost"
               class="flex w-full items-center justify-between text-left"
-              @click="isAccessoriesCardOpen = !isAccessoriesCardOpen"
+              @click="toggleAccessoriesCard"
             >
               <div class="flex items-center gap-2">
                 <div class="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500/20 text-amber-400">
                   <Icon name="inventory_2" size="xs" />
                 </div>
-                <span class="text-xs font-bold text-text-primary">Accessoires de Personnage</span>
+                <span class="text-xs font-bold text-text-primary">Accessoires & Bouche</span>
               </div>
               <Icon
                 name="chevron-down"
@@ -608,7 +699,7 @@ function finishCalibration(): void {
 
             <div v-show="isAccessoriesCardOpen" class="space-y-3 pt-2 border-t border-border-subtle/40">
               <div class="grid grid-cols-2 gap-2">
-                <FormGroup label="Catégorie d'accessoire">
+                <FormGroup label="Catégorie d'élément">
                   <Select v-model="selectedPropSlot" :options="propSlotOptions" size="sm" />
                 </FormGroup>
                 <FormGroup label="Asset sélectionné">
@@ -623,14 +714,47 @@ function finishCalibration(): void {
 
               <div
                 v-if="selectedAccessoryId"
-                class="flex items-start gap-2 rounded-lg border border-border-subtle bg-bg-elevated/60 p-2.5"
+                class="space-y-2.5 rounded-lg border border-border-subtle bg-bg-elevated/60 p-2.5"
               >
-                <Icon name="open_with" size="xs" class="mt-0.5 shrink-0 text-amber-400" />
-                <div class="space-y-0.5">
-                  <Text variant="caption" weight="semibold">Calibrage visuel de l’accessoire</Text>
-                  <Text variant="caption" color="muted">
-                    Ajustez sa position, son pivot, sa taille et sa rotation directement dans le viewport.
-                  </Text>
+                <div class="flex items-start gap-2">
+                  <Icon
+                    name="open_with"
+                    size="xs"
+                    class="mt-0.5 shrink-0"
+                    :class="selectedPropSlot === 'mouth' ? 'text-emerald-400' : selectedPropSlot === 'hat' ? 'text-sky-400' : 'text-amber-400'"
+                  />
+                  <div class="space-y-0.5">
+                    <Text variant="caption" weight="semibold">
+                      {{ selectedPropSlot === 'mouth' ? 'Calibrage visuel de la bouche' : 'Calibrage visuel de l’accessoire' }}
+                    </Text>
+                    <Text variant="caption" color="muted">
+                      Ajustez sa position, sa taille et sa rotation directement dans le viewport.
+                    </Text>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between gap-2 pt-1 border-t border-border-subtle/40">
+                  <Button
+                    v-if="selectedPropSlot === 'mouth'"
+                    size="xs"
+                    variant="ghost"
+                    class="h-7 text-xs gap-1"
+                    :disabled="isCurrentMouthDefault"
+                    @click="setDefaultMouthForSeries"
+                  >
+                    <Icon name="bookmark" size="xs" />
+                    {{ isCurrentMouthDefault ? 'Bouche par défaut' : 'Définir par défaut' }}
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    class="h-7 text-xs gap-1 text-text-muted hover:text-text-primary ml-auto"
+                    title="Réinitialiser le positionnement, échelle et rotation"
+                    @click="resetCurrentAnchoredCalibration"
+                  >
+                    <Icon name="refresh" size="xs" />
+                    Réinitialiser
+                  </Button>
                 </div>
               </div>
             </div>

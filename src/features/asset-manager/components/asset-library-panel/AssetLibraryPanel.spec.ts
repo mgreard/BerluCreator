@@ -107,4 +107,61 @@ describe('AssetLibraryPanel', () => {
 
     expect(wrapper.emitted('update:open')?.at(-1)).toEqual([false])
   })
+
+  it('synchronise le focus d’un rig puis de son prop depuis le viewport', async () => {
+    const assetStore = useAssetStore()
+    const prop = {
+      ...mockAsset('prop-1', 'Lunettes', 'props_character'),
+      characterPropSlot: 'sunglass' as const
+    }
+    assetStore.assets = [mockAsset('body-1', 'Corps Berlu', 'body'), prop]
+    assetStore.hasLoaded = true
+    assetStore.searchQuery = 'recherche masquante'
+
+    const wrapper = mount(AssetLibraryPanel, {
+      props: { open: true, selection: { type: 'all' } }
+    })
+
+    assetStore.focusCharacterInLibrary('berlu')
+    await wrapper.setProps({ selection: assetStore.librarySelection })
+
+    expect(assetStore.searchQuery).toBe('')
+    expect(assetStore.selectedAssetId).toBeNull()
+    expect(assetStore.librarySelection).toEqual({
+      type: 'character',
+      characterKey: 'berlu',
+      categoryId: null
+    })
+    expect(
+      wrapper
+        .findAll('button[aria-pressed]')
+        .find((button) => button.text().includes('Tout'))
+        ?.attributes('aria-pressed')
+    ).toBe('true')
+
+    assetStore.focusCharacterInLibrary('berlu', {
+      assetId: prop.id,
+      categoryId: 'props-character'
+    })
+    await wrapper.setProps({ selection: assetStore.librarySelection })
+
+    expect(assetStore.selectedAssetId).toBe(prop.id)
+    expect(assetStore.selectedCategory).toBe('props_character')
+    expect(
+      wrapper
+        .findAll('button[aria-pressed]')
+        .find((button) => button.text().includes('Accessoires'))
+        ?.attributes('aria-pressed')
+    ).toBe('true')
+    expect(wrapper.get('[data-focused="true"]').text()).toContain('Lunettes')
+
+    const stageProp = mockAsset('stage-prop-1', 'Lampe', 'props_set')
+    assetStore.assets.push(stageProp)
+    assetStore.focusStageAssetInLibrary(stageProp.id, stageProp.category)
+    await wrapper.setProps({ selection: assetStore.librarySelection })
+
+    expect(assetStore.librarySelection).toEqual({ type: 'stage', category: 'props_set' })
+    expect(assetStore.selectedAssetId).toBe(stageProp.id)
+    expect(wrapper.get('[data-focused="true"]').text()).toContain('Lampe')
+  })
 })

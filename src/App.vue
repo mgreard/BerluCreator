@@ -19,7 +19,6 @@ import ExportModal from '@/features/project/components/ExportModal.vue'
 import { BatchExportModal } from '@/features/asset-manager/components/batch-export-modal'
 import { ViewportSnapshotsPanel } from '@/features/editor/components/viewport-snapshots-panel'
 import ResizableSidebar from '@/features/studio/components/ResizableSidebar.vue'
-import RigCalibrationWorkspace from '@/features/studio/components/RigCalibrationWorkspace.vue'
 import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import ToastContainer from '@/components/ui/toast-container/ToastContainer.vue'
 import { ProductTour } from '@/components/ui/product-tour'
@@ -134,12 +133,16 @@ watch(isSavedSnapshotsOpen, (open) => {
 })
 
 watch(
-  [isSavedSnapshotsOpen, () => rigCatalogStore.isCalibrationOpen],
-  ([snapshotsOpen, calibrationOpen]) => {
-    if (snapshotsOpen || calibrationOpen) compactPane.value = 'inspector'
-    else if (compactPane.value === 'inspector') compactPane.value = 'studio'
+  () => assetStore.libraryFocusVersion,
+  () => {
+    isAssetLibraryOpen.value = true
   }
 )
+
+watch(isSavedSnapshotsOpen, (snapshotsOpen) => {
+  if (snapshotsOpen) compactPane.value = 'inspector'
+  else if (compactPane.value === 'inspector') compactPane.value = 'studio'
+})
 </script>
 
 <template>
@@ -170,7 +173,11 @@ watch(
           :max-width="520"
           storage-key="berlu.asset-library-sidebar-width.v1"
         >
-          <AssetLibraryPanel v-model:open="isAssetLibraryOpen" data-tour="asset-library" />
+          <AssetLibraryPanel
+            v-model:open="isAssetLibraryOpen"
+            v-model:selection="assetStore.librarySelection"
+            data-tour="asset-library"
+          />
         </ResizableSidebar>
       </template>
 
@@ -183,9 +190,8 @@ watch(
         />
       </div>
 
-      <template v-if="isSavedSnapshotsOpen || rigCatalogStore.isCalibrationOpen" #right>
+      <template v-if="isSavedSnapshotsOpen" #right>
         <ResizableSidebar
-          v-if="isSavedSnapshotsOpen"
           v-model:open="isSavedSnapshotsOpen"
           side="right"
           :default-width="380"
@@ -194,18 +200,6 @@ watch(
           storage-key="berlu.saved-snapshots-sidebar-width.v1"
         >
           <ViewportSnapshotsPanel v-model:open="isSavedSnapshotsOpen" />
-        </ResizableSidebar>
-
-        <ResizableSidebar
-          v-else
-          v-model:open="rigCatalogStore.isCalibrationOpen"
-          side="right"
-          :default-width="420"
-          :min-width="360"
-          :max-width="560"
-          storage-key="berlu.rig-calibration-sidebar-width.v1"
-        >
-          <RigCalibrationWorkspace />
         </ResizableSidebar>
       </template>
     </StudioWorkspaceLayout>

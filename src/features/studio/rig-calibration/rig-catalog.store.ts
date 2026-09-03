@@ -15,6 +15,7 @@ import {
 } from './rig-catalog.service'
 import type {
   HeadSeriesProfile,
+  RigCalibrationTool,
   RigCatalogFile,
   RigDefinition,
   RigHeadSeriesConfig,
@@ -46,6 +47,7 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
   const selectedRigId = ref<string | null>(null)
   const selectedHeadSeriesId = ref<HeadSeriesId>('berlu')
   const calibrationTargetId = ref<string | null>(null)
+  const calibrationTool = ref<RigCalibrationTool>('body')
 
   function persist(): void {
     rigs.value = [...rigs.value]
@@ -278,6 +280,53 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
     persist()
   }
 
+  function commitRigCalibration(
+    rigId: string,
+    patch: {
+      neckAnchor?: RigPoint
+      seriesId?: HeadSeriesId
+      defaultScale?: number
+      defaultRotation?: number
+      anchor?: {
+        id: 'neckPivot' | 'mouthAnchor' | 'sunglass' | 'hat'
+        point: NormalizedPoint
+      }
+    }
+  ): void {
+    const rig = rigById(rigId)
+    if (!rig) return
+    if (patch.neckAnchor) rig.neckAnchor = { ...patch.neckAnchor }
+
+    if (patch.seriesId) {
+      const config = rig.headSeries.find((entry) => entry.seriesId === patch.seriesId)
+      if (config) {
+        if (patch.defaultScale !== undefined) {
+          config.defaultScale = Math.max(0.01, patch.defaultScale)
+        }
+        if (patch.defaultRotation !== undefined) config.defaultRotation = patch.defaultRotation
+      }
+
+      if (patch.anchor) {
+        const series = seriesById(patch.seriesId)
+        if (series) {
+          const point = {
+            x: Math.max(0, Math.min(1, patch.anchor.point.x)),
+            y: Math.max(0, Math.min(1, patch.anchor.point.y))
+          }
+          if (patch.anchor.id === 'neckPivot' || patch.anchor.id === 'mouthAnchor') {
+            series[patch.anchor.id] = point
+          } else {
+            series.propAnchors[patch.anchor.id] = point
+          }
+          series.updatedAt = Date.now()
+        }
+      }
+    }
+
+    rig.updatedAt = Date.now()
+    persist()
+  }
+
   function setDefaultRig(characterKey: string, rigId: string): void {
     if (!rigs.value.some((rig) => rig.id === rigId && rig.characterKey === characterKey)) return
     defaultRigByCharacter.value = { ...defaultRigByCharacter.value, [characterKey]: rigId }
@@ -307,12 +356,14 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
 
   function openCalibration(rigId?: string): void {
     selectedRigId.value = rigId ?? selectedRigId.value ?? rigs.value[0]?.id ?? null
+    calibrationTool.value = 'body'
     isCalibrationOpen.value = true
   }
 
   function closeCalibration(): void {
     isCalibrationOpen.value = false
     calibrationTargetId.value = null
+    calibrationTool.value = 'body'
   }
 
   function resetToDefaultCatalog(assets: Asset[]): void {
@@ -340,6 +391,7 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
     selectedRigId,
     selectedHeadSeriesId,
     calibrationTargetId,
+    calibrationTool,
     initialize,
     rigById,
     rigsForCharacter,
@@ -354,6 +406,7 @@ export const useRigCatalogStore = defineStore('rigCatalog', () => {
     setSeriesCompatibility,
     updateSeriesDefaults,
     updateRigGeometry,
+    commitRigCalibration,
     updateRigBodyOrigin,
     setDefaultRig,
     replaceCatalog,

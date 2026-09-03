@@ -123,4 +123,49 @@ describe('AssetCategoryDrawer', () => {
     expect(rigCatalog.isCalibrationOpen).toBe(false)
     expect(editorStore.currentDocument.layers.some((layer) => layer.assetId === body.id)).toBe(true)
   })
+
+  it('retire un prop du rig sans supprimer son asset de la bibliothèque', async () => {
+    const assetStore = useAssetStore()
+    const editorStore = useEditorStore()
+    const body = { ...mockAsset('body-1', 'Corps Berlu', 'body'), source: 'bundled' as const }
+    const prop = {
+      ...mockAsset('prop-1', 'Lunettes Berlu', 'props_character'),
+      source: 'bundled' as const,
+      characterPropSlot: 'sunglass' as const
+    }
+    assetStore.assets = [body, prop]
+    const bodyLayer = editorStore.assignAssetToGroup(body.id, body.category, null, body.name)
+    editorStore.assignAssetToGroup(prop.id, prop.category, bodyLayer.groupId, prop.name)
+
+    const wrapper = mount(AssetCategoryDrawer, {
+      props: {
+        open: true,
+        selection: {
+          type: 'character',
+          characterKey: 'berlu',
+          categoryId: 'props-character'
+        }
+      }
+    })
+    const card = wrapper.getComponent(AssetCard)
+
+    expect(card.props('canRemoveFromViewport')).toBe(true)
+    expect(card.props('canDelete')).toBe(false)
+
+    card.vm.$emit('remove-from-viewport', prop)
+    await wrapper.vm.$nextTick()
+
+    expect(editorStore.currentDocument.layers.some((layer) => layer.assetId === prop.id)).toBe(false)
+    expect(assetStore.assets.some((asset) => asset.id === prop.id)).toBe(true)
+  })
+
+  it('refuse la suppression métier d’un asset embarqué', async () => {
+    const assetStore = useAssetStore()
+    const bundled = { ...mockAsset('body-1', 'Corps Berlu', 'body'), source: 'bundled' as const }
+    assetStore.assets = [bundled]
+
+    await expect(assetStore.deleteAssetCascade(bundled.id)).rejects.toThrow(
+      'Les assets de base ne peuvent pas être supprimés.'
+    )
+  })
 })

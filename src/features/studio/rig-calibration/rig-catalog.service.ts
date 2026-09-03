@@ -41,7 +41,7 @@ export function createBerluHeadSeries(): HeadSeriesProfile {
     label: 'Berlu',
     width: 1205,
     height: 1305,
-    neckPivot: { x: 0.5, y: 0.94 },
+    neckPivot: { x: 0.5, y: 0.5 },
     mouthAnchor: { x: 0.5, y: 0.66 },
     propAnchors: {
       sunglass: { x: 0.5, y: 0.43 },
@@ -146,10 +146,8 @@ export function headCalibration(
   if (!config) return null
   const scale = config.defaultScale
   return {
-    // Le cou reste l'origine de l'échelle et du placement. Le renderer utilise
-    // une origine distincte, au centre visuel du sprite, pour la rotation.
-    x: rig.neckAnchor.x - series.neckPivot.x * asset.width,
-    y: rig.neckAnchor.y - series.neckPivot.y * asset.height,
+    x: rig.neckAnchor.x - 0.5 * asset.width,
+    y: rig.neckAnchor.y - 0.5 * asset.height,
     scaleX: scale,
     scaleY: scale,
     rotation: config.defaultRotation,
@@ -188,7 +186,7 @@ export function createHeadSeriesProfile(
     label: label.trim() || id,
     width,
     height,
-    neckPivot: { x: 0.5, y: 0.94 },
+    neckPivot: { x: 0.5, y: 0.5 },
     mouthAnchor: { x: 0.5, y: 0.66 },
     propAnchors: { sunglass: { x: 0.5, y: 0.43 }, hat: { x: 0.5, y: 0.08 } },
     updatedAt: Date.now()
@@ -244,6 +242,7 @@ export function parseRigCatalogFile(raw: string): RigCatalogFile {
   const file = value as unknown as RigCatalogFile
   for (const series of file.headSeries) {
     if (!series.id || series.width <= 0 || series.height <= 0) throw new Error('Profil de série invalide.')
+    series.neckPivot = { x: 0.5, y: 0.5 }
   }
   for (const rig of file.rigs) {
     if (!rig.id || rig.body?.category !== 'body' || !Array.isArray(rig.headSeries)) {

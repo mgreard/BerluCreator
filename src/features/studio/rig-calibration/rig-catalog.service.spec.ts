@@ -51,7 +51,8 @@ describe('rig catalog v7', () => {
     const series = createBerluHeadSeries()
     const calibration = headCalibration(rig, series, { width: 1205, height: 1305 })!
     expect(calibration.rotation).toBe(12)
-    expect(calibration.x + series.neckPivot.x * 1205).toBeCloseTo(rig.neckAnchor.x)
+    expect(calibration.x + 0.5 * 1205).toBeCloseTo(rig.neckAnchor.x)
+    expect(calibration.y + 0.5 * 1305).toBeCloseTo(rig.neckAnchor.y)
     expect(clampHeadOffset({ x: 30, y: 40 }, 25)).toEqual({ x: 15, y: 20 })
   })
 

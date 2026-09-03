@@ -71,7 +71,6 @@ describe('RigCalibrationWorkspace', () => {
 
     expect(text).toContain('Placement dans le viewport')
     expect(text).toContain('Ajustement visuel')
-    expect(text).toContain('Ancrages dans le viewport')
     for (const removedControl of [
       'Décalage X',
       'Échelle',
@@ -113,5 +112,41 @@ describe('RigCalibrationWorkspace', () => {
     expect(assets.selectedAsset?.id).toBe(glasses.id)
     await accessorySelect!.vm.$emit('update:modelValue', sunglasses.id)
     expect(assets.selectedAsset?.id).toBe(sunglasses.id)
+  })
+
+  it('sélectionne et active la calibration pour la bouche choisie dans l’inspecteur', async () => {
+    const assets = useAssetStore()
+    const catalog = useRigCatalogStore()
+    const body = asset('body', 'Corps', 'body')
+    const mouthA = asset('mouth-a', 'Bouche A', 'mouth', { headSeriesId: 'berlu' })
+    const mouthB = asset('mouth-b', 'Bouche B', 'mouth', { headSeriesId: 'berlu' })
+    const rig = createRigDefinition(body)
+    assets.assets = [body, mouthA, mouthB]
+    catalog.rigs = [rig]
+    catalog.selectedHeadSeriesId = 'berlu'
+    catalog.openCalibration(rig.id)
+
+    const wrapper = mount(RigCalibrationWorkspace)
+    const slotSelect = wrapper
+      .findAllComponents(Select)
+      .find((candidate) =>
+        candidate.props('options')?.some((option: { value: unknown }) => option.value === 'mouth')
+      )
+    expect(slotSelect).toBeDefined()
+    await slotSelect!.vm.$emit('update:modelValue', 'mouth')
+    await wrapper.vm.$nextTick()
+
+    const mouthSelect = wrapper
+      .findAllComponents(Select)
+      .find((candidate) =>
+        candidate.props('options')?.some((option: { value: unknown }) => option.value === mouthA.id)
+      )
+    expect(mouthSelect).toBeDefined()
+    expect(assets.selectedAsset?.id).toBe(mouthA.id)
+    expect(catalog.calibrationTool).toBe('accessory')
+
+    await mouthSelect!.vm.$emit('update:modelValue', mouthB.id)
+    expect(assets.selectedAsset?.id).toBe(mouthB.id)
+    expect(catalog.calibrationTool).toBe('accessory')
   })
 })

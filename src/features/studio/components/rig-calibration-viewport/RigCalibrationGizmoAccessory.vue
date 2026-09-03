@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, useTemplateRef } from 'vue'
-import type { AnchoredAssetCalibration } from '@core/types/asset.types'
+import type { AnchoredAssetCalibration, AssetCategory, CharacterPropSlot } from '@core/types/asset.types'
 import { Badge } from '@/components/ui/badge'
 import { normalizeRotation, pointerAngle, screenDeltaToLocal } from './useRigViewportNavigation'
 
@@ -16,7 +16,9 @@ const {
   headRotation = 0,
   pivotStageX,
   pivotStageY,
-  label = 'Accessoire'
+  label = 'Accessoire',
+  category,
+  propSlot
 } = defineProps<{
   anchor: { x: number; y: number }
   headWidth: number
@@ -30,6 +32,8 @@ const {
   pivotStageX: number
   pivotStageY: number
   label?: string
+  category?: AssetCategory
+  propSlot?: CharacterPropSlot
 }>()
 
 const emit = defineEmits<{
@@ -38,7 +42,7 @@ const emit = defineEmits<{
   (event: 'drag-end'): void
 }>()
 
-type DragMode = 'translate' | 'pivot' | 'scale' | 'rotate'
+type DragMode = 'translate' | 'scale' | 'rotate'
 const dragMode = ref<DragMode | null>(null)
 const rootRef = useTemplateRef<HTMLDivElement>('rootRef')
 const startPointer = ref<{ x: number; y: number }>({ x: 0, y: 0 })
@@ -50,6 +54,8 @@ const startCalibration = ref<AnchoredAssetCalibration>({
   rotation: 0
 })
 const dragPivotClient = ref({ x: 0, y: 0 })
+const startPointerDistance = ref(1)
+
 const controlScale = computed(
   () =>
     1 /
@@ -64,11 +70,45 @@ const centeredControlTransform = computed(
     `translate(${-50 * controlScale.value}%, ${-50 * controlScale.value}%) scale(${controlScale.value})`
 )
 
+const themeClasses = computed(() => {
+  if (category === 'mouth') {
+    return {
+      border: 'border-emerald-400/90 hover:border-emerald-300 hover:bg-emerald-400/10',
+      activeBorder: 'border-emerald-300 bg-emerald-400/15 shadow-[0_0_14px_rgba(52,211,153,0.4)]',
+      badgeClass: 'bg-emerald-500 text-white border-emerald-300',
+      badgeVariant: 'success' as const,
+      markerBg: 'bg-emerald-600',
+      markerBorder: 'border-emerald-500',
+      stalkBg: 'bg-emerald-500/80'
+    }
+  }
+  if (propSlot === 'hat') {
+    return {
+      border: 'border-sky-400/90 hover:border-sky-300 hover:bg-sky-400/10',
+      activeBorder: 'border-sky-300 bg-sky-400/15 shadow-[0_0_14px_rgba(56,189,248,0.4)]',
+      badgeClass: 'bg-sky-500 text-white border-sky-300',
+      badgeVariant: 'info' as const,
+      markerBg: 'bg-sky-600',
+      markerBorder: 'border-sky-500',
+      stalkBg: 'bg-sky-500/80'
+    }
+  }
+  return {
+    border: 'border-amber-400/90 hover:border-amber-300 hover:bg-amber-400/10',
+    activeBorder: 'border-amber-300 bg-amber-400/15 shadow-[0_0_14px_rgba(251,191,36,0.4)]',
+    badgeClass: 'bg-amber-500 text-black border-amber-300',
+    badgeVariant: 'warning' as const,
+    markerBg: 'bg-amber-600',
+    markerBorder: 'border-amber-500',
+    stalkBg: 'bg-amber-500/80'
+  }
+})
+
 const accessoryLeft = computed(() => {
-  return anchor.x * headWidth + calibration.offsetX - calibration.pivot.x * assetWidth
+  return anchor.x * headWidth + calibration.offsetX - 0.5 * assetWidth
 })
 const accessoryTop = computed(() => {
-  return anchor.y * headHeight + calibration.offsetY - calibration.pivot.y * assetHeight
+  return anchor.y * headHeight + calibration.offsetY - 0.5 * assetHeight
 })
 
 function onPointerDown(mode: DragMode, e: PointerEvent): void {
@@ -77,7 +117,7 @@ function onPointerDown(mode: DragMode, e: PointerEvent): void {
   startPointer.value = { x: e.clientX, y: e.clientY }
   startCalibration.value = {
     ...calibration,
-    pivot: { ...calibration.pivot }
+    pivot: { x: 0.5, y: 0.5 }
   }
   const headWrapper = rootRef.value?.offsetParent as HTMLElement | null
   const stage = headWrapper?.offsetParent as HTMLElement | null
@@ -91,6 +131,14 @@ function onPointerDown(mode: DragMode, e: PointerEvent): void {
   } else {
     dragPivotClient.value = { x: e.clientX, y: e.clientY }
   }
+
+  startPointerDistance.value = Math.max(
+    1,
+    Math.hypot(
+      e.clientX - dragPivotClient.value.x,
+      e.clientY - dragPivotClient.value.y
+    )
+  )
 
   const target = e.currentTarget as HTMLElement
   if (target?.setPointerCapture) {
@@ -114,33 +162,26 @@ function onPointerMove(e: PointerEvent): void {
   if (dragMode.value === 'translate') {
     emit('update:calibration', {
       offsetX: Math.round(startCalibration.value.offsetX + headDelta.x),
-      offsetY: Math.round(startCalibration.value.offsetY + headDelta.y)
-    })
-  } else if (dragMode.value === 'pivot') {
-    const pivotDelta = screenDeltaToLocal(
-      e.clientX - startPointer.value.x,
-      e.clientY - startPointer.value.y,
-      zoom,
-      headRotation + startCalibration.value.rotation,
-      headScale * startCalibration.value.scale
-    )
-    const nextPivotX = Math.max(0, Math.min(1, Number((startCalibration.value.pivot.x + pivotDelta.x / assetWidth).toFixed(3))))
-    const nextPivotY = Math.max(0, Math.min(1, Number((startCalibration.value.pivot.y + pivotDelta.y / assetHeight).toFixed(3))))
-    emit('update:calibration', {
-      pivot: { x: nextPivotX, y: nextPivotY }
+      offsetY: Math.round(startCalibration.value.offsetY + headDelta.y),
+      pivot: { x: 0.5, y: 0.5 }
     })
   } else if (dragMode.value === 'scale') {
-    const diagonal = Math.hypot(assetWidth, assetHeight)
-    const factor = (headDelta.x + headDelta.y) / diagonal
-    const nextScale = Math.max(0.05, Number((startCalibration.value.scale * (1 + factor)).toFixed(3)))
-    emit('update:calibration', { scale: nextScale })
+    const currentDistance = Math.hypot(
+      e.clientX - dragPivotClient.value.x,
+      e.clientY - dragPivotClient.value.y
+    )
+    const nextScale = Math.max(
+      0.05,
+      Number((startCalibration.value.scale * currentDistance / startPointerDistance.value).toFixed(3))
+    )
+    emit('update:calibration', { scale: nextScale, pivot: { x: 0.5, y: 0.5 } })
   } else if (dragMode.value === 'rotate') {
     const currentAngle = pointerAngle({ x: e.clientX, y: e.clientY }, dragPivotClient.value)
     const startAngle = pointerAngle(startPointer.value, dragPivotClient.value)
     const nextRot = Math.round(
       normalizeRotation(startCalibration.value.rotation + currentAngle - startAngle)
     )
-    emit('update:calibration', { rotation: nextRot })
+    emit('update:calibration', { rotation: nextRot, pivot: { x: 0.5, y: 0.5 } })
   }
 }
 
@@ -169,49 +210,34 @@ function onPointerUp(e: PointerEvent): void {
       top: `${accessoryTop}px`,
       width: `${assetWidth}px`,
       height: `${assetHeight}px`,
-      transformOrigin: `${calibration.pivot.x * 100}% ${calibration.pivot.y * 100}%`,
+      transformOrigin: 'center center',
       transform: `rotate(${calibration.rotation ?? 0}deg) scale(${calibration.scale ?? 1})`
     }"
   >
-    <!-- Dashed Amber Bounding Box for Accessory -->
+    <!-- Dashed Bounding Box for Anchored Part -->
     <div
-      class="pointer-events-auto absolute inset-0 cursor-move border-2 border-dashed border-amber-400/90 transition-colors duration-150 hover:border-amber-300 hover:bg-amber-400/10"
-      :class="{ 'border-amber-300 bg-amber-400/15 shadow-[0_0_14px_rgba(251,191,36,0.4)]': dragMode !== null }"
+      class="pointer-events-auto absolute inset-0 cursor-move border-2 border-dashed transition-colors duration-150"
+      :class="[
+        themeClasses.border,
+        dragMode !== null ? themeClasses.activeBorder : ''
+      ]"
       @pointerdown="onPointerDown('translate', $event)"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
       @pointercancel="onPointerUp"
     >
-      <!-- Accessory Label Badge from library -->
+      <!-- Label Badge -->
       <div
         class="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 flex items-center justify-center shadow-md"
       >
-        <Badge variant="warning" size="sm" class="bg-amber-500 text-black border-amber-300 font-bold px-2.5">
+        <Badge
+          :variant="themeClasses.badgeVariant"
+          size="sm"
+          class="font-bold px-2.5"
+          :class="themeClasses.badgeClass"
+        >
           {{ label }}
         </Badge>
-      </div>
-
-      <!-- Pivot Point Handle -->
-      <div
-        data-testid="accessory-pivot-handle"
-        class="group pointer-events-auto absolute flex h-12 w-12 touch-none cursor-crosshair items-center justify-center sm:h-11 sm:w-11"
-        :style="{
-          left: `${calibration.pivot.x * 100}%`,
-          top: `${calibration.pivot.y * 100}%`,
-          transform: centeredControlTransform,
-          transformOrigin: 'top left'
-        }"
-        title="Pivot de l'accessoire"
-        role="button"
-        aria-label="Déplacer le pivot de l'accessoire"
-        @pointerdown="onPointerDown('pivot', $event)"
-        @pointermove="onPointerMove"
-        @pointerup="onPointerUp"
-        @pointercancel="onPointerUp"
-      >
-        <div data-testid="accessory-pivot-marker" class="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-amber-600 shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-5 sm:w-5">
-          <div class="h-2 w-2 rounded-full bg-white shadow-xs" />
-        </div>
       </div>
 
       <!-- Scale Corners -->
@@ -220,13 +246,17 @@ function onPointerUp(e: PointerEvent): void {
         class="group pointer-events-auto absolute left-full top-full flex h-12 w-12 touch-none cursor-nwse-resize items-center justify-center sm:h-11 sm:w-11"
         :style="{ transform: centeredControlTransform, transformOrigin: 'top left' }"
         role="button"
-        aria-label="Redimensionner l'accessoire depuis le coin inférieur droit"
+        aria-label="Redimensionner depuis le coin inférieur droit"
         @pointerdown="onPointerDown('scale', $event)"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <div data-testid="accessory-resize-marker" class="h-5 w-5 rounded-sm border-2 border-amber-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-4 sm:w-4" />
+        <div
+          data-testid="accessory-resize-marker"
+          class="h-5 w-5 rounded-sm border-2 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-4 sm:w-4"
+          :class="themeClasses.markerBorder"
+        />
       </div>
 
       <!-- Rotation Handle -->
@@ -239,14 +269,18 @@ function onPointerUp(e: PointerEvent): void {
           transformOrigin: 'top left'
         }"
         role="button"
-        aria-label="Rotation de l'accessoire"
+        aria-label="Rotation de l'élément"
         @pointerdown="onPointerDown('rotate', $event)"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <div class="absolute top-[calc(50%+12px)] h-8 w-0.5 bg-amber-500/80" />
-        <div data-testid="accessory-rotation-marker" class="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-amber-600 shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6">
+        <div class="absolute top-[calc(50%+12px)] h-8 w-0.5" :class="themeClasses.stalkBg" />
+        <div
+          data-testid="accessory-rotation-marker"
+          class="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-6 sm:w-6"
+          :class="themeClasses.markerBg"
+        >
           <div class="h-2 w-2 rounded-full bg-white shadow-xs" />
         </div>
       </div>
@@ -255,13 +289,17 @@ function onPointerUp(e: PointerEvent): void {
         class="group pointer-events-auto absolute left-full top-0 flex h-12 w-12 touch-none cursor-nesw-resize items-center justify-center sm:h-11 sm:w-11"
         :style="{ transform: centeredControlTransform, transformOrigin: 'top left' }"
         role="button"
-        aria-label="Redimensionner l'accessoire depuis le coin supérieur droit"
+        aria-label="Redimensionner depuis le coin supérieur droit"
         @pointerdown="onPointerDown('scale', $event)"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <div data-testid="accessory-resize-marker" class="h-5 w-5 rounded-sm border-2 border-amber-500 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-4 sm:w-4" />
+        <div
+          data-testid="accessory-resize-marker"
+          class="h-5 w-5 rounded-sm border-2 bg-white shadow-lg transition-all duration-300 ease-out group-hover:scale-110 group-active:scale-95 sm:h-4 sm:w-4"
+          :class="themeClasses.markerBorder"
+        />
       </div>
     </div>
   </div>

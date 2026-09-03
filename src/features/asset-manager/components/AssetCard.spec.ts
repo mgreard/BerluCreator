@@ -65,7 +65,7 @@ describe('AssetCard', () => {
   })
 
   it('conserve les actions de sélection et de suppression', async () => {
-    const wrapper = mount(AssetCard, { props: { asset: headAsset } })
+    const wrapper = mount(AssetCard, { props: { asset: headAsset, canDelete: true } })
     await flushPromises()
 
     await wrapper.get('[role="option"]').trigger('click')
@@ -73,6 +73,33 @@ describe('AssetCard', () => {
 
     expect(wrapper.emitted('select')).toEqual([[headAsset]])
     expect(wrapper.emitted('delete')).toEqual([[headAsset]])
+  })
+
+  it('sépare le retrait du viewport de la suppression définitive', async () => {
+    const prop = { ...headAsset, category: 'props_character' as const }
+    const wrapper = mount(AssetCard, {
+      props: { asset: prop, selected: true, canRemoveFromViewport: true }
+    })
+    await flushPromises()
+
+    expect(wrapper.find('button[aria-label^="Supprimer"]').exists()).toBe(false)
+    await wrapper.get('button[aria-label^="Retirer"]').trigger('click')
+
+    expect(wrapper.emitted('remove-from-viewport')).toEqual([[prop]])
+    expect(wrapper.emitted('select')).toBeUndefined()
+    expect(wrapper.emitted('delete')).toBeUndefined()
+  })
+
+  it('distingue visuellement l’asset ciblé des autres assets actifs', async () => {
+    const wrapper = mount(AssetCard, {
+      props: { asset: headAsset, selected: true, focused: true }
+    })
+    await flushPromises()
+
+    const card = wrapper.get('[role="option"]')
+    expect(card.attributes('data-selected')).toBe('true')
+    expect(card.attributes('data-focused')).toBe('true')
+    expect(card.attributes('aria-current')).toBe('true')
   })
 
   it('propose une occurrence supplémentaire uniquement quand elle est autorisée', async () => {
