@@ -5,7 +5,7 @@ import ViewportQuickExportButton from './ViewportQuickExportButton.vue'
 const mocks = vi.hoisted(() => {
   return {
     endGesture: vi.fn(),
-    captureCleanFrame: vi.fn(async (..._args: any[]) => 'data:image/png;base64,mocked1080p'),
+    captureCleanFrame: vi.fn(async () => 'data:image/png;base64,mocked1080p'),
     toastSuccess: vi.fn(),
     toastError: vi.fn()
   }
