@@ -1,6 +1,6 @@
 # AssetLibraryPanel
 
-Explorateur unifié de la bibliothèque du Studio. Le panneau regroupe la recherche, les familles de sprites, les filtres contextuels et la grille d’assets dans une seule surface. Les actions globales Projet, Importer et Rigs vivent dans `AssetLibraryGlobalActions`, au début du header Studio.
+Explorateur unifié de la bibliothèque du Studio. Le panneau regroupe la recherche, les familles de sprites (« Personnages » et « Plateau »), les filtres contextuels et la grille d’assets dans une seule surface. Les actions globales Projet, Importer et Rigs vivent dans `AssetLibraryGlobalActions`, au début du header Studio.
 
 ## Utilisation
 
@@ -12,9 +12,9 @@ Explorateur unifié de la bibliothèque du Studio. Le panneau regroupe la recher
 
 ## Modèles
 
-| Modèle      | Type              | Défaut            | Description                     |
-| ----------- | ----------------- | ----------------- | ------------------------------- |
-| `open`      | `boolean`         | `true`            | État déplié de la bibliothèque. |
-| `selection` | `ActiveSelection` | `{ type: 'all' }` | Famille et filtre actifs.       |
+| Modèle      | Type              | Défaut                                                         | Description                     |
+| ----------- | ----------------- | -------------------------------------------------------------- | ------------------------------- |
+| `open`      | `boolean`         | `true`                                                         | État déplié de la bibliothèque. |
+| `selection` | `ActiveSelection` | `{ type: 'character', characterKey: 'berlu', categoryId: null }` | Famille et filtre actifs.       |
 
 La largeur n’est pas gérée par ce composant : elle appartient à `ResizableSidebar`. Les sous-catégories utilisent une grille sur deux colonnes sans défilement horizontal. Sous 1100 px, le panneau remplit l’espace Bibliothèque du layout compact.

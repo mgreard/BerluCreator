@@ -34,7 +34,7 @@ import {
 } from '../types/asset-nav.types'
 
 const open = defineModel<boolean>('open', { default: true })
-const { selection = { type: 'all' } } = defineProps<{
+const { selection = { type: 'character', characterKey: 'berlu', categoryId: null } } = defineProps<{
   selection?: ActiveSelection
 }>()
 
@@ -97,7 +97,11 @@ const availableCharacters = computed<CharacterSummary[]>(() => {
     const key = characterKey(asset)
     characters.set(key, { key, name: characterName(asset) })
   }
-  return [...characters.values()].sort((left, right) => left.name.localeCompare(right.name, 'fr'))
+  return [...characters.values()].sort((left, right) => {
+    if (left.key === 'berlu') return -1
+    if (right.key === 'berlu') return 1
+    return left.name.localeCompare(right.name, 'fr')
+  })
 })
 
 function matchesCharacterCategory(asset: Asset, definition: CharacterCategory): boolean {

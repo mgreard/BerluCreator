@@ -4,7 +4,7 @@ import type { ActiveSelection } from '../types/asset-nav.types'
 
 const open = defineModel<boolean>('open', { default: true })
 const selection = defineModel<ActiveSelection>('selection', {
-  default: () => ({ type: 'all' })
+  default: () => ({ type: 'character', characterKey: 'berlu', categoryId: null })
 })
 </script>
 

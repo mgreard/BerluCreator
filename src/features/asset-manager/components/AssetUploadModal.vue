@@ -175,7 +175,11 @@ const availableCharacters = computed<CharacterOption[]>(() => {
       name: current?.name || asset.character.name
     })
   }
-  return [...characters.values()].sort((left, right) => left.name.localeCompare(right.name, 'fr'))
+  return [...characters.values()].sort((left, right) => {
+    if (left.key === 'berlu') return -1
+    if (right.key === 'berlu') return 1
+    return left.name.localeCompare(right.name, 'fr')
+  })
 })
 
 const characterSelectOptions = computed<SelectOption[]>(() =>
@@ -269,7 +273,8 @@ function resetFormFromContext(): void {
   const preferredCharacter = availableCharacters.value.find(
     (character) => character.key === preferredKey
   )
-  const character = preferredCharacter ?? availableCharacters.value[0]
+  const berluCharacter = availableCharacters.value.find((c) => c.key === 'berlu')
+  const character = preferredCharacter ?? berluCharacter ?? availableCharacters.value[0]
   selectedCharacterKey.value = character?.key ?? ''
   characterTargetMode.value = character ? 'existing' : 'new'
   newCharacterName.value = ''

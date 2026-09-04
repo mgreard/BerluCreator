@@ -49,7 +49,7 @@ describe('AssetCategoryNav', () => {
     setActivePinia(createPinia())
   })
 
-  it('renders all sprite categories and filters available categories based on active rig', async () => {
+  it('affiche uniquement 2 onglets (Personnages et Plateau) sans catégorie "Tous"', async () => {
     const assetStore = useAssetStore()
     const editorStore = useEditorStore()
     const rigCatalog = useRigCatalogStore()
@@ -70,22 +70,20 @@ describe('AssetCategoryNav', () => {
 
     const wrapper = mount(AssetCategoryNav, {
       props: {
-        selection: { type: 'all' },
+        selection: { type: 'character', characterKey: 'berlu', categoryId: null },
         drawerOpen: true
       }
     })
 
     expect(wrapper.text()).toContain('Bibliothèque')
-    expect(wrapper.text()).toContain('Tous')
+    expect(wrapper.text()).not.toContain('Tous')
+    expect(wrapper.text()).toContain('Personnages')
+    expect(wrapper.text()).toContain('Plateau')
+
     const tabs = wrapper.getComponent(Tabs)
     expect(tabs.props('variant')).toBe('segmented')
     expect(tabs.props('orientation')).toBe('horizontal')
-
-    const characterTab = wrapper
-      .findAll('[role="tab"]')
-      .find((tab) => tab.text().includes('Personnages'))
-    expect(characterTab).toBeDefined()
-    await characterTab?.trigger('mousedown', { button: 0, ctrlKey: false })
+    expect(tabs.props('tabs')).toHaveLength(2)
 
     expect(wrapper.text()).toContain('Corps')
     expect(wrapper.text()).toContain('Têtes')
@@ -99,9 +97,10 @@ describe('AssetCategoryNav', () => {
     const categoryGrid = wrapper.get('[aria-label="Parties du personnage"]')
     expect(categoryGrid.classes()).toContain('grid-cols-2')
     expect(categoryGrid.classes()).not.toContain('overflow-x-auto')
+    expect(categoryGrid.text()).not.toContain('Tout')
   })
 
-  it('masque les catégories de rig quand le personnage ne possède aucun rig', () => {
+  it('ouvre directement les personnages complets sans afficher de filtres de catégorie', async () => {
     const assetStore = useAssetStore()
     const withoutRig = (asset: Asset): Asset => ({
       ...asset,
@@ -127,13 +126,29 @@ describe('AssetCategoryNav', () => {
       }
     })
 
-    const categoryGrid = wrapper.get('[aria-label="Parties du personnage"]')
-    expect(categoryGrid.text()).toContain('Tout')
-    expect(categoryGrid.text()).toContain('Personnages complets')
-    expect(categoryGrid.text()).not.toContain('Corps')
-    expect(categoryGrid.text()).not.toContain('Têtes')
-    expect(categoryGrid.text()).not.toContain('Bouches')
-    expect(categoryGrid.text()).not.toContain('Accessoires')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[aria-label="Parties du personnage"]').exists()).toBe(false)
+    expect(wrapper.emitted('update:selection')?.at(-1)).toEqual([
+      { type: 'character', characterKey: 'sans-rig', categoryId: 'full' }
+    ])
+  })
+
+  it('normalise automatiquement toute sélection résiduelle "all" vers un personnage', async () => {
+    const assetStore = useAssetStore()
+    assetStore.assets = [mockAsset('full-1', 'Berlu complet', 'perso')]
+
+    const wrapper = mount(AssetCategoryNav, {
+      props: {
+        selection: { type: 'all' as unknown as 'character' },
+        drawerOpen: true
+      }
+    })
+
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('update:selection')?.at(-1)).toEqual([
+      { type: 'character', characterKey: 'berlu', categoryId: null }
+    ])
   })
 
   it('emits selection updates and opens drawer on category click', async () => {
@@ -142,7 +157,7 @@ describe('AssetCategoryNav', () => {
 
     const wrapper = mount(AssetCategoryNav, {
       props: {
-        selection: { type: 'all' },
+        selection: { type: 'character', characterKey: 'berlu', categoryId: null },
         drawerOpen: false
       }
     })
@@ -167,7 +182,7 @@ describe('AssetCategoryNav', () => {
   it('réserve la sidebar à la navigation et à la recherche', () => {
     const wrapper = mount(AssetCategoryNav, {
       props: {
-        selection: { type: 'all' },
+        selection: { type: 'character', characterKey: 'berlu', categoryId: null },
         drawerOpen: false
       }
     })
@@ -184,7 +199,10 @@ describe('AssetCategoryNav', () => {
   it('annonce le chargement initial avant d’afficher le nombre de sprites', async () => {
     const assetStore = useAssetStore()
     const wrapper = mount(AssetCategoryNav, {
-      props: { selection: { type: 'all' }, drawerOpen: true }
+      props: {
+        selection: { type: 'character', characterKey: 'berlu', categoryId: null },
+        drawerOpen: true
+      }
     })
 
     expect(wrapper.get('[role="status"]').text()).toContain('Chargement des sprites')

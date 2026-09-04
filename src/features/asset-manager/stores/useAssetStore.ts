@@ -110,7 +110,11 @@ export const useAssetStore = defineStore('asset', () => {
   const assets = ref<Asset[]>([])
   const selectedAssetId = ref<string | null>(null)
   const selectedCategory = ref<AssetCategory | 'all'>('all')
-  const librarySelection = ref<ActiveSelection>({ type: 'all' })
+  const librarySelection = ref<ActiveSelection>({
+    type: 'character',
+    characterKey: 'berlu',
+    categoryId: null
+  })
   const libraryFocusVersion = ref(0)
   const searchQuery = ref('')
   const isLoading = ref(false)

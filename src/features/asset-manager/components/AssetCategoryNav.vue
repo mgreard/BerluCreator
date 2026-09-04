@@ -26,7 +26,7 @@ import {
 } from '../types/asset-nav.types'
 
 const selection = defineModel<ActiveSelection>('selection', {
-  default: () => ({ type: 'all' })
+  default: () => ({ type: 'character', characterKey: 'berlu', categoryId: null })
 })
 const drawerOpen = defineModel<boolean>('drawerOpen', { default: true })
 const assetStore = useAssetStore()
@@ -58,6 +58,15 @@ function availableCategoriesForCharacter(key: string): CharacterCategory[] {
   })
 }
 
+function hasOnlyFullCharacterCategory(key: string): boolean {
+  const available = availableCategoriesForCharacter(key)
+  return available.length === 1 && available[0]?.id === 'full'
+}
+
+function defaultCategoryIdForCharacter(key: string): string | null {
+  return availableCategoriesForCharacter(key)[0]?.id ?? null
+}
+
 const availableCharacters = computed<CharacterSummary[]>(() => {
   const characters = new Map<string, CharacterSummary>()
   for (const group of editorStore.currentDocument.groups) {
@@ -70,26 +79,78 @@ const availableCharacters = computed<CharacterSummary[]>(() => {
     const key = characterKey(asset)
     characters.set(key, { key, name: characterName(asset) })
   }
-  return [...characters.values()].sort((left, right) => left.name.localeCompare(right.name, 'fr'))
+  return [...characters.values()].sort((left, right) => {
+    if (left.key === 'berlu') return -1
+    if (right.key === 'berlu') return 1
+    return left.name.localeCompare(right.name, 'fr')
+  })
+})
+
+const defaultCharacterKey = computed(() => {
+  const berlu = availableCharacters.value.find((c) => c.key === 'berlu')
+  return berlu ? berlu.key : (availableCharacters.value[0]?.key ?? 'berlu')
 })
 
 watch(
-  () =>
-    editorStore.currentDocument.groups.map((g) => (g.kind === 'character' ? g.activeRigId : null)),
-  () => {
-    const sel = selection.value
-    if (sel.type === 'character' && sel.categoryId) {
-      const available = availableCategoriesForCharacter(sel.characterKey)
-      if (!available.some((c) => c.id === sel.categoryId)) {
+  availableCharacters,
+  (characters) => {
+    if (characters.some((c) => c.key === 'berlu')) {
+      if (
+        selection.value.type === 'character' &&
+        (!selection.value.characterKey || selection.value.characterKey === 'berleak')
+      ) {
         selection.value = {
           type: 'character',
-          characterKey: sel.characterKey,
+          characterKey: 'berlu',
           categoryId: null
         }
       }
     }
   },
-  { deep: true }
+  { immediate: true }
+)
+
+watch(
+  () => {
+    const sel = selection.value
+    if (sel.type !== 'character') return null
+    return {
+      characterKey: sel.characterKey,
+      categoryId: sel.categoryId,
+      availableCategoryIds: availableCategoriesForCharacter(sel.characterKey).map(
+        (category) => category.id
+      )
+    }
+  },
+  (state) => {
+    if (!state) return
+    const fallbackCategoryId = state.availableCategoryIds[0] ?? null
+    const categoryIsMissing = state.categoryId === null && fallbackCategoryId !== null
+    const categoryIsUnavailable =
+      state.categoryId !== null && !state.availableCategoryIds.includes(state.categoryId)
+    if (categoryIsMissing || categoryIsUnavailable) {
+      selection.value = {
+        type: 'character',
+        characterKey: state.characterKey,
+        categoryId: fallbackCategoryId
+      }
+    }
+  },
+  { deep: true, immediate: true }
+)
+
+watch(
+  () => selection.value,
+  (sel) => {
+    if ((sel as { type: string }).type === 'all') {
+      selection.value = {
+        type: 'character',
+        characterKey: defaultCharacterKey.value,
+        categoryId: null
+      }
+    }
+  },
+  { immediate: true }
 )
 
 watch(
@@ -97,7 +158,7 @@ watch(
   (isOpen) => {
     if (isOpen) {
       const selectedRig = rigCatalog.rigById(rigCatalog.selectedRigId) ?? rigCatalog.rigs[0]
-      const charKey = selectedRig?.characterKey ?? availableCharacters.value[0]?.key
+      const charKey = selectedRig?.characterKey ?? defaultCharacterKey.value
       if (charKey) {
         selection.value = {
           type: 'character',
@@ -117,17 +178,15 @@ function matchesCharacterCategory(asset: Asset, definition: CharacterCategory): 
 
 function characterAssets(key: string): Asset[] {
   const activeRig = activeRigForCharacterKey(key)
-  return assetStore.assets.filter(
-    (asset) => {
-      if (ASSET_CATEGORIES[asset.category].placementMode !== 'character-anchored') return false
-      if (isRigSlotCategory(asset.category) && !activeRig) return false
-      if (asset.category === 'props_character') return true
-      if (asset.category === 'head' || asset.category === 'mouth') {
-        return activeRig ? true : characterKey(asset) === key
-      }
-      return characterKey(asset) === key
+  return assetStore.assets.filter((asset) => {
+    if (ASSET_CATEGORIES[asset.category].placementMode !== 'character-anchored') return false
+    if (isRigSlotCategory(asset.category) && !activeRig) return false
+    if (asset.category === 'props_character') return true
+    if (asset.category === 'head' || asset.category === 'mouth') {
+      return activeRig ? true : characterKey(asset) === key
     }
-  )
+    return characterKey(asset) === key
+  })
 }
 
 function characterCategoryCount(key: string, definition: CharacterCategory): number {
@@ -137,17 +196,17 @@ function characterCategoryCount(key: string, definition: CharacterCategory): num
 function stageCategoryCount(category: AssetCategory): number {
   return assetStore.assets.filter((asset) => asset.category === category).length
 }
+
 const availableStageCategories = computed(() =>
   STAGE_CATEGORIES.filter((category) => stageCategoryCount(category.category) > 0)
 )
 
-function selectAll(): void {
-  selection.value = { type: 'all' }
-  drawerOpen.value = true
-}
-
 function selectCharacter(characterKeyValue: string, categoryId: string | null): void {
-  selection.value = { type: 'character', characterKey: characterKeyValue, categoryId }
+  selection.value = {
+    type: 'character',
+    characterKey: characterKeyValue,
+    categoryId: categoryId ?? defaultCategoryIdForCharacter(characterKeyValue)
+  }
   drawerOpen.value = true
 }
 
@@ -157,11 +216,6 @@ function selectStage(category: AssetCategory): void {
 }
 
 const categoryTabs = computed<TabItem[]>(() => [
-  {
-    key: 'all',
-    label: 'Tous',
-    icon: 'apps'
-  },
   {
     key: 'characters',
     label: 'Personnages',
@@ -184,7 +238,7 @@ const characterOptions = computed<SelectOption[]>(() =>
 const selectedCharacterKey = computed(() =>
   selection.value.type === 'character'
     ? selection.value.characterKey
-    : (availableCharacters.value[0]?.key ?? null)
+    : defaultCharacterKey.value
 )
 
 function selectCharacterOption(value: string | number | boolean | null): void {
@@ -192,24 +246,18 @@ function selectCharacterOption(value: string | number | boolean | null): void {
 }
 
 const activeCategoryTab = computed(() => {
-  if (selection.value.type === 'character') return 'characters'
   if (selection.value.type === 'stage') return 'stage'
-  return 'all'
+  return 'characters'
 })
 
 function selectCategoryTab(key: string | number): void {
   const value = String(key)
-  if (value === 'all') {
-    selectAll()
-    return
-  }
   if (value === 'characters') {
     if (selection.value.type === 'character') {
       drawerOpen.value = true
       return
     }
-    const character = availableCharacters.value[0]
-    if (character) selectCharacter(character.key, null)
+    selectCharacter(defaultCharacterKey.value, null)
     return
   }
   if (value === 'stage') {
@@ -217,8 +265,8 @@ function selectCategoryTab(key: string | number): void {
       drawerOpen.value = true
       return
     }
-    const category = availableStageCategories.value[0]
-    if (category) selectStage(category.category)
+    const category = availableStageCategories.value[0]?.category ?? 'background'
+    selectStage(category)
   }
 }
 </script>
@@ -296,22 +344,11 @@ function selectCategoryTab(key: string | number): void {
         @update:model-value="selectCharacterOption"
       />
 
-      <div class="category-grid grid grid-cols-2 gap-1.5" aria-label="Parties du personnage">
-        <Button
-          variant="secondary"
-          size="xs"
-          shape="pill"
-          class="category-filter min-h-8 w-full justify-start gap-1.5 px-2.5 py-1 shadow-none"
-          :data-selected="selection.categoryId === null"
-          :aria-pressed="selection.categoryId === null"
-          :style="{ '--category-accent': '#f59e0b' }"
-          @click="selectCharacter(selection.characterKey, null)"
-        >
-          <Icon name="apps" size="xs" />
-          <span class="category-label">Tout</span>
-          <span class="category-count">{{ characterAssets(selection.characterKey).length }}</span>
-        </Button>
-
+      <div
+        v-if="!hasOnlyFullCharacterCategory(selection.characterKey)"
+        class="category-grid grid grid-cols-2 gap-1.5"
+        aria-label="Parties du personnage"
+      >
         <Button
           v-for="category in availableCategoriesForCharacter(selection.characterKey)"
           :key="category.id"

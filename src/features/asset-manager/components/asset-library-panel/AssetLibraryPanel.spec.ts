@@ -100,7 +100,7 @@ describe('AssetLibraryPanel', () => {
     expect(assetStore.librarySelection.type).toBe('character')
   })
 
-  it('retire les éléments de rig des vues Tout et Tous quand aucun rig n’existe', async () => {
+  it('retire les éléments de rig des vues d’un personnage sans rig', async () => {
     const assetStore = useAssetStore()
     const withoutRig = (asset: Asset): Asset => ({
       ...asset,
@@ -129,14 +129,14 @@ describe('AssetLibraryPanel', () => {
       }
     })
 
+    await wrapper.vm.$nextTick()
+
     expect(wrapper.findAllComponents(AssetCard).map((card) => card.props('asset').id)).toEqual([
       full.id
     ])
-
-    await wrapper.setProps({ selection: { type: 'all' } })
-
-    expect(wrapper.findAllComponents(AssetCard).map((card) => card.props('asset').id).sort()).toEqual(
-      [background.id, full.id].sort()
+    expect(wrapper.find('[aria-label="Parties du personnage"]').exists()).toBe(false)
+    expect(wrapper.get('[role="listbox"]').attributes('aria-label')).toBe(
+      'Sprites : Sans rig · Personnages complets'
     )
   })
 
@@ -159,7 +159,10 @@ describe('AssetLibraryPanel', () => {
     assetStore.searchQuery = 'recherche masquante'
 
     const wrapper = mount(AssetLibraryPanel, {
-      props: { open: true, selection: { type: 'all' } }
+      props: {
+        open: true,
+        selection: { type: 'character', characterKey: 'berlu', categoryId: null }
+      }
     })
 
     assetStore.focusCharacterInLibrary('berlu')
@@ -170,14 +173,19 @@ describe('AssetLibraryPanel', () => {
     expect(assetStore.librarySelection).toEqual({
       type: 'character',
       characterKey: 'berlu',
-      categoryId: null
+      categoryId: 'body'
     })
     expect(
       wrapper
         .findAll('button[aria-pressed]')
-        .find((button) => button.text().includes('Tout'))
+        .find((button) => button.text().includes('Corps'))
         ?.attributes('aria-pressed')
     ).toBe('true')
+    expect(
+      wrapper
+        .findAll('button[aria-pressed]')
+        .some((button) => button.text().trim().startsWith('Tout'))
+    ).toBe(false)
 
     assetStore.focusCharacterInLibrary('berlu', {
       assetId: prop.id,
