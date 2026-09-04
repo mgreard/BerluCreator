@@ -73,37 +73,37 @@ const items = computed<DropdownMenuItemDef[]>(() => [
     icon: 'folder_zip',
     onClick: () => emit('openBatchExport')
   },
-  { id: 'separator-settings', type: 'separator' },
-  { id: 'application-data', type: 'label', label: 'Données de l’application' },
-  {
-    id: 'save',
-    label: 'Créer une sauvegarde locale',
-    icon: 'save',
-    disabled: isBusy.value || isResetting.value,
-    onClick: () => void saveSnapshot()
-  },
-  {
-    id: 'restore',
-    label: 'Restaurer la sauvegarde locale',
-    icon: 'restore',
-    disabled: isBusy.value || isResetting.value || !snapshotSummary.value,
-    onClick: () => void restoreSnapshot()
-  },
-  { id: 'separator-file', type: 'separator' },
-  {
-    id: 'export',
-    label: 'Exporter la sauvegarde complète',
-    icon: 'download',
-    disabled: isBusy.value || isResetting.value,
-    onClick: () => void exportSnapshotFile()
-  },
-  {
-    id: 'import',
-    label: 'Importer une sauvegarde complète',
-    icon: 'upload',
-    disabled: isBusy.value || isResetting.value,
-    onClick: () => fileInputRef.value?.click()
-  },
+  // { id: 'separator-settings', type: 'separator' },
+  // { id: 'application-data', type: 'label', label: 'Données de l’application' },
+  // {
+  //   id: 'save',
+  //   label: 'Créer une sauvegarde locale',
+  //   icon: 'save',
+  //   disabled: isBusy.value || isResetting.value,
+  //   onClick: () => void saveSnapshot()
+  // },
+  // {
+  //   id: 'restore',
+  //   label: 'Restaurer la sauvegarde locale',
+  //   icon: 'restore',
+  //   disabled: isBusy.value || isResetting.value || !snapshotSummary.value,
+  //   onClick: () => void restoreSnapshot()
+  // },
+  // { id: 'separator-file', type: 'separator' },
+  // {
+  //   id: 'export',
+  //   label: 'Exporter la sauvegarde complète',
+  //   icon: 'download',
+  //   disabled: isBusy.value || isResetting.value,
+  //   onClick: () => void exportSnapshotFile()
+  // },
+  // {
+  //   id: 'import',
+  //   label: 'Importer une sauvegarde complète',
+  //   icon: 'upload',
+  //   disabled: isBusy.value || isResetting.value,
+  //   onClick: () => fileInputRef.value?.click()
+  // },
   { id: 'separator-reset', type: 'separator' },
   {
     id: 'reset',

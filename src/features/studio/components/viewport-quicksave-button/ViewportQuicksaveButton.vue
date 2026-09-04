@@ -7,6 +7,7 @@ import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { useHierarchyResolver } from '@/features/studio/composables/useHierarchyResolver'
 import { captureCleanFrame } from '@/features/studio/composables/useCanvasRenderer'
 import { toast } from '@/ui/shared/services/toast.service'
+import { IconButton, type IconButtonVariant } from '@/components/ui/icon-button'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/shared/utils/cn'
 import type {
@@ -126,25 +127,29 @@ const buttonTitle = computed(() => {
   }
 })
 
+const buttonVariant = computed<IconButtonVariant>(() => {
+  if (status.value === 'error') return 'destructive'
+  return 'primary'
+})
+
 const buttonClasses = computed(() => {
   return cn(
-    'relative inline-flex items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-full border text-base outline-none transition-all duration-300 ease-out select-none touch-manipulation focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+    'shadow-glass-md transition-all duration-200 ease-out focus-visible:outline-accent',
     status.value === 'idle' &&
-      'bg-accent text-violet-950 font-bold border-accent/40 backdrop-blur-md shadow-glass-md hover:brightness-110 hover:shadow-glass-lg hover:scale-105 active:brightness-95 active:scale-95 cursor-pointer',
-    status.value === 'saving' &&
-      'bg-accent/80 text-violet-950 border-accent/50 shadow-glass-md cursor-wait',
+      'border-accent/40 font-bold hover:shadow-glass-lg hover:scale-105 active:scale-95 cursor-pointer',
+    status.value === 'saving' && 'border-accent/50 opacity-80 cursor-wait',
     status.value === 'success' &&
-      'bg-emerald-950/80 text-emerald-400 border-emerald-500/60 shadow-[0_0_24px_rgba(16,185,129,0.45)] scale-105 cursor-default',
+      'bg-emerald-950/80 text-emerald-400 border-emerald-500/60 shadow-[0_0_24px_rgba(16,185,129,0.45)] scale-105 cursor-default hover:bg-emerald-950/80 hover:text-emerald-400',
     status.value === 'error' &&
-      'bg-rose-950/80 text-rose-400 border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.35)] cursor-default',
-    disabled && 'opacity-40 cursor-not-allowed pointer-events-none'
+      'bg-rose-950/80 text-rose-400 border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.35)] cursor-default hover:bg-rose-950/80 hover:text-rose-400'
   )
 })
 </script>
 
 <template>
-  <button
-    type="button"
+  <IconButton
+    size="md"
+    :variant="buttonVariant"
     :class="buttonClasses"
     :title="buttonTitle"
     :aria-label="buttonTitle"
@@ -178,5 +183,5 @@ const buttonClasses = computed(() => {
       class="absolute inset-0 rounded-full border border-emerald-400/80 animate-ping pointer-events-none opacity-50"
       aria-hidden="true"
     />
-  </button>
+  </IconButton>
 </template>

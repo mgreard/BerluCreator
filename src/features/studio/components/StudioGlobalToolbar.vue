@@ -201,19 +201,6 @@ defineSlots<{
           <span>Vues</span>
         </Button>
       </ToolbarButton>
-      <ToolbarButton as-child>
-        <Button
-          data-tour="export-btn"
-          variant="primary"
-          size="xs"
-          class="h-7 gap-1 px-2.5 text-xs font-semibold shadow-sm"
-          title="Exporter l'image finale (PNG / WebP 4K)"
-          @click="emit('openExport')"
-        >
-          <Icon name="file_download" size="xs" />
-          <span>Exporter</span>
-        </Button>
-      </ToolbarButton>
       <StudioTourMenu @start-tour="emit('startTour', $event)" />
     </div>
   </ToolbarRoot>
