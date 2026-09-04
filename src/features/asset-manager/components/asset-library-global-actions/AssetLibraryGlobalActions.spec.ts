@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import type { Asset } from '@core/types/asset.types'
-import { useAssetStore } from '../../stores/useAssetStore'
-import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import AssetLibraryGlobalActions from './AssetLibraryGlobalActions.vue'
 
 vi.mock('@infrastructure/db/repositories/editor-document.repository', () => ({
@@ -24,20 +21,6 @@ vi.mock('@infrastructure/db/repositories/asset.repository', () => ({
     inspectDeletion: vi.fn().mockResolvedValue({ layerCount: 0, snapshotNames: [] })
   }
 }))
-
-const bodyAsset: Asset = {
-  id: 'body-1',
-  name: 'Micro 1 torse',
-  category: 'body',
-  tags: [],
-  blobId: 'blob-body',
-  width: 758,
-  height: 555,
-  character: { key: 'berlu', name: 'Berlu', form: 'rig' },
-  isMovable: false,
-  createdAt: 1,
-  updatedAt: 1
-}
 
 describe('AssetLibraryGlobalActions', () => {
   beforeEach(() => {

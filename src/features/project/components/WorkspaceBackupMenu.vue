@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useTemplateRef, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { AlertDialog } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
@@ -32,17 +32,12 @@ const triggerClass = computed(() =>
     .filter(Boolean)
     .join(' ')
 )
-const fileInputRef = useTemplateRef<HTMLInputElement>('backupFileInput')
 const {
   status,
-  snapshotSummary,
   isBusy,
   isResetConfirmOpen,
   isResetting,
-  saveSnapshot,
-  exportSnapshotFile,
   importSnapshotFile,
-  restoreSnapshot,
   resetApplication
 } = useWorkspaceBackupActions()
 

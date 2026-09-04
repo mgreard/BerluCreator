@@ -41,7 +41,6 @@ import type { Asset, DeskSplitConfig } from '@core/types/asset.types'
 import type { TourKey } from '@/features/project/services/tour-definitions'
 import { toast } from '@/ui/shared/services/toast.service'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
-import { useRigRuntime } from '../rig-calibration/useRigRuntime'
 import StudioGlobalToolbar from './StudioGlobalToolbar.vue'
 import { StudioSelectionToolbar, type DeskPlacement } from './studio-selection-toolbar'
 import { ViewportQuicksaveButton } from './viewport-quicksave-button'
@@ -61,7 +60,6 @@ const projectStore = useProjectStore()
 const editorStore = useEditorStore()
 const assetStore = useAssetStore()
 const rigCatalog = useRigCatalogStore()
-const rigRuntime = useRigRuntime()
 
 const stage = computed(() => projectStore.currentProject.stage)
 const canvasRef = useTemplateRef<HTMLCanvasElement>('canvas')
