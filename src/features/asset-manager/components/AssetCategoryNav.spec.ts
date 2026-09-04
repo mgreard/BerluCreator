@@ -140,7 +140,7 @@ describe('AssetCategoryNav', () => {
 
     const wrapper = mount(AssetCategoryNav, {
       props: {
-        selection: { type: 'all' as unknown as 'character' },
+        selection: { type: 'all' },
         drawerOpen: true
       }
     })
@@ -179,21 +179,78 @@ describe('AssetCategoryNav', () => {
     expect(wrapper.emitted('update:drawerOpen')?.at(-1)).toEqual([true])
   })
 
-  it('réserve la sidebar à la navigation et à la recherche', () => {
+  it('affiche Importer dans le header et Calibrer avec le sélecteur de personnage', () => {
     const wrapper = mount(AssetCategoryNav, {
       props: {
         selection: { type: 'character', characterKey: 'berlu', categoryId: null },
         drawerOpen: false
+      },
+      global: {
+        stubs: {
+          AssetUploadModal: true
+        }
       }
     })
 
     expect(wrapper.text()).not.toContain('Projet')
-    expect(wrapper.text()).not.toContain('Importer')
-    expect(wrapper.text()).not.toContain('Rigs')
+    expect(wrapper.text()).toContain('Importer')
+    expect(wrapper.text()).toContain('Calibrer')
 
     const navigation = wrapper.get('[data-tour="asset-library-nav"]')
     expect(navigation.classes()).toContain('w-full')
     expect(wrapper.get('input[aria-label="Rechercher dans la bibliothèque"]')).toBeDefined()
+  })
+
+  it('ouvre la modale d’upload avec la sélection actuelle depuis le header de la sidebar', async () => {
+    const wrapper = mount(AssetCategoryNav, {
+      props: {
+        selection: { type: 'character', characterKey: 'berlu', categoryId: 'head' },
+        drawerOpen: true
+      },
+      global: {
+        stubs: {
+          AssetUploadModal: {
+            props: ['open', 'initialCategory', 'initialCharacterKey'],
+            template:
+              '<div data-testid="upload" :data-open="open" :data-category="initialCategory" :data-character="initialCharacterKey" />'
+          }
+        }
+      }
+    })
+
+    await wrapper.get('[data-library-action="import"]').trigger('click')
+
+    const modal = wrapper.get('[data-testid="upload"]')
+    expect(modal.attributes('data-open')).toBe('true')
+    expect(modal.attributes('data-category')).toBe('head')
+    expect(modal.attributes('data-character')).toBe('berlu')
+  })
+
+  it('active la calibration de rig depuis le bouton inline de personnage', async () => {
+    const assetStore = useAssetStore()
+    const rigCatalog = useRigCatalogStore()
+    const body = mockAsset('body-berlu', 'Corps Berlu', 'body')
+    assetStore.assets = [body]
+    rigCatalog.initialize(assetStore.assets)
+
+    const wrapper = mount(AssetCategoryNav, {
+      props: {
+        selection: { type: 'character', characterKey: 'berlu', categoryId: null },
+        drawerOpen: true
+      },
+      global: {
+        stubs: {
+          AssetUploadModal: true
+        }
+      }
+    })
+
+    await wrapper.get('[data-library-action="rigs"]').trigger('click')
+
+    expect(rigCatalog.isCalibrationOpen).toBe(true)
+    expect(wrapper.get('button[data-library-action="rigs"][aria-pressed="true"]').text()).toContain(
+      'Calibrer'
+    )
   })
 
   it('annonce le chargement initial avant d’afficher le nombre de sprites', async () => {

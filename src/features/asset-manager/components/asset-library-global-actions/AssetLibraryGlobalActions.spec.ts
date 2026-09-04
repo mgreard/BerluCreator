@@ -45,68 +45,47 @@ describe('AssetLibraryGlobalActions', () => {
     setActivePinia(createPinia())
   })
 
-  it('affiche Projet, Importer et Calibrer un personnage dans cet ordre', () => {
+  it('affiche le logo studio et le menu Projet', () => {
     const wrapper = mount(AssetLibraryGlobalActions, {
       global: {
         stubs: {
-          WorkspaceBackupMenu: { template: '<button>Projet</button>' },
-          AssetUploadModal: true
+          WorkspaceBackupMenu: { template: '<button>Projet</button>' }
         }
       }
     })
 
     const buttons = wrapper.findAll('button')
+    expect(buttons).toHaveLength(1)
     expect(buttons[0]?.text()).toBe('Projet')
-    expect(buttons[1]?.text()).toContain('Importer')
-    expect(buttons[2]?.text()).toContain('Calibrer un personnage')
+    expect(wrapper.text()).toContain('Incroyaux')
+    expect(wrapper.text()).toContain('News')
   })
 
-  it('ouvre la modale avec la sous-catégorie active', async () => {
-    const assetStore = useAssetStore()
-    assetStore.librarySelection = {
-      type: 'character',
-      characterKey: 'berlu',
-      categoryId: 'head'
-    }
+  it('relais les événements du WorkspaceBackupMenu', async () => {
     const wrapper = mount(AssetLibraryGlobalActions, {
       global: {
         stubs: {
-          WorkspaceBackupMenu: { template: '<button>Projet</button>' },
-          AssetUploadModal: {
-            props: ['open', 'initialCategory', 'initialCharacterKey'],
-            template:
-              '<div data-testid="upload" :data-open="open" :data-category="initialCategory" :data-character="initialCharacterKey" />'
+          WorkspaceBackupMenu: {
+            emits: ['openSettings', 'openBatchExport', 'openChange'],
+            template: `
+              <div>
+                <button data-action="settings" @click="$emit('openSettings')">Settings</button>
+                <button data-action="export-hd" @click="$emit('openBatchExport')">Export HD</button>
+                <button data-action="open-change" @click="$emit('openChange', true)">Open Change</button>
+              </div>
+            `
           }
         }
       }
     })
 
-    await wrapper.get('[data-library-action="import"]').trigger('click')
+    await wrapper.get('button[data-action="settings"]').trigger('click')
+    expect(wrapper.emitted('openSettings')).toBeTruthy()
 
-    const modal = wrapper.get('[data-testid="upload"]')
-    expect(modal.attributes('data-open')).toBe('true')
-    expect(modal.attributes('data-category')).toBe('head')
-    expect(modal.attributes('data-character')).toBe('berlu')
-  })
+    await wrapper.get('button[data-action="export-hd"]').trigger('click')
+    expect(wrapper.emitted('openBatchExport')).toBeTruthy()
 
-  it('active la calibration depuis le header', async () => {
-    const assetStore = useAssetStore()
-    const rigCatalog = useRigCatalogStore()
-    assetStore.assets = [bodyAsset]
-    rigCatalog.initialize(assetStore.assets)
-
-    const wrapper = mount(AssetLibraryGlobalActions, {
-      global: {
-        stubs: {
-          WorkspaceBackupMenu: { template: '<button>Projet</button>' },
-          AssetUploadModal: true
-        }
-      }
-    })
-
-    await wrapper.get('[data-library-action="rigs"]').trigger('click')
-
-    expect(rigCatalog.isCalibrationOpen).toBe(true)
-    expect(wrapper.get('button[aria-pressed="true"]').text()).toContain('Calibrer un personnage')
+    await wrapper.get('button[data-action="open-change"]').trigger('click')
+    expect(wrapper.emitted('projectMenuOpen')).toEqual([[true]])
   })
 })

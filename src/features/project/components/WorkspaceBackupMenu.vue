@@ -12,6 +12,7 @@ import { useWorkspaceBackupActions } from '../composables/useWorkspaceBackupActi
 
 const emit = defineEmits<{
   (event: 'openSettings'): void
+  (event: 'openBatchExport'): void
   (event: 'openChange', open: boolean): void
 }>()
 
@@ -65,6 +66,12 @@ const items = computed<DropdownMenuItemDef[]>(() => [
     label: 'Paramètres du plateau',
     icon: 'settings',
     onClick: () => emit('openSettings')
+  },
+  {
+    id: 'batch-export',
+    label: 'Export HD',
+    icon: 'folder_zip',
+    onClick: () => emit('openBatchExport')
   },
   { id: 'separator-settings', type: 'separator' },
   { id: 'application-data', type: 'label', label: 'Données de l’application' },

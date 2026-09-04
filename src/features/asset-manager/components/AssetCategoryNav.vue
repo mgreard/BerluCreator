@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { Asset, AssetCategory } from '@core/types/asset.types'
 import { ASSET_CATEGORIES } from '@core/constants/categories'
 import { useAssetStore } from '../stores/useAssetStore'
@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Icon } from '@/components/ui/icon'
 import { IconButton } from '@/components/ui/icon-button'
+import { toast } from '@/ui/shared/services/toast.service'
+import AssetUploadModal from './AssetUploadModal.vue'
 import { Input } from '@/components/ui/input'
 import { Heading } from '@/components/ui/heading'
 import { Select, type SelectOption } from '@/components/ui/select'
@@ -269,6 +271,88 @@ function selectCategoryTab(key: string | number): void {
     selectStage(category)
   }
 }
+
+const isUploadModalOpen = ref(false)
+
+const uploadInitialCategory = computed<AssetCategory | null>(() => {
+  const sel = selection.value
+  if (sel.type === 'stage') return sel.category
+  if (sel.type !== 'character') return null
+  const definition = CHARACTER_CATEGORIES.find((entry) => entry.id === sel.categoryId)
+  return definition?.category ?? 'perso'
+})
+
+const uploadInitialCharacterKey = computed<string | null>(() =>
+  selection.value.type === 'character' ? selection.value.characterKey : null
+)
+
+function toggleRigCalibration(): void {
+  if (rigCatalog.isCalibrationOpen) {
+    rigCatalog.closeCalibration()
+    const selectedGroup = editorStore.currentDocument.groups.find(
+      (group): group is CharacterGroup =>
+        group.kind === 'character' && group.id === editorStore.selectedGroupId
+    )
+    if (selectedGroup) editorStore.selectGroupForEditing(selectedGroup.id)
+    return
+  }
+
+  const charKey = selection.value.type === 'character' ? selection.value.characterKey : undefined
+
+  const group =
+    (charKey
+      ? editorStore.currentDocument.groups.find(
+          (candidate): candidate is CharacterGroup =>
+            candidate.kind === 'character' && candidate.characterKey === charKey
+        )
+      : undefined) ??
+    editorStore.currentDocument.groups.find(
+      (candidate): candidate is CharacterGroup =>
+        candidate.kind === 'character' && candidate.id === editorStore.selectedGroupId
+    ) ??
+    editorStore.currentDocument.groups.find(
+      (candidate): candidate is CharacterGroup =>
+        candidate.kind === 'character' && candidate.activeMode === 'rig'
+    )
+
+  const rig =
+    (charKey
+      ? (group
+          ? (rigRuntime.activeRigForGroup(group) ?? rigCatalog.defaultRig(charKey))
+          : rigCatalog.defaultRig(charKey))
+      : undefined) ??
+    (group ? (rigRuntime.activeRigForGroup(group) ?? rigCatalog.defaultRig(group.characterKey)) : undefined) ??
+    rigCatalog.rigById(rigCatalog.selectedRigId) ??
+    rigCatalog.rigs[0]
+
+  if (!rig) {
+    toast.warning('Rig indisponible', 'Aucune configuration de corps n’est disponible.')
+    return
+  }
+
+  let preferredLayer = group
+    ? (editorStore.currentDocument.layers.find(
+        (layer) => layer.groupId === group.id && !layer.muted && layer.category === 'body'
+      ) ??
+      editorStore.currentDocument.layers.find(
+        (layer) => layer.groupId === group.id && !layer.muted && layer.category !== 'perso'
+      ))
+    : undefined
+
+  if (group && (!preferredLayer || group.activeMode !== 'rig')) {
+    preferredLayer = rigRuntime.activateRig(rig) ?? undefined
+  }
+
+  rigCatalog.selectedRigId = rig.id
+  rigCatalog.openCalibration(rig.id)
+  if (preferredLayer) {
+    editorStore.selectRigLayerForCalibration(preferredLayer.id)
+    assetStore.selectAsset(preferredLayer.assetId)
+  } else {
+    const body = rigCatalog.resolveBodyAsset(rig, assetStore.assets)
+    if (body) assetStore.selectAsset(body.id)
+  }
+}
 </script>
 
 <template>
@@ -301,15 +385,29 @@ function selectCategoryTab(key: string | number): void {
         </div>
       </div>
 
-      <IconButton
-        icon="left_panel_close"
-        size="xs"
-        variant="ghost"
-        class="size-7 shrink-0 text-text-muted hover:text-text-primary"
-        aria-label="Replier la bibliothèque"
-        title="Replier la bibliothèque"
-        @click="drawerOpen = false"
-      />
+      <div class="flex shrink-0 items-center gap-1.5">
+        <Button
+          data-library-action="import"
+          variant="secondary"
+          size="xs"
+          class="h-7 gap-1.5 px-2 text-[11px] font-medium"
+          title="Importer des sprites"
+          @click="isUploadModalOpen = true"
+        >
+          <Icon name="cloud_upload" size="xs" class="text-primary" />
+          <span>Importer</span>
+        </Button>
+
+        <IconButton
+          icon="left_panel_close"
+          size="xs"
+          variant="ghost"
+          class="size-7 shrink-0 text-text-muted hover:text-text-primary"
+          aria-label="Replier la bibliothèque"
+          title="Replier la bibliothèque"
+          @click="drawerOpen = false"
+        />
+      </div>
     </div>
 
     <Input
@@ -334,15 +432,31 @@ function selectCategoryTab(key: string | number): void {
       v-if="selection.type === 'character'"
       class="grid gap-2 border-t border-border-subtle pt-3"
     >
-      <Select
-        :model-value="selectedCharacterKey"
-        :options="characterOptions"
-        size="sm"
-        aria-label="Personnage actif"
-        placeholder="Choisir un personnage"
-        class="bg-bg-base shadow-none"
-        @update:model-value="selectCharacterOption"
-      />
+      <div class="flex items-center gap-1.5">
+        <Select
+          :model-value="selectedCharacterKey"
+          :options="characterOptions"
+          size="sm"
+          aria-label="Personnage actif"
+          placeholder="Choisir un personnage"
+          class="min-w-0 flex-1 bg-bg-base shadow-none"
+          @update:model-value="selectCharacterOption"
+        />
+
+        <Button
+          data-library-action="rigs"
+          variant="secondary"
+          size="sm"
+          class="h-8 shrink-0 gap-1.5 px-2.5 text-xs font-medium"
+          :class="rigCatalog.isCalibrationOpen ? 'bg-primary/15 text-text-primary border-primary/40' : undefined"
+          :aria-pressed="rigCatalog.isCalibrationOpen"
+          title="Calibrer les rigs du personnage"
+          @click="toggleRigCalibration"
+        >
+          <Icon name="construction" size="xs" class="text-primary" />
+          <span>Calibrer</span>
+        </Button>
+      </div>
 
       <div
         v-if="!hasOnlyFullCharacterCategory(selection.characterKey)"
@@ -407,6 +521,12 @@ function selectCategoryTab(key: string | number): void {
       </div>
     </div>
   </nav>
+
+  <AssetUploadModal
+    v-model:open="isUploadModalOpen"
+    :initial-category="uploadInitialCategory"
+    :initial-character-key="uploadInitialCharacterKey"
+  />
 </template>
 
 <style scoped>

@@ -28,4 +28,18 @@ describe('WorkspaceBackupMenu', () => {
     expect(wrapper.getComponent(Button).props('size')).toBe('xs')
     expect(wrapper.text()).toContain('Projet')
   })
+
+  it('propose Export HD dans les items et émet openBatchExport au clic', () => {
+    const wrapper = mount(WorkspaceBackupMenu, { props: { placement: 'header' } })
+
+    const dropdown = wrapper.getComponent(DropdownMenu)
+    const items = dropdown.props('items') as Array<{ id?: string; label?: string; onClick?: () => void }>
+    const batchExportItem = items.find((item) => item.id === 'batch-export')
+
+    expect(batchExportItem).toBeDefined()
+    expect(batchExportItem?.label).toBe('Export HD')
+
+    batchExportItem?.onClick?.()
+    expect(wrapper.emitted('openBatchExport')).toHaveLength(1)
+  })
 })
