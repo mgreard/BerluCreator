@@ -44,6 +44,8 @@ import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
 import { useRigRuntime } from '../rig-calibration/useRigRuntime'
 import StudioGlobalToolbar from './StudioGlobalToolbar.vue'
 import { StudioSelectionToolbar, type DeskPlacement } from './studio-selection-toolbar'
+import { ViewportQuicksaveButton } from './viewport-quicksave-button'
+import { ViewportQuickExportButton } from './viewport-quick-export-button'
 
 const { isSavedSnapshotsOpen = false } = defineProps<{
   isSavedSnapshotsOpen?: boolean
@@ -64,6 +66,7 @@ const rigRuntime = useRigRuntime()
 const stage = computed(() => projectStore.currentProject.stage)
 const canvasRef = useTemplateRef<HTMLCanvasElement>('canvas')
 const stageViewportRef = useTemplateRef<HTMLDivElement>('stageViewport')
+const quicksaveBtnRef = useTemplateRef<InstanceType<typeof ViewportQuicksaveButton>>('quicksaveBtn')
 const { activeLayers } = useHierarchyResolver()
 const isRigCalibrationOpen = computed(() => rigCatalog.isCalibrationOpen)
 
@@ -705,6 +708,11 @@ function onHistoryKeydown(event: KeyboardEvent) {
   if (!(event.ctrlKey || event.metaKey) || event.altKey) return
 
   const key = event.key.toLowerCase()
+  if (key === 's') {
+    event.preventDefault()
+    quicksaveBtnRef.value?.triggerSave()
+    return
+  }
   if (key === 'z' && event.shiftKey && editorStore.canRedo) {
     event.preventDefault()
     redoCanvasTransform()
@@ -1322,6 +1330,12 @@ function onCanvasDoubleClick(e: MouseEvent) {
           @reset-cover="resetBackgroundCover"
         />
       </Transition>
+    </div>
+
+    <!-- Boutons d'actions rapides flottants en bas à droite du viewport -->
+    <div class="absolute bottom-5 right-5 z-40 flex items-center gap-2">
+      <ViewportQuickExportButton />
+      <ViewportQuicksaveButton ref="quicksaveBtn" />
     </div>
 
     <!-- Modale de calibrage de découpe 2.5D du bureau -->
