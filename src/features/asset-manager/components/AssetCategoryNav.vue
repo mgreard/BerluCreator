@@ -388,13 +388,13 @@ function toggleRigCalibration(): void {
       <div class="flex shrink-0 items-center gap-1.5">
         <Button
           data-library-action="import"
-          variant="secondary"
+          variant="accent"
           size="xs"
-          class="h-7 gap-1.5 px-2 text-[11px] font-medium"
+          class="h-7 gap-1.5 px-2 text-[11px] font-semibold"
           title="Importer des sprites"
           @click="isUploadModalOpen = true"
         >
-          <Icon name="cloud_upload" size="xs" class="text-primary" />
+          <Icon name="cloud_upload" size="xs" />
           <span>Importer</span>
         </Button>
 

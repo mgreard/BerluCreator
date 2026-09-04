@@ -128,11 +128,11 @@ const buttonTitle = computed(() => {
 
 const buttonClasses = computed(() => {
   return cn(
-    'relative inline-flex items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-full border text-base outline-none transition-all duration-300 ease-out select-none touch-manipulation focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+    'relative inline-flex items-center justify-center w-11 h-11 min-w-[44px] min-h-[44px] rounded-full border text-base outline-none transition-all duration-300 ease-out select-none touch-manipulation focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
     status.value === 'idle' &&
-      'bg-[#0e0e18]/85 text-white/90 border-white/15 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] hover:bg-[#1a1a2e]/90 hover:text-white hover:border-white/30 hover:shadow-[0_8px_32px_rgba(168,85,247,0.25)] hover:scale-105 active:scale-95 cursor-pointer',
+      'bg-accent text-violet-950 font-bold border-accent/40 backdrop-blur-md shadow-glass-md hover:brightness-110 hover:shadow-glass-lg hover:scale-105 active:brightness-95 active:scale-95 cursor-pointer',
     status.value === 'saving' &&
-      'bg-[#0e0e18]/90 text-primary border-primary/50 shadow-[0_0_20px_rgba(168,85,247,0.35)] cursor-wait',
+      'bg-accent/80 text-violet-950 border-accent/50 shadow-glass-md cursor-wait',
     status.value === 'success' &&
       'bg-emerald-950/80 text-emerald-400 border-emerald-500/60 shadow-[0_0_24px_rgba(16,185,129,0.45)] scale-105 cursor-default',
     status.value === 'error' &&
