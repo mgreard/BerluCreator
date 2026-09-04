@@ -83,7 +83,8 @@ function updateCompactPane(value: AcceptableValue | AcceptableValue[]): void {
     </nav>
 
     <div
-      class="grid h-full min-h-0 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] overflow-hidden max-[1100px]:grid-cols-1"
+      class="grid h-full flex-1 min-h-0 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] overflow-hidden max-[1100px]:grid-cols-1"
+      style="height: 100vh"
     >
       <aside
         v-if="$slots.left"

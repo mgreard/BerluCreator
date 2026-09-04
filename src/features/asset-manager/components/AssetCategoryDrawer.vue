@@ -80,8 +80,8 @@ function activeRigForCharacterKey(key: string): RigDefinition | undefined {
 
 function isAssetAvailableInRig(asset: Asset, rig?: RigDefinition): boolean {
   if (!isRigSlotCategory(asset.category)) return true
+  if (!rig) return false
   if (asset.category === 'body') return true
-  if (!rig) return true
   return rigCatalog.isAssetCompatible(rig, asset)
 }
 
@@ -108,6 +108,7 @@ function characterAssets(key: string): Asset[] {
   const activeRig = activeRigForCharacterKey(key)
   return assetStore.assets.filter((asset) => {
     if (ASSET_CATEGORIES[asset.category].placementMode !== 'character-anchored') return false
+    if (isRigSlotCategory(asset.category) && !activeRig) return false
     if (asset.category === 'props_character') return true
     if (asset.category === 'head' || asset.category === 'mouth') {
       return activeRig ? true : characterKey(asset) === key

@@ -101,6 +101,41 @@ describe('AssetCategoryNav', () => {
     expect(categoryGrid.classes()).not.toContain('overflow-x-auto')
   })
 
+  it('masque les catégories de rig quand le personnage ne possède aucun rig', () => {
+    const assetStore = useAssetStore()
+    const withoutRig = (asset: Asset): Asset => ({
+      ...asset,
+      character: {
+        key: 'sans-rig',
+        name: 'Sans rig',
+        form: asset.category === 'perso' ? 'full' : 'rig'
+      }
+    })
+    const full = withoutRig(mockAsset('full-1', 'Personnage complet', 'perso'))
+    assetStore.assets = [
+      full,
+      withoutRig(mockAsset('body-1', 'Corps sans rig', 'body')),
+      withoutRig(mockAsset('head-1', 'Tête sans rig', 'head')),
+      withoutRig(mockAsset('mouth-1', 'Bouche sans rig', 'mouth')),
+      withoutRig(mockAsset('prop-1', 'Lunettes sans rig', 'props_character'))
+    ]
+
+    const wrapper = mount(AssetCategoryNav, {
+      props: {
+        selection: { type: 'character', characterKey: 'sans-rig', categoryId: null },
+        drawerOpen: true
+      }
+    })
+
+    const categoryGrid = wrapper.get('[aria-label="Parties du personnage"]')
+    expect(categoryGrid.text()).toContain('Tout')
+    expect(categoryGrid.text()).toContain('Personnages complets')
+    expect(categoryGrid.text()).not.toContain('Corps')
+    expect(categoryGrid.text()).not.toContain('Têtes')
+    expect(categoryGrid.text()).not.toContain('Bouches')
+    expect(categoryGrid.text()).not.toContain('Accessoires')
+  })
+
   it('emits selection updates and opens drawer on category click', async () => {
     const assetStore = useAssetStore()
     assetStore.assets = [mockAsset('bg-1', 'Bureau jour', 'background')]

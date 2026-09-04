@@ -14,6 +14,7 @@ import { Select, type SelectOption } from '@/components/ui/select'
 import { Tabs, type TabItem } from '@/components/ui/tabs'
 import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import { useRigRuntime } from '@/features/studio/rig-calibration/useRigRuntime'
+import { isRigSlotCategory } from '@/features/studio/rig-calibration/rig-catalog.service'
 import type { RigDefinition } from '@/features/studio/rig-calibration/rig-catalog.types'
 import type { CharacterGroup } from '@core/types/editor.types'
 import {
@@ -119,6 +120,7 @@ function characterAssets(key: string): Asset[] {
   return assetStore.assets.filter(
     (asset) => {
       if (ASSET_CATEGORIES[asset.category].placementMode !== 'character-anchored') return false
+      if (isRigSlotCategory(asset.category) && !activeRig) return false
       if (asset.category === 'props_character') return true
       if (asset.category === 'head' || asset.category === 'mouth') {
         return activeRig ? true : characterKey(asset) === key

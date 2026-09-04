@@ -100,6 +100,46 @@ describe('AssetLibraryPanel', () => {
     expect(assetStore.librarySelection.type).toBe('character')
   })
 
+  it('retire les éléments de rig des vues Tout et Tous quand aucun rig n’existe', async () => {
+    const assetStore = useAssetStore()
+    const withoutRig = (asset: Asset): Asset => ({
+      ...asset,
+      character: {
+        key: 'sans-rig',
+        name: 'Sans rig',
+        form: asset.category === 'perso' ? 'full' : 'rig'
+      }
+    })
+    const full = withoutRig(mockAsset('full-1', 'Personnage complet', 'perso'))
+    const background = mockAsset('bg-1', 'Plateau TV', 'background')
+    assetStore.assets = [
+      full,
+      withoutRig(mockAsset('body-1', 'Corps sans rig', 'body')),
+      withoutRig(mockAsset('head-1', 'Tête sans rig', 'head')),
+      withoutRig(mockAsset('mouth-1', 'Bouche sans rig', 'mouth')),
+      withoutRig(mockAsset('prop-1', 'Lunettes sans rig', 'props_character')),
+      background
+    ]
+    assetStore.hasLoaded = true
+
+    const wrapper = mount(AssetLibraryPanel, {
+      props: {
+        open: true,
+        selection: { type: 'character', characterKey: 'sans-rig', categoryId: null }
+      }
+    })
+
+    expect(wrapper.findAllComponents(AssetCard).map((card) => card.props('asset').id)).toEqual([
+      full.id
+    ])
+
+    await wrapper.setProps({ selection: { type: 'all' } })
+
+    expect(wrapper.findAllComponents(AssetCard).map((card) => card.props('asset').id).sort()).toEqual(
+      [background.id, full.id].sort()
+    )
+  })
+
   it('replie toute la bibliothèque depuis son en-tête', async () => {
     const wrapper = mount(AssetLibraryPanel, { props: { open: true } })
 
