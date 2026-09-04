@@ -97,4 +97,30 @@ describe('StudioSelectionToolbar', () => {
     expect(wrapper.emitted('toggleBlur')).toHaveLength(1)
     wrapper.unmount()
   })
+
+  it('affiche le bouton de recadrage cover et émet resetCover au clic quand isBackground est vrai', async () => {
+    const wrapper = mount(StudioSelectionToolbar, {
+      attachTo: document.body,
+      props: {
+        open: true,
+        layerName: 'Arrière-plan',
+        layerIcon: 'tv_gen',
+        canEditDeskPlacement: false,
+        deskPlacement: 'front',
+        canEditDeskSplit: false,
+        deskSplitOpen: false,
+        isBackground: true,
+        flipped: false,
+        deleteLabel: 'Supprimer Arrière-plan'
+      }
+    })
+
+    const coverButton = document.querySelector<HTMLButtonElement>(
+      '#studio-selection-overlay-host button[aria-label="Recadrer en cover dans le viewport"]'
+    )
+    expect(coverButton).not.toBeNull()
+    await coverButton?.click()
+    expect(wrapper.emitted('resetCover')).toHaveLength(1)
+    wrapper.unmount()
+  })
 })

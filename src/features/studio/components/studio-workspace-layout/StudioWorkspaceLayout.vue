@@ -40,7 +40,7 @@ function updateCompactPane(value: AcceptableValue | AcceptableValue[]): void {
   <section
     :class="
       cn(
-        'studio-workspace-layout grid h-full min-h-0 min-w-0 flex-1 overflow-hidden bg-bg-base text-text-primary',
+        'studio-workspace-layout flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-bg-base text-text-primary',
         className
       )
     "
@@ -59,7 +59,7 @@ function updateCompactPane(value: AcceptableValue | AcceptableValue[]): void {
     </header>
 
     <nav
-      class="hidden min-h-11 items-center border-b border-border-default bg-bg-surface px-2 max-[1100px]:flex"
+      class="hidden min-h-11 shrink-0 items-center border-b border-border-default bg-bg-surface px-2 max-[1100px]:flex"
       aria-label="Espaces de travail du Studio"
       data-layout-region="compact-navigation"
     >
@@ -83,14 +83,13 @@ function updateCompactPane(value: AcceptableValue | AcceptableValue[]): void {
     </nav>
 
     <div
-      class="grid h-full flex-1 min-h-0 min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] overflow-hidden max-[1100px]:grid-cols-1"
-      style="height: 100vh"
+      class="grid min-h-0 min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] overflow-hidden max-[1100px]:grid-cols-1"
     >
       <aside
         v-if="$slots.left"
         :class="
           cn(
-            'flex min-h-0 min-w-0 shrink-0 overflow-hidden border-r border-border-default bg-bg-surface max-[1100px]:w-full max-[1100px]:border-r-0',
+            'flex h-full min-h-0 min-w-0 shrink-0 overflow-hidden border-r border-border-default bg-bg-surface max-[1100px]:w-full max-[1100px]:border-r-0',
             compactPane !== 'library' && 'max-[1100px]:hidden'
           )
         "
@@ -106,7 +105,7 @@ function updateCompactPane(value: AcceptableValue | AcceptableValue[]): void {
       <main
         :class="
           cn(
-            'relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-bg-base',
+            'relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-bg-base',
             compactPane !== 'studio' && 'max-[1100px]:hidden'
           )
         "
@@ -119,7 +118,7 @@ function updateCompactPane(value: AcceptableValue | AcceptableValue[]): void {
         v-if="$slots.right"
         :class="
           cn(
-            'flex min-h-0 min-w-0 shrink-0 overflow-visible border-l border-border-default bg-bg-surface max-[1100px]:w-full max-[1100px]:border-l-0',
+            'flex h-full min-h-0 min-w-0 shrink-0 overflow-visible border-l border-border-default bg-bg-surface max-[1100px]:w-full max-[1100px]:border-l-0',
             compactPane !== 'inspector' && 'max-[1100px]:hidden'
           )
         "
@@ -147,9 +146,3 @@ function updateCompactPane(value: AcceptableValue | AcceptableValue[]): void {
     </footer>
   </section>
 </template>
-
-<style scoped>
-.studio-workspace-layout {
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
-}
-</style>

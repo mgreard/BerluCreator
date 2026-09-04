@@ -11,4 +11,5 @@ export interface StudioSelectionToolbarProps {
   blurEnabled?: boolean
   flipped: boolean
   deleteLabel: string
+  isBackground?: boolean
 }

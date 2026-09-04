@@ -5,7 +5,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { SegmentedControl, type SegmentOption } from '@/components/ui/segmented-control'
 import type { DeskPlacement, StudioSelectionToolbarProps } from './types'
 
-const { blurEnabled = false } = defineProps<StudioSelectionToolbarProps>()
+const { blurEnabled = false, isBackground = false } = defineProps<StudioSelectionToolbarProps>()
 
 const emit = defineEmits<{
   (event: 'update:deskPlacement', value: DeskPlacement): void
@@ -14,6 +14,7 @@ const emit = defineEmits<{
   (event: 'flip'): void
   (event: 'delete'): void
   (event: 'clearSelection'): void
+  (event: 'resetCover'): void
 }>()
 
 const deskPlacementOptions: SegmentOption[] = [
@@ -99,6 +100,18 @@ const deskPlacementOptions: SegmentOption[] = [
           :aria-label="flipped ? 'Rétablir l’orientation' : 'Retourner horizontalement'"
           :title="flipped ? 'Rétablir l’orientation' : 'Retourner horizontalement'"
           @click="emit('flip')"
+        />
+      </ToolbarButton>
+
+      <ToolbarButton v-if="isBackground" as-child>
+        <IconButton
+          icon="fit_screen"
+          size="xs"
+          variant="ghost"
+          class="viewport-action size-7 text-sky-400 hover:text-sky-300"
+          aria-label="Recadrer en cover dans le viewport"
+          title="Recadrer en cover dans le viewport"
+          @click="emit('resetCover')"
         />
       </ToolbarButton>
 

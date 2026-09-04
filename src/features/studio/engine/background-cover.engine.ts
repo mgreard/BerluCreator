@@ -1,8 +1,8 @@
 /**
- * Moteur mathématique de contrainte « Cover » pour le calque d'arrière-plan (Background).
+ * Moteur mathématique de cadrage et redimensionnement pour l'arrière-plan (Background).
  *
- * Garantit que l'image de fond remplit en permanence 100% de la surface du viewport
- * sans aucun décrochage des bords ni interstice transparent.
+ * Fournit le calcul du cadrage « Cover » initial dans le viewport tout en permettant
+ * d'agrandir l'image au-delà du viewport ou de la réduire sans contrainte.
  */
 
 export interface BackgroundCoverParams {
@@ -19,6 +19,10 @@ export interface ClampedBackgroundTransform {
   scaleY: number
 }
 
+export interface ClampBackgroundCoverOptions {
+  strictClamp?: boolean
+}
+
 /**
  * Calcule l'échelle minimale requise pour que l'image couvre entièrement le viewport.
  */
@@ -30,38 +34,61 @@ export function computeCoverMinScale(params: BackgroundCoverParams): number {
 }
 
 /**
- * Ajuste les coordonnées (x, y) et l'échelle (scaleX, scaleY) de l'arrière-plan
- * pour satisfaire la contrainte stricte de cadrage « Cover ».
+ * Calcule la transformation permettant à l'arrière-plan de démarrer en cadrage « Cover »
+ * centré dans le viewport (100% de la surface couverte sans bandes noires).
  */
-export function clampBackgroundCover(
-  transform: { x?: number; y?: number; scaleX?: number; scaleY?: number },
+export function computeBackgroundCoverTransform(
   params: BackgroundCoverParams
 ): ClampedBackgroundTransform {
   const minScale = computeCoverMinScale(params)
+  const x = Math.round((params.stageWidth - params.assetWidth) / 2)
+  const y = Math.round((params.stageHeight - params.assetHeight) / 2)
+  return {
+    x,
+    y,
+    scaleX: minScale,
+    scaleY: minScale
+  }
+}
 
-  const rawScale = transform.scaleX ?? transform.scaleY ?? 1
+/**
+ * Résout ou ajuste les coordonnées (x, y) et l'échelle (scaleX, scaleY) de l'arrière-plan.
+ * Par défaut, initialise en cover sans bloquer les échelles inférieures ou supérieures
+ * ni restreindre les translations.
+ */
+export function clampBackgroundCover(
+  transform: { x?: number; y?: number; scaleX?: number; scaleY?: number },
+  params: BackgroundCoverParams,
+  options?: ClampBackgroundCoverOptions
+): ClampedBackgroundTransform {
+  const cover = computeBackgroundCoverTransform(params)
 
-  // L'échelle effective ne peut jamais être inférieure à l'échelle de couverture minimale
+  if (!options?.strictClamp) {
+    const rawScale = transform.scaleX ?? transform.scaleY ?? cover.scaleX
+    return {
+      x: transform.x !== undefined ? Math.round(transform.x) : cover.x,
+      y: transform.y !== undefined ? Math.round(transform.y) : cover.y,
+      scaleX: rawScale,
+      scaleY: rawScale
+    }
+  }
+
+  // Clamping strict (si explicitement requis)
+  const minScale = computeCoverMinScale(params)
+  const rawScale = transform.scaleX ?? transform.scaleY ?? cover.scaleX
   const scale = Math.max(minScale, rawScale)
-
   const renderedWidth = params.assetWidth * scale
   const renderedHeight = params.assetHeight * scale
-
-  // Bornes de translation autorisées (x <= 0 et x + renderedWidth >= stageWidth)
   const minX = params.stageWidth - renderedWidth
   const maxX = 0
   const minY = params.stageHeight - renderedHeight
   const maxY = 0
-
-  const rawX = transform.x ?? 0
-  const rawY = transform.y ?? 0
-
-  const x = Math.round(Math.min(maxX, Math.max(minX, rawX)))
-  const y = Math.round(Math.min(maxY, Math.max(minY, rawY)))
+  const rawX = transform.x ?? cover.x
+  const rawY = transform.y ?? cover.y
 
   return {
-    x,
-    y,
+    x: Math.round(Math.min(maxX, Math.max(minX, rawX))),
+    y: Math.round(Math.min(maxY, Math.max(minY, rawY))),
     scaleX: scale,
     scaleY: scale
   }

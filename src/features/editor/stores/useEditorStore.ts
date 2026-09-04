@@ -32,6 +32,7 @@ import { useProjectStore } from '@/features/project/stores/useProjectStore'
 import { generateId } from '@/lib/utils'
 import { useRigCatalogStore } from '@/features/studio/rig-calibration/rig-catalog.store'
 import { DEFAULT_RIG_CANVAS } from '@/features/studio/rig-calibration/rig-catalog.service'
+import { computeBackgroundCoverTransform } from '@/features/studio/engine/background-cover.engine'
 
 interface StudioState {
   depthOfField: DepthOfFieldSettings
@@ -672,6 +673,21 @@ export const useEditorStore = defineStore('editor', () => {
         } else if (calibration) {
           existing.transform = normalizeTransform(calibration)
           existing.zIndex = calibration.zIndex ?? existing.zIndex
+        } else if ((category === 'background' || category === 'background_overlay') && asset) {
+          const stage = useProjectStore().currentProject.stage
+          const cover = computeBackgroundCoverTransform({
+            assetWidth: asset.width || stage.width,
+            assetHeight: asset.height || stage.height,
+            stageWidth: stage.width,
+            stageHeight: stage.height
+          })
+          existing.transform = {
+            ...existing.transform,
+            x: cover.x,
+            y: cover.y,
+            scaleX: cover.scaleX,
+            scaleY: cover.scaleY
+          }
         }
         if (group.kind === 'character') {
           group.activeMode = category === 'perso' ? 'full' : 'rig'
@@ -701,10 +717,23 @@ export const useEditorStore = defineStore('editor', () => {
         depthRole: 'auto',
         transform: normalizeTransform(calibration)
       }
-      if (!calibration && group.kind === 'stage' && category !== 'background' && asset) {
+      if (!calibration && group.kind === 'stage' && asset) {
         const stage = useProjectStore().currentProject.stage
-        layer.transform.x = Math.round((stage.width - asset.width) / 2)
-        layer.transform.y = Math.round((stage.height - asset.height) / 2)
+        if (category === 'background' || category === 'background_overlay') {
+          const cover = computeBackgroundCoverTransform({
+            assetWidth: asset.width || stage.width,
+            assetHeight: asset.height || stage.height,
+            stageWidth: stage.width,
+            stageHeight: stage.height
+          })
+          layer.transform.x = cover.x
+          layer.transform.y = cover.y
+          layer.transform.scaleX = cover.scaleX
+          layer.transform.scaleY = cover.scaleY
+        } else {
+          layer.transform.x = Math.round((stage.width - asset.width) / 2)
+          layer.transform.y = Math.round((stage.height - asset.height) / 2)
+        }
       }
       currentDocument.value.layers.push(layer)
       if (group.kind === 'character') {

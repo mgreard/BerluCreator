@@ -8,7 +8,7 @@ import type { RenderableLayer } from '../rendering'
 import { getCachedAssetImage, useCanvasRenderer } from '../composables/useCanvasRenderer'
 import { isLayerPointOpaque } from '../engine/alpha-hit-test'
 import { isActiveSelectionHit, shouldTargetWholeGroup } from '../engine/selection-target'
-import { clampBackgroundCover } from '../engine/background-cover.engine'
+import { computeBackgroundCoverTransform } from '../engine/background-cover.engine'
 import { resolveStagePlacementZIndexes } from '../engine/stage-layer-placement'
 import {
   panViewport,
@@ -786,6 +786,24 @@ function removeSelectedFromViewport() {
   assetStore.selectAsset(null)
 }
 
+function resetBackgroundCover() {
+  const layer = activeSelectedLayer.value
+  if (!layer || layer.category !== 'background') return
+  const cover = computeBackgroundCoverTransform({
+    assetWidth: layer.asset.width || stage.value.width,
+    assetHeight: layer.asset.height || stage.value.height,
+    stageWidth: stage.value.width,
+    stageHeight: stage.value.height
+  })
+  editorStore.updateLayerTransform(layer.layerId, {
+    x: cover.x,
+    y: cover.y,
+    scaleX: cover.scaleX,
+    scaleY: cover.scaleY,
+    rotation: 0
+  })
+}
+
 function getStageCoordinates(e: PointerEvent): { x: number; y: number } | null {
   if (!canvasRef.value) return null
   const rect = canvasRef.value.getBoundingClientRect()
@@ -837,12 +855,16 @@ function hitTestLayer(pos: { x: number; y: number }): RenderableLayer | null {
   const reversed = [...activeLayers.value].reverse()
 
   for (const layer of reversed) {
+    const renderedW = (layer.width ?? 0) * Math.abs(layer.scaleX ?? 1)
+    const renderedH = (layer.height ?? 0) * Math.abs(layer.scaleY ?? 1)
+    const isCoveringStage =
+      renderedW >= stage.value.width * 0.95 &&
+      renderedH >= stage.value.height * 0.95
+
     const isFullScreenBg =
-      layer.category === 'background' ||
       layer.category === 'background_overlay' ||
-      (layer.category === 'foreground' && !layer.isMovable) ||
-      (layer.width >= stage.value.width * 0.95 &&
-        layer.height >= stage.value.height * 0.95 &&
+      ((layer.category === 'background' || layer.category === 'foreground') &&
+        isCoveringStage &&
         !layer.isMovable)
 
     if (isFullScreenBg) continue
@@ -1070,35 +1092,14 @@ function onCanvasPointerMove(e: PointerEvent) {
       const newGroupY = Math.round(dragStartGroupPos.value.y + dy)
       editorStore.updateGroupTransform(activeSelectedGroup.value.id, { x: newGroupX, y: newGroupY })
     } else if (activeSelectedLayer.value) {
-      if (activeSelectedLayer.value.category === 'background') {
-        const clamped = clampBackgroundCover(
-          {
-            x: dragStartLayerPos.value.x + dx,
-            y: dragStartLayerPos.value.y + dy,
-            scaleX: currentScale.value,
-            scaleY: currentScale.value
-          },
-          {
-            assetWidth: activeSelectedLayer.value.asset.width || stage.value.width,
-            assetHeight: activeSelectedLayer.value.asset.height || stage.value.height,
-            stageWidth: stage.value.width,
-            stageHeight: stage.value.height
-          }
-        )
-        editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, {
-          x: clamped.x,
-          y: clamped.y
-        })
-      } else {
-        const rigUnitScale =
-          activeSelectedLayer.value.groupId === activeCalibrationGroup.value?.id &&
-          activeSelectedLayer.value.asset.width > 0
-            ? activeSelectedLayer.value.width / activeSelectedLayer.value.asset.width
-            : 1
-        const newX = Math.round(dragStartLayerPos.value.x + dx / rigUnitScale)
-        const newY = Math.round(dragStartLayerPos.value.y + dy / rigUnitScale)
-        editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, { x: newX, y: newY })
-      }
+      const rigUnitScale =
+        activeSelectedLayer.value.groupId === activeCalibrationGroup.value?.id &&
+        activeSelectedLayer.value.asset.width > 0
+          ? activeSelectedLayer.value.width / activeSelectedLayer.value.asset.width
+          : 1
+      const newX = Math.round(dragStartLayerPos.value.x + dx / rigUnitScale)
+      const newY = Math.round(dragStartLayerPos.value.y + dy / rigUnitScale)
+      editorStore.updateLayerTransform(activeSelectedLayer.value.layerId, { x: newX, y: newY })
     }
     return
   }
@@ -1311,12 +1312,14 @@ function onCanvasDoubleClick(e: MouseEvent) {
           :blur-enabled="selectedBlurEnabled"
           :flipped="isSelectedFlippedHorizontally"
           :delete-label="deleteSelectionLabel"
+          :is-background="activeSelectedLayer?.category === 'background'"
           @update:desk-placement="selectedDeskPlacement = $event"
           @open-desk-split="openDeskSplitEditor"
           @toggle-blur="toggleSelectedBlur"
           @flip="flipSelectedHorizontal"
           @delete="removeSelectedFromViewport"
           @clear-selection="editorStore.clearStudioSelection()"
+          @reset-cover="resetBackgroundCover"
         />
       </Transition>
     </div>

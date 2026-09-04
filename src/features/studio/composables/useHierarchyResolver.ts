@@ -9,7 +9,7 @@ import type {
   EditorLayer,
   LayerDepthRole
 } from '@core/types/editor.types'
-import { clampBackgroundCover } from '../engine/background-cover.engine'
+import { computeBackgroundCoverTransform } from '../engine/background-cover.engine'
 import { useRigCatalogStore } from '../rig-calibration/rig-catalog.store'
 import { DEFAULT_RIG_CANVAS } from '../rig-calibration/rig-catalog.service'
 import type { HeadSeriesProfile } from '../rig-calibration/rig-catalog.types'
@@ -342,32 +342,71 @@ function resolveLayer(
 ): RenderableLayer {
   const transform = layer.transform
 
-  if (layer.category === 'background' || layer.category === 'background_overlay') {
-    const clamped = clampBackgroundCover(transform, {
-      assetWidth: asset.width || stage.width,
-      assetHeight: asset.height || stage.height,
+  if (layer.category === 'background_overlay') {
+    const width = asset.width || stage.width
+    const height = asset.height || stage.height
+
+    const cover = computeBackgroundCoverTransform({
+      assetWidth: width,
+      assetHeight: height,
       stageWidth: stage.width,
       stageHeight: stage.height
     })
-    const width = asset.width || stage.width
-    const height = asset.height || stage.height
+
     return {
       ...commonLayer(layer, asset, group),
       groupZIndex: 0,
-      x: clamped.x,
-      y: clamped.y,
+      x: cover.x,
+      y: cover.y,
       width,
       height,
-      transformOriginX: clamped.x,
-      transformOriginY: clamped.y,
-      scaleX: clamped.scaleX,
-      scaleY: clamped.scaleY,
-      localX: clamped.x,
-      localY: clamped.y,
-      localScaleX: clamped.scaleX,
-      localScaleY: clamped.scaleY,
+      transformOriginX: cover.x + width / 2,
+      transformOriginY: cover.y + height / 2,
+      scaleX: cover.scaleX,
+      scaleY: cover.scaleY,
+      localX: cover.x,
+      localY: cover.y,
+      localScaleX: cover.scaleX,
+      localScaleY: cover.scaleY,
       localRotation: 0,
       rotation: 0,
+      opacity: transform.opacity
+    }
+  }
+
+  if (layer.category === 'background') {
+    const width = asset.width || stage.width
+    const height = asset.height || stage.height
+
+    const cover = computeBackgroundCoverTransform({
+      assetWidth: width,
+      assetHeight: height,
+      stageWidth: stage.width,
+      stageHeight: stage.height
+    })
+
+    const scaleX = transform.scaleX !== undefined ? transform.scaleX : cover.scaleX
+    const scaleY = transform.scaleY !== undefined ? transform.scaleY : cover.scaleY
+    const x = transform.x !== undefined ? transform.x : cover.x
+    const y = transform.y !== undefined ? transform.y : cover.y
+
+    return {
+      ...commonLayer(layer, asset, group),
+      groupZIndex: 0,
+      x: Math.round(x),
+      y: Math.round(y),
+      width,
+      height,
+      transformOriginX: x + width / 2,
+      transformOriginY: y + height / 2,
+      scaleX,
+      scaleY,
+      localX: x,
+      localY: y,
+      localScaleX: scaleX,
+      localScaleY: scaleY,
+      localRotation: transform.rotation ?? 0,
+      rotation: transform.rotation ?? 0,
       opacity: transform.opacity
     }
   }

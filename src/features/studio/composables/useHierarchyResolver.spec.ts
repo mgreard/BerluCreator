@@ -383,7 +383,7 @@ describe('useHierarchyResolver', () => {
     expect(charIndex).toBeLessThan(frontIndex)
   })
 
-  it('aligne l’origine de transformation d’un calque arrière-plan sur le coin supérieur gauche clampé', () => {
+  it('initialise un calque arrière-plan en cover centré et permet un redimensionnement libre', () => {
     const editor = useEditorStore()
     const assets = useAssetStore()
     const bgAsset = asset('bg-1', 'background', undefined, 2400, 1350)
@@ -394,9 +394,18 @@ describe('useHierarchyResolver', () => {
     expect(activeLayers.value).toHaveLength(1)
     const resolved = activeLayers.value[0]!
 
-    expect(resolved.x).toBe(0)
-    expect(resolved.y).toBe(0)
-    expect(resolved.transformOriginX).toBe(resolved.x)
-    expect(resolved.transformOriginY).toBe(resolved.y)
+    // Cover initial : échelle 0.8 (1920/2400), centré à (-240, -135)
+    expect(resolved.scaleX).toBe(0.8)
+    expect(resolved.scaleY).toBe(0.8)
+    expect(resolved.x).toBe(-240)
+    expect(resolved.y).toBe(-135)
+
+    // Redimensionnement réduit sans contrainte (ex: scale = 0.5 < 0.8)
+    editor.updateLayerTransform(resolved.layerId, { scaleX: 0.5, scaleY: 0.5 })
+    expect(activeLayers.value[0]?.scaleX).toBe(0.5)
+
+    // Agrandissement au-delà du viewport (ex: scale = 2.0)
+    editor.updateLayerTransform(resolved.layerId, { scaleX: 2.0, scaleY: 2.0 })
+    expect(activeLayers.value[0]?.scaleX).toBe(2.0)
   })
 })
